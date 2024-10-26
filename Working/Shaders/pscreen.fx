@@ -87,15 +87,15 @@ float CalcAO(float2 tex,float4 reference)
     float Highlight;
     for (int i = -8; i < 8; i++)
     {
-        float2 coordOffset = (((tex2D(NoiseSampler, tex * i + float2(noiseOffset, noiseOffset)).rg * 2 - float2(1, 1))) * i*2) / screenSize;
+        float2 coordOffset = (((tex2D(NoiseSampler, tex * i + float2(noiseOffset, noiseOffset)).rg * 2 - float2(1, 1))) * i*4) / screenSize;
         
         float3 testSample = tex2Dlod(NormalSampler, float4(tex+coordOffset, 0, 0));
         
         if (abs(testSample.r - reference.r) > 5)
             continue;
         
-        AO += (testSample.r < reference.r && testSample.g != reference.g ? 1 : 0);
-        Highlight += (testSample.r > reference.r && testSample.g != reference.g ? 1 : 0);
+        AO += (testSample.r < reference.r && abs(testSample.g - reference.g) > 0.01f ? 1 : 0);
+        Highlight += (testSample.r > reference.r && abs(testSample.g - reference.g) > 0.01f ? 1 : 0);
     }
     AO /= 16;
     Highlight /= 16;

@@ -37,12 +37,13 @@ namespace IslandGame
         private Effect chunk;
         private Effect postProcessing;
 
-        private int Width => GraphicsDevice.Viewport.Width/2;
-        private int Height => GraphicsDevice.Viewport.Height/2;
+        private int Width => GraphicsDevice.Viewport.Width;
+        private int Height => GraphicsDevice.Viewport.Height;
 
         public Player player;
         public ConcurrentDictionary<(int x, int y, int z), Chunk> loadedChunks = new ConcurrentDictionary<(int x, int y, int z), Chunk>();
         ConcurrentQueue<(int x, int y, int z)> toGenerate = new ConcurrentQueue<(int x, int y, int z)>();
+        ConcurrentQueue<(int x, int y, int z)> toMesh = new ConcurrentQueue<(int x, int y, int z)>();
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
         public int RenderDistance = 120;
@@ -148,8 +149,8 @@ namespace IslandGame
             Chunk.chunkBuffer = new VertexBuffer(GraphicsDevice,typeof(VertexPosition),Chunk.chunkVerts.Length,BufferUsage.WriteOnly);
             Chunk.chunkBuffer.SetData(Chunk.chunkVerts);
 
-            Chunk.indexBuffer = new IndexBuffer(GraphicsDevice,IndexElementSize.SixteenBits,Chunk.triangles.Length,BufferUsage.WriteOnly);
-            Chunk.indexBuffer.SetData(Chunk.triangles);
+            //Chunk.indexBuffer = new IndexBuffer(GraphicsDevice,IndexElementSize.SixteenBits,Chunk.triangles.Length,BufferUsage.WriteOnly);
+            //Chunk.indexBuffer.SetData(Chunk.triangles);
 
             player.Start();
 
@@ -248,6 +249,28 @@ namespace IslandGame
                             c.Generate();
 
                             loadedChunks.TryAdd(t, c);
+                        }
+                    });
+                }
+            }
+            if (toMesh.Count > 0)
+            {
+                for (int i = 0; i < toMesh.Count; i += 4)
+                {
+                    chunkUpdatePool.EnqueueTask(() =>
+                    {
+                        for (int i = 0; i < MathF.Min(toMesh.Count, 4); i++)
+                        {
+                            if (!toMesh.TryDequeue(out (int x, int y, int z) t)) return;
+
+                            BoundingBox chunkbounds = new BoundingBox(new Vector3(t.x, t.y, t.z) * Chunk.Size, (new Vector3(t.x, t.y, t.z) + Vector3.One) * Chunk.Size);
+
+                            if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint || loadedChunks[t].meshUpdated[loadedChunks[t].GetLOD()])
+                            {
+                                return;
+                            }
+
+                            loadedChunks[t].Remesh();
                         }
                     });
                 }
@@ -356,6 +379,10 @@ namespace IslandGame
                         if (x == cx && z == cz) currentChunk.CheckQueue();
                         else chunkUpdatePool.EnqueueTask(() => currentChunk.CheckQueue());
                     }
+                    if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)))
+                    {
+                        toMesh.Enqueue((x,y,z));
+                    }
 
                     if (visitedChunks.Contains((x, y, z))) continue;
                     visitedChunks.Add((x, y, z));
@@ -451,27 +478,19 @@ namespace IslandGame
 
             GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
             GraphicsDevice.BlendState = BlendState.AlphaBlend;
-            GraphicsDevice.DepthStencilState = stencilDraw;
+            GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
-            GraphicsDevice.SetVertexBuffer(Chunk.chunkBuffer);
-            GraphicsDevice.Indices = Chunk.indexBuffer;
-
-            GraphicsDevice.SamplerStates[0] = SamplerState.PointClamp;
-            GraphicsDevice.SamplerStates[1] = SamplerState.PointClamp;
+            GraphicsDevice.SamplerStates[0] = SamplerState.PointWrap;
+            GraphicsDevice.SamplerStates[1] = SamplerState.PointWrap;
 
             chunk.Parameters["skyColor"].SetValue(Color.LightSkyBlue.ToVector3());
-            chunk.Parameters["renderDistance"].SetValue(RenderDistance);
-
+            chunk.Parameters["renderDistance"]?.SetValue(RenderDistance);
+            chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
+            chunk.Parameters["cameraPosition"]?.SetValue(cameraPosition);
 
             chunk.Parameters["View"].SetValue(view);
             chunk.Parameters["Projection"].SetValue(projection);
-            chunk.Parameters["InvProjection"].SetValue(Matrix.Invert(projection));
-            chunk.Parameters["cameraViewMatrix"]?.SetValue(Matrix.Invert(view));
             chunk.Parameters["time"]?.SetValue((float)gameTime.TotalGameTime.TotalSeconds);
-
-            chunk.Parameters["dim"]?.SetValue(GraphicsDevice.Viewport.Bounds.Size.ToVector2());
-            chunk.Parameters["FOV"]?.SetValue(MathHelper.ToRadians(_fov));
-            chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             chunk.Parameters["colors"]?.SetValue(colors);
 
             foreach (var c in toRender.ToArray().AsSpan())
@@ -480,16 +499,20 @@ namespace IslandGame
                 if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
                     continue;
 
-                chunk.Parameters["World"].SetValue(Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY+1, Chunk.Size) * world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
-                chunk.Parameters["cameraPosition"]?.SetValue(cameraPosition - new Vector3(c.x, c.y, c.z) * Chunk.Size);
-                chunk.Parameters["minSafeDistance"]?.SetValue(Vector3.Distance(cameraPosition, Vector3.Min(chunkbounds.Max, Vector3.Max(chunkbounds.Min, cameraPosition))));
+                int LOD = loadedChunks[c].GetLOD();
 
-                chunk.Parameters["voxels"]?.SetValue(loadedChunks[(c.x, c.y, c.z)].voxelTexture);
+                if (loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0) 
+                    continue;
+
+                GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
+
+                chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
+                chunk.Parameters["minSafeDistance"]?.SetValue(Vector3.Distance(cameraPosition, Vector3.Min(chunkbounds.Max, Vector3.Max(chunkbounds.Min, cameraPosition))));
 
                 foreach (var pass in chunk.CurrentTechnique.Passes)
                 {
                     pass.Apply();
-                    GraphicsDevice.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, Chunk.triangles.Length / 3);
+                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[c].chunkVertexBuffers[LOD].VertexCount/3);
                 }
             }
 

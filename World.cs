@@ -4,8 +4,6 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Media;
 using System;
 using System.Collections.Generic;
-using System.Linq.Expressions;
-using System.Threading.Tasks;
 
 namespace IslandGame
 {
@@ -80,16 +78,19 @@ namespace IslandGame
             this.shaderEffect = shaderEffect;
         }
     }
+    public struct VoxelData
+    {
+        public int shade;
+    }
     public class Chunk
     {
         public const int Size = 32;
         public (int x, int y, int z) chunkPos;
         public int[] voxels = new int[Size*Size*Size];
+        public VoxelData[] voxeldata = new VoxelData[Size*Size*Size];
 
         public bool queueModified,queueInWorks;
 
-        private Color[] voxelsAC = new Color[Size*Size*Size];
-        public Texture3D voxelTexture;
         public bool CompletelyEmpty;
 
         public static VertexPosition[] chunkVerts = 
@@ -105,19 +106,51 @@ namespace IslandGame
         ];
         public static short[] triangles = 
         [
-            0, 2, 1, //face front
-	        0, 3, 2,
-            2, 3, 4, //face top
-	        2, 4, 5,
             1, 2, 5, //face right
 	        1, 5, 6,
             0, 7, 4, //face left
 	        0, 4, 3,
+            0, 2, 1, //face front
+	        0, 3, 2,
             5, 4, 7, //face back
 	        5, 7, 6,
+            2, 3, 4, //face top
+	        2, 4, 5,
             0, 6, 7, //face bottom
 	        0, 1, 6
         ];
+        static Vector3[] vertsPerCheck =
+        {
+            new (1,0,1),
+            new (1,1,1),
+            new (1,1,0),
+            new (1,0,0),
+
+            new (0,0,0),
+            new (0,1,0),
+            new (0,1,1),
+            new (0,0,1),
+
+            new (0,1,0),
+            new (1,1,0),
+            new (1,1,1),
+            new (0,1,1),
+
+            new (0,0,1),
+            new (1,0,1),
+            new (1,0,0),
+            new (0,0,0),
+
+            new (0,1,1),
+            new (1,1,1),
+            new (1,0,1),
+            new (0,0,1),
+
+            new (0,0,0),
+            new (1,0,0),
+            new (1,1,0),
+            new (0,1,0),
+        };
         static (int x, int y, int z)[] positionChecks =
         {
             (1,0,0),
@@ -128,16 +161,16 @@ namespace IslandGame
             (0,0,-1),
         };
         public static VertexBuffer chunkBuffer;
-        public static IndexBuffer indexBuffer;
+        public VertexBuffer[] chunkVertexBuffers;
 
         public bool[,] sidesVisible = new bool[6,6];
         public bool generated = false;
+        public bool[] meshUpdated = new bool[4];
         public int MaxY;
         Random tRandom;
         public Chunk()
         {
-            voxelTexture = new Texture3D(MGame.Instance.GraphicsDevice,Size,Size,Size,false,SurfaceFormat.Color);
-
+            chunkVertexBuffers = new VertexBuffer[4];
             tRandom = new Random(MGame.Instance.seed + 4);
         }
         float GetOctaveNoise(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
@@ -224,7 +257,7 @@ namespace IslandGame
         {
             CompletelyEmpty = true;
             Array.Fill(voxels,0);
-            Array.Fill(voxelsAC,Color.Black);
+            Array.Fill(voxeldata,new VoxelData());
             HashSet<(int x, int y, int z)> propogate = new HashSet<(int x, int y, int z)>();
             int elementsCount = 0;
             for (int x = 0; x < Size; x++)
@@ -235,7 +268,7 @@ namespace IslandGame
 
                     //float ocean = (IcariaNoise.GradientNoise(samplex * 0.001f, samplez * 0.001f, 1 + MGame.Instance.seed) +1f);
                     float ocean = 0f;
-                    int terrainHeight = (int)(GetTerrainHeight(samplex/2f, samplez/2f)*(1-ocean) + (ocean*2));;
+                    int terrainHeight = (int)(GetTerrainHeight(samplex/2f, samplez/2f)*(1-ocean) + (ocean*2));
 
                     int shortGrassHeight = tRandom.Next(1,4);
                     float shortGrassChance = (float)(tRandom.NextDouble() * 2 - 1);
@@ -258,13 +291,6 @@ namespace IslandGame
                         {
                             propogate.Add((x, y, z));
                         }
-
-
-                        voxelsAC[x + Size * (y + Size * z)] = new Color(
-                            voxels[x + Size * (y + Size * z)], 
-                            (int)((MathF.Min(MathF.Max(terrainHeight - 10,0), 100)*0.2f + 180) * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((samplex, sampley, samplez))),
-                            Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].shaderEffect, 
-                            255);
                         elementsCount++;
                     }
                     //"Dirt Pass"
@@ -292,22 +318,120 @@ namespace IslandGame
                             VoxelStructurePlacer.Place(samplex, sampley + 1, samplez, new ShortGrass());
                         }
 
-                        voxelsAC[x + Size * (y + Size * z)] = new Color(
-                            voxels[x + Size * (y + Size * z)],
-                            (int)((MathF.Min(MathF.Max(terrainHeight - 10, 0), 100) * 0.2f + 180) * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((samplex, sampley, samplez))),
-                            Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].shaderEffect,
-                            255);
+                        voxeldata[x + Size * (y + Size * z)].shade = (int)((MathF.Min(MathF.Max(terrainHeight - 10, 0), 100) * 0.2f + 180) * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((samplex, sampley, samplez)));
                     }
                 }
             }
 
             if (!CheckQueue())
             {
-                voxelTexture.SetData(voxelsAC, 0, voxelsAC.Length);
                 GenerateVisibility(propogate);
             }
-
+            Remesh(true);
+            meshUpdated = new bool[4] { true, true, true, true };
             generated = true;
+        }
+
+        private VertexPositionColorNormalTexture[] MeshLOD(int lod)
+        {
+            List<VertexPositionColorNormalTexture> verts = new List<VertexPositionColorNormalTexture>();
+
+            int scale = (int)MathF.Pow(2,lod);
+
+            for (int x = 0; x < Size; x += scale)
+            {
+                for (int z = 0; z < Size; z += scale)
+                {
+                    int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
+
+                    int terrainHeight = (int)(GetTerrainHeight(samplex / 2f, samplez / 2f));
+                    for (int y = 0; y < Size; y += scale)
+                    {
+                        int sampley = y + chunkPos.y * Size;
+
+                        if (IsOutOfBounds((x, y, z))) continue;
+
+                        if (voxels[x + Size * (y + Size * z)] == 0) continue;
+
+                        for (int p = 0; p < positionChecks.Length; p++)
+                        {
+                            (int x, int y, int z) checkPos = (positionChecks[p].x*scale + x, positionChecks[p].y * scale + y, positionChecks[p].z * scale + z);
+                            bool placeFace = false;
+
+                            Vector3 normal = new Vector3(positionChecks[p].x, positionChecks[p].y, positionChecks[p].z);
+
+                            Color color = new Color((byte)voxels[x + Size * (y + Size * z)],
+                                                    (byte)voxeldata[x + Size * (y + Size * z)].shade,
+                                                    (byte)Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].shaderEffect,
+                                                    (byte)0);
+
+                            Vector2 UVCoords = Vector2.Zero;
+                            switch ((p / 2))
+                            {
+                                case 0:
+                                    UVCoords = new Vector2((MathF.Abs(sampley) + 1) % 16, (MathF.Abs(samplez) + 1) % 16);
+                                    break;
+                                case 1:
+                                    UVCoords = new Vector2((MathF.Abs(samplex) + 1) % 16, (MathF.Abs(samplez) + 1) % 16);
+                                    break;
+                                case 2:
+                                    UVCoords = new Vector2((MathF.Abs(samplex) + 1) % 16, (MathF.Abs(sampley) + 1) % 16);
+                                    break;
+                            }
+                            UVCoords += new Vector2((voxels[x + Size * (y + Size * z)] - 1) % 16, (voxels[x + Size * (y + Size * z)] - 1) / 16) * 16 + Vector2.One * 0.1f;
+
+                            UVCoords /= 256f;
+
+                            if (IsOutOfBounds(checkPos))
+                            {
+                                placeFace = true;
+                            }
+                            else
+                            {
+                                placeFace = voxels[checkPos.x + Size * (checkPos.y + Size * checkPos.z)] == 0;
+                            }
+                            if (placeFace)
+                            {
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 1]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 3]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
+                            }
+                        }
+                    }
+                }
+            }
+
+            meshUpdated[lod] = true;
+
+            if (verts.Count == 0) return verts.ToArray();
+
+            chunkVertexBuffers[lod] = new VertexBuffer(MGame.Instance.GraphicsDevice, typeof(VertexPositionColorNormalTexture), verts.Count, BufferUsage.WriteOnly);
+            chunkVertexBuffers[lod].SetData(verts.ToArray());
+
+            return verts.ToArray();
+        }
+
+        public int GetLOD()
+        {
+            return (int)MathF.Floor(MathF.Min(Vector3.Distance(MGame.Instance.cameraPosition, new Vector3(chunkPos.x + 0.5f, chunkPos.y + 0.5f, chunkPos.z + 0.5f) * Size) / (Size * 16),3));
+        }
+
+        public void Remesh(bool all = false)
+        {
+            if (CompletelyEmpty) return;
+
+            if(!all)
+            {
+                MeshLOD(GetLOD());
+            }
+            else
+            {
+                for(int i = 0; i < 4; i++)
+                    MeshLOD(i);
+            }
         }
 
         public bool CheckQueue()
@@ -323,17 +447,15 @@ namespace IslandGame
                 if (p.x < 0 || p.y < 0 || p.z < 0 || p.x >= Size || p.y >= Size || p.z >= Size) continue;
                 CompletelyEmpty = false;
                 voxels[p.x + Size * (p.y + Size * p.z)] = p.vox;
+                voxeldata[p.x + Size * (p.y + Size * p.z)].shade = (int)(180 * Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].GetShade((p.x,p.y,p.z)));
                 MaxY = Math.Max(MaxY, p.y);
-
-                voxelsAC[p.x + Size * (p.y + Size * p.z)] = new Color(
-                    (int)voxels[p.x + Size * (p.y + Size * p.z)],
-                    (int)(250* Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].GetShade((p.x, p.y, p.z))),
-                    Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].shaderEffect,
-                    255);
             }
             queuedVoxels.Clear();
             GenerateVisibility();
-            voxelTexture.SetData(voxelsAC, 0, voxelsAC.Length);
+            meshUpdated = new bool[4] { false, false, false, false };
+
+            Remesh();
+
             return true;
         }
 
@@ -342,16 +464,13 @@ namespace IslandGame
             if (x < 0 || y < 0 || z < 0 || x >= Size || y >= Size || z >= Size) return;
 
             voxels[x + Size * (y + Size * z)] = newVoxel;
+            voxeldata[x + Size * (y + Size * z)].shade = (int)(180 * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((x, y, z)));
 
-            voxelsAC[x + Size * (y + Size * z)] = new Color(
-                (int)voxels[x + Size * (y + Size * z)],
-                (int)(250 * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((x, y, z))),
-                Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].shaderEffect,
-                255);
             MaxY = Math.Max(MaxY, y);
             GenerateVisibility();
-            voxelTexture.SetData(voxelsAC, 0, voxelsAC.Length);
             CompletelyEmpty = false;
+            meshUpdated = new bool[4] { false, false, false, false };
+            Remesh();
         }
         public void ModifyQueue(int x, int y, int z, int newVoxel)
         {
