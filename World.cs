@@ -29,7 +29,7 @@ namespace IslandGame
             new Voxel(((int x, int y, int z) pos) =>
             {
                 return MathF.Abs(MathF.Sin((IcariaNoise.GradientNoise3D(pos.x * 0.1f, pos.y * 0.1f, pos.z * 0.1f))))*0.1f + 0.9f + (float)(Random.Shared.NextDouble() * 0.05f);
-            },true,1),
+            },true,1,true),
             //Sand
             new Voxel(((int x, int y, int z) pos) =>
             {
@@ -68,13 +68,14 @@ namespace IslandGame
         ];
 
         public Func<(int x, int y, int z),float> GetShade;
-        public bool ignoreCollision;
+        public bool ignoreCollision,isTransparent;
         public int shaderEffect;
 
-        public Voxel(Func<(int x, int y, int z), float> GetShade, bool ignoreCollision = false, int shaderEffect = 0)
+        public Voxel(Func<(int x, int y, int z), float> GetShade, bool ignoreCollision = false, int shaderEffect = 0, bool isTransparent = false)
         {
             this.GetShade = GetShade;
             this.ignoreCollision = ignoreCollision;
+            this.isTransparent = isTransparent;
             this.shaderEffect = shaderEffect;
         }
     }
@@ -164,13 +165,14 @@ namespace IslandGame
         public VertexBuffer[] chunkVertexBuffers;
 
         public bool[,] sidesVisible = new bool[6,6];
+        public bool[] facesVisibleAtAll = new bool[6];
         public bool generated = false;
         public bool[] meshUpdated = new bool[4];
         public int MaxY;
         Random tRandom;
         public Chunk()
         {
-            chunkVertexBuffers = new VertexBuffer[4];
+            chunkVertexBuffers = new VertexBuffer[5];
             tRandom = new Random(MGame.Instance.seed + 4);
         }
         float GetOctaveNoise(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
@@ -236,7 +238,7 @@ namespace IslandGame
         {
             int voxel = 0;
             // Main terrain voxel assignment with 3D noise layers
-            voxel = y <= terrainHeight ? 2 : 0;
+            voxel = y <= terrainHeight ? y < 5 ? 4 : 2 : 0;
 
             // Water voxel assignment for regions below sea level
             if (y < 5 && y >= terrainHeight)
@@ -287,7 +289,7 @@ namespace IslandGame
                             CompletelyEmpty = false;
                             MaxY = Math.Max(MaxY, y);
                         }
-                        else
+                        if(voxels[x + Size * (y + Size * z)] == 0 || Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent)
                         {
                             propogate.Add((x, y, z));
                         }
@@ -318,7 +320,7 @@ namespace IslandGame
                             VoxelStructurePlacer.Place(samplex, sampley + 1, samplez, new ShortGrass());
                         }
 
-                        voxeldata[x + Size * (y + Size * z)].shade = (int)((MathF.Min(MathF.Max(terrainHeight - 10, 0), 100) * 0.2f + 180) * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((samplex, sampley, samplez)));
+                        voxeldata[x + Size * (y + Size * z)].shade = (int)((MathF.Min(MathF.Max(terrainHeight - 10, 0), 100) * 0.2f + 190) * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((samplex, sampley, samplez)));
                     }
                 }
             }
@@ -328,7 +330,6 @@ namespace IslandGame
                 GenerateVisibility(propogate);
             }
             Remesh(true);
-            meshUpdated = new bool[4] { true, true, true, true };
             generated = true;
         }
 
@@ -336,7 +337,7 @@ namespace IslandGame
         {
             List<VertexPositionColorNormalTexture> verts = new List<VertexPositionColorNormalTexture>();
 
-            int scale = (int)MathF.Pow(2,lod);
+            int scale = lod!=4? (int)MathF.Pow(2, lod) :1;
 
             for (int x = 0; x < Size; x += scale)
             {
@@ -352,6 +353,8 @@ namespace IslandGame
                         if (IsOutOfBounds((x, y, z))) continue;
 
                         if (voxels[x + Size * (y + Size * z)] == 0) continue;
+                        if (Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod != 4) continue;
+                        if (!Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod == 4) continue;
 
                         for (int p = 0; p < positionChecks.Length; p++)
                         {
@@ -361,7 +364,7 @@ namespace IslandGame
                             Vector3 normal = new Vector3(positionChecks[p].x, positionChecks[p].y, positionChecks[p].z);
 
                             Color color = new Color((byte)voxels[x + Size * (y + Size * z)],
-                                                    (byte)voxeldata[x + Size * (y + Size * z)].shade,
+                                                    (byte)MathF.Min(voxeldata[x + Size * (y + Size * z)].shade,255),
                                                     (byte)Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].shaderEffect,
                                                     (byte)0);
 
@@ -382,15 +385,20 @@ namespace IslandGame
 
                             UVCoords /= 256f;
 
+                            int vox = 0;
+
                             if (IsOutOfBounds(checkPos))
                             {
-                                placeFace = true;
+                                int grabbed = MGame.Instance.GrabVoxel(new Vector3(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale)));
+
+                                if (grabbed == -1) vox = GetVoxel(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale), terrainHeight - 2);
+                                else vox = grabbed;
                             }
                             else
                             {
-                                placeFace = voxels[checkPos.x + Size * (checkPos.y + Size * checkPos.z)] == 0;
+                                vox = voxels[checkPos.x + Size * (checkPos.y + Size * checkPos.z)];
                             }
-                            if (placeFace)
+                            if (vox == 0 || (Voxel.voxelTypes[vox].isTransparent && vox != voxels[x + Size * (y + Size * z)]))
                             {
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 1]*(scale) + new Vector3(x, y, z), color, normal, UVCoords));
@@ -404,7 +412,7 @@ namespace IslandGame
                 }
             }
 
-            meshUpdated[lod] = true;
+            if(lod != 4) meshUpdated[lod] = true;
 
             if (verts.Count == 0) return verts.ToArray();
 
@@ -432,6 +440,7 @@ namespace IslandGame
                 for(int i = 0; i < 4; i++)
                     MeshLOD(i);
             }
+            MeshLOD(4);
         }
 
         public bool CheckQueue()
@@ -447,7 +456,7 @@ namespace IslandGame
                 if (p.x < 0 || p.y < 0 || p.z < 0 || p.x >= Size || p.y >= Size || p.z >= Size) continue;
                 CompletelyEmpty = false;
                 voxels[p.x + Size * (p.y + Size * p.z)] = p.vox;
-                voxeldata[p.x + Size * (p.y + Size * p.z)].shade = (int)(180 * Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].GetShade((p.x,p.y,p.z)));
+                voxeldata[p.x + Size * (p.y + Size * p.z)].shade = (int)(240 * Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].GetShade((p.x,p.y,p.z)));
                 MaxY = Math.Max(MaxY, p.y);
             }
             queuedVoxels.Clear();
@@ -464,7 +473,7 @@ namespace IslandGame
             if (x < 0 || y < 0 || z < 0 || x >= Size || y >= Size || z >= Size) return;
 
             voxels[x + Size * (y + Size * z)] = newVoxel;
-            voxeldata[x + Size * (y + Size * z)].shade = (int)(180 * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((x, y, z)));
+            voxeldata[x + Size * (y + Size * z)].shade = (int)(240 * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((x, y, z)));
 
             MaxY = Math.Max(MaxY, y);
             GenerateVisibility();
@@ -484,8 +493,11 @@ namespace IslandGame
             {
                 // Initialize visibility array
                 for (int i = 0; i < 6; i++)
+                {
+                    facesVisibleAtAll[i] = true;
                     for (int j = 0; j < 6; j++)
                         sidesVisible[i, j] = true;
+                }
 
                 return;
             }
@@ -532,7 +544,7 @@ namespace IslandGame
                     }
 
                     // If it's not a solid voxel, add to internal propagation queue
-                    if (voxels[p.x + Size * (p.y + Size * p.z)] == 0)
+                    if (voxels[p.x + Size * (p.y + Size * p.z)] == 0 || Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].isTransparent)
                     {
                         internalProp.Enqueue(p);
                     }
@@ -558,7 +570,7 @@ namespace IslandGame
                             continue;
                         }
 
-                        if (voxels[p.x + Size * (p.y + Size * p.z)] == 0)
+                        if (voxels[p.x + Size * (p.y + Size * p.z)] == 0 || Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].isTransparent)
                         {
                             internalProp.Enqueue(p);
                         }
@@ -570,14 +582,18 @@ namespace IslandGame
 
             // Initialize visibility array
             for (int i = 0; i < 6; i++)
+            {
+                facesVisibleAtAll[i] = true;
                 for (int j = 0; j < 6; j++)
                     sidesVisible[i, j] = false;
+            }
 
             // Update sidesVisible if any edge was touched
             for (int i = 0; i < 6; i++)
             {
                 if (touchedByFlood[i])
                 {
+                    facesVisibleAtAll[i] = true;
                     for (int j = 0; j < 6; j++)
                     {
                         if (touchedByFlood[j])

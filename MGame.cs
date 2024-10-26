@@ -46,7 +46,7 @@ namespace IslandGame
         ConcurrentQueue<(int x, int y, int z)> toMesh = new ConcurrentQueue<(int x, int y, int z)>();
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 120;
+        public int RenderDistance = 32;
         public bool enableAO = true;
         float _fov = 90f;
         public float FOV {
@@ -424,29 +424,21 @@ namespace IslandGame
                     const int BACK_FACE = 4;
 
                     // Check if we can travel through each face of the chunk
-                    if (fromFace == -1 || (chunk.TestVisibility(LEFT_FACE, fromFace)))
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[LEFT_FACE]) || (chunk.TestVisibility(LEFT_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x - 1, chunk.chunkPos.y, chunk.chunkPos.z, RIGHT_FACE));
-                    if (fromFace == -1 || (chunk.TestVisibility(RIGHT_FACE, fromFace)))
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[RIGHT_FACE]) || (chunk.TestVisibility(RIGHT_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x + 1, chunk.chunkPos.y, chunk.chunkPos.z, LEFT_FACE));
-                    if (fromFace == -1 || (chunk.TestVisibility(BOTTOM_FACE, fromFace)))
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[BOTTOM_FACE]) || (chunk.TestVisibility(BOTTOM_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y - 1, chunk.chunkPos.z, TOP_FACE));
-                    if (fromFace == -1 || (chunk.TestVisibility(TOP_FACE, fromFace)))
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[TOP_FACE]) || (chunk.TestVisibility(TOP_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y + 1, chunk.chunkPos.z, BOTTOM_FACE));
-                    if (fromFace == -1 || (chunk.TestVisibility(FRONT_FACE, fromFace)))
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[FRONT_FACE]) || (chunk.TestVisibility(FRONT_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z - 1, BACK_FACE));
-                    if (fromFace == -1 || (chunk.TestVisibility(BACK_FACE, fromFace)))
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[BACK_FACE]) || (chunk.TestVisibility(BACK_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z + 1, FRONT_FACE));
 
                     return neighbors;
                 }
-
-                toRender.Sort(((int x, int y, int z) a, (int x, int y, int z) b) =>
-                {
-                    float adist = MathF.Abs(a.x-cx)+MathF.Abs(a.y-cy)+MathF.Abs(a.z-cz);
-                    float bdist = MathF.Abs(b.x-cx)+MathF.Abs(b.y-cy)+MathF.Abs(b.z-cz);
-
-                    return adist.CompareTo(bdist);
-                });
             }
 
             base.Update(gameTime);
@@ -477,7 +469,7 @@ namespace IslandGame
             GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, Color.LightSkyBlue, 1000f, 1);
 
             GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
-            GraphicsDevice.BlendState = BlendState.AlphaBlend;
+            GraphicsDevice.BlendState = BlendState.NonPremultiplied;
             GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
             GraphicsDevice.SamplerStates[0] = SamplerState.PointWrap;
@@ -507,7 +499,6 @@ namespace IslandGame
                 GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
 
                 chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
-                chunk.Parameters["minSafeDistance"]?.SetValue(Vector3.Distance(cameraPosition, Vector3.Min(chunkbounds.Max, Vector3.Max(chunkbounds.Min, cameraPosition))));
 
                 foreach (var pass in chunk.CurrentTechnique.Passes)
                 {
@@ -516,24 +507,47 @@ namespace IslandGame
                 }
             }
 
-            GraphicsDevice.DepthStencilState = DepthStencilState.DepthRead;
+            //Transparent
+            foreach (var c in toRender.ToArray().AsSpan())
+            {
+                BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size)));
+                if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
+                    continue;
+
+                int LOD = 4;
+
+                if (loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0)
+                    continue;
+
+                GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
+
+                chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
+
+                foreach (var pass in chunk.CurrentTechnique.Passes)
+                {
+                    pass.Apply();
+                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[c].chunkVertexBuffers[LOD].VertexCount / 3);
+                }
+            }
+
             player.Render();
-            //foreach (var c in toRender.ToArray().AsSpan())
-            //{
-            //    effect.Alpha = 0.4f;
-            //    effect.DiffuseColor = Color.Black.ToVector3();
+            GraphicsDevice.DepthStencilState = DepthStencilState.None;
+            foreach (var c in toRender.ToArray().AsSpan())
+            {
+                effect.Alpha = 0.4f;
+                effect.DiffuseColor = Color.Black.ToVector3();
 
-            //    effect.Projection = MGame.Instance.projection;
-            //    effect.View = MGame.Instance.view;
+                effect.Projection = MGame.Instance.projection;
+                effect.View = MGame.Instance.view;
 
-            //    effect.World = Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
+                effect.World = Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
 
-            //    foreach (var pass in effect.CurrentTechnique.Passes)
-            //    {
-            //        pass.Apply();
-            //        Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
-            //    }
-            //}
+                foreach (var pass in effect.CurrentTechnique.Passes)
+                {
+                    pass.Apply();
+                    Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
+                }
+            }
 
 
             GraphicsDevice.SetRenderTarget(SSAOTarget);
@@ -599,7 +613,7 @@ namespace IslandGame
 
                 return loadedChunks[(cx, cy, cz)].voxels[x + Chunk.Size * (y + Chunk.Size * z)];
             }
-            return 0;
+            return -1;
         }
         public void SetVoxel(Vector3 p, int newVoxel)
         {
@@ -641,6 +655,9 @@ namespace IslandGame
         public static bool IsSolidTile(int x, int y, int z)
         {
             int v = MGame.Instance.GrabVoxel(new Vector3(x, y, z));
+
+            if (v == -1) return true;
+
             return v != 0 && !Voxel.voxelTypes[v].ignoreCollision;
         }
         public static Vector3 ResolveCollision(BoundingBox aabb, Vector3 position, ref Vector3 velocity, bool step)
