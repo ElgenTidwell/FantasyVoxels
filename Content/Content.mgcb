@@ -1,0 +1,65 @@
+
+#----------------------------- Global Properties ----------------------------#
+
+/outputDir:bin/$(Platform)
+/intermediateDir:obj/$(Platform)
+/platform:DesktopGL
+/config:
+/profile:HiDef
+/compress:False
+
+#-------------------------------- References --------------------------------#
+
+
+#---------------------------------- Content ---------------------------------#
+
+#begin ../Working/Shaders/chunk.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/chunk.fx;Shaders/chunk.fx
+
+#begin ../Working/Shaders/screencomp.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/screencomp.fx;Shaders/screencomp.fx
+
+#begin ../Working/Textures/colors.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/colors.png;Textures/colors.png
+
+#begin ../Working/Shaders/pscreen.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/pscreen.fx;Shaders/pscreen.fx
+
+#begin ../Working/Textures/noise.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/noise.png;Textures/noise.png
+
+#begin ../Working/Textures/UITextures.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/UITextures.png;Textures/UITextures.png
