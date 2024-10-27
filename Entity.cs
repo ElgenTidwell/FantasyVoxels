@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace IslandGame
+namespace FantasyVoxels
 {
     public abstract class Entity
     {
@@ -48,9 +48,9 @@ namespace IslandGame
 
             if (!MGame.Instance.loadedChunks.ContainsKey((cx, cy, cz))) return;
 
-            for (int i = 0; i < 8f; i++)
+            for (int i = 0; i < 4; i++)
             {
-                position += velocity * MGame.dt * (1 / 8f);
+                position += velocity * MGame.dt * (1 / 4f);
 
                 Vector3 push = CollisionDetector.ResolveCollision(bounds, position, ref velocity, grounded);
                 position = push;

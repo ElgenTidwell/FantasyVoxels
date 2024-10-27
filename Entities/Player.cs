@@ -10,7 +10,7 @@ using InternalFPS;
 using Icaria.Engine.Procedural;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace IslandGame.Entities
+namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
@@ -22,7 +22,7 @@ namespace IslandGame.Entities
         float curwalkspeed = 12;
         float desiredFOV = 80f;
 
-        float digTime = 0f;
+        float autoDigTime = 0f;
 
         bool running;
 
@@ -79,7 +79,7 @@ namespace IslandGame.Entities
         public override void Start()
         {
             bounds = new BoundingBox(new Vector3(-1.5f,-8,-1.5f), new Vector3(1.5f, 1, 1.5f));
-            cameraBounce = new SecondOrderDynamics(3.8f, 0.7f, 2.0f, position.Y);
+            cameraBounce = new SecondOrderDynamics(3.8f, 0.7f, 0.6f, position.Y);
 
             vertBuffer = new VertexBuffer(MGame.Instance.GraphicsDevice, typeof(VertexPosition), voxelBoxVert.Length, BufferUsage.WriteOnly);
             vertBuffer.SetData(voxelBoxVert);
@@ -151,10 +151,10 @@ namespace IslandGame.Entities
 
             prevHitTile = Vector3.Floor(prevHitTile / 4) * 4;
 
-            digTime -= MGame.dt;
-            if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit && digTime <= 0)
+            autoDigTime -= MGame.dt;
+            if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
             {
-                digTime = 0.25f;
+                autoDigTime = 0.25f;
                 if (Keyboard.GetState().IsKeyDown(Keys.LeftShift))
                 {
                     MGame.Instance.SetVoxel(hitTile, 0);
@@ -173,21 +173,25 @@ namespace IslandGame.Entities
                     }
                 }
             }
-            if (Mouse.GetState().RightButton == ButtonState.Pressed && voxelHit && digTime <= 0)
+            if (Mouse.GetState().RightButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
             {
-                digTime = 0.25f;
-                for (int x = 0; x < 4; x++)
+                BoundingBox placeBox = new BoundingBox(prevHitTile - position, prevHitTile + Vector3.One*4-position);
+                if (placeBox.Contains(bounds) == ContainmentType.Disjoint)
                 {
-                    for (int z = 0; z < 4; z++)
+                    autoDigTime = 0.25f;
+                    for (int x = 0; x < 4; x++)
                     {
-                        for (int y = 0; y < 4; y++)
+                        for (int z = 0; z < 4; z++)
                         {
-                            MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + prevHitTile, 10);
+                            for (int y = 0; y < 4; y++)
+                            {
+                                MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + prevHitTile, 10);
+                            }
                         }
                     }
                 }
             }
-            if (Mouse.GetState().RightButton == ButtonState.Released && Mouse.GetState().LeftButton == ButtonState.Released) digTime = 0f;
+            if (Mouse.GetState().RightButton == ButtonState.Released && Mouse.GetState().LeftButton == ButtonState.Released) autoDigTime = 0f;
 
             applyVelocity(wishDir);
             base.Update();
@@ -251,7 +255,7 @@ namespace IslandGame.Entities
                 {
                     effect.DiffuseColor = Color.Black.ToVector3();
 
-                    effect.World = Matrix.CreateScale(4) * MGame.Instance.world * Matrix.CreateTranslation(Vector3.Floor(hitTile / 4) * 4);
+                    effect.World = Matrix.CreateScale(4.01f) * MGame.Instance.world * Matrix.CreateTranslation(Vector3.Floor(hitTile / 4) * 4 - Vector3.One * 0.005f);
 
                     foreach (var pass in effect.CurrentTechnique.Passes)
                     {

@@ -8,7 +8,7 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace IslandGame
+namespace FantasyVoxels
 {
     public static class VoxelStructurePlacer
     {
@@ -54,11 +54,15 @@ namespace IslandGame
 
         protected void SetVoxel(int x, int y, int z, int voxel)
         {
-            int cx = (int)((float)x/ Chunk.Size);
-            int cy = (int)((float)y/ Chunk.Size);
-            int cz = (int)((float)z/ Chunk.Size);
+            int cx = (int)((float)x / Chunk.Size);
+            int cy = (int)((float)y / Chunk.Size);
+            int cz = (int)((float)z / Chunk.Size);
 
-            VoxelStructurePlacer.Enqueue((cx,cy,cz),(x-cx*Chunk.Size,y-cy*Chunk.Size,z-cz*Chunk.Size,voxel));
+            int px = (x)-cx*Chunk.Size;
+            int py = (y)-cy*Chunk.Size;
+            int pz = (z)-cz*Chunk.Size;
+
+            VoxelStructurePlacer.Enqueue((cx,cy,cz),(px,py,pz,voxel));
         }
     }
 

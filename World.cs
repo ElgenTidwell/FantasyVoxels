@@ -5,7 +5,7 @@ using Microsoft.Xna.Framework.Media;
 using System;
 using System.Collections.Generic;
 
-namespace IslandGame
+namespace FantasyVoxels
 {
     public struct Voxel
     {
@@ -175,7 +175,7 @@ namespace IslandGame
             chunkVertexBuffers = new VertexBuffer[5];
             tRandom = new Random(MGame.Instance.seed + 4);
         }
-        float GetOctaveNoise(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
+        public static float GetOctaveNoise(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
             float totalNoise = 0;
             float amplitude = 1;
@@ -189,7 +189,7 @@ namespace IslandGame
             }
             return totalNoise;
         }
-        float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
+        public static float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
             float totalNoise = 0;
             float amplitude = 1;
@@ -203,7 +203,7 @@ namespace IslandGame
             }
             return totalNoise;
         }
-        int GetTerrainHeight(float samplex, float samplez)
+        public static int GetTerrainHeight(float samplex, float samplez)
         {
             float valleyNoise = GetOctaveNoise(samplex, samplez, 0.00002f, 5, 1.02f, 3.0f,14);
             if (valleyNoise < -0.0f) valleyNoise = 1 - MathF.Pow(1 - valleyNoise, 4);
@@ -234,7 +234,7 @@ namespace IslandGame
 
             return terrainHeight;
         }
-        public int GetVoxel(float x, float y, float z, int terrainHeight)
+        public static int GetVoxel(float x, float y, float z, int terrainHeight)
         {
             int voxel = 0;
             // Main terrain voxel assignment with 3D noise layers
@@ -300,12 +300,18 @@ namespace IslandGame
                     for (int y = MaxY; y >= 0; y--)
                     {
                         int sampley = y + chunkPos.y * Size;
-
-                        grassed = GetVoxel(samplex, sampley + 2, samplez, terrainHeight) == 2 || sampley<terrainHeight-1 || sampley > (IcariaNoise.GradientNoise(samplex*0.1f,sampley * 0.1f,MGame.Instance.seed-10)*100+410);
+                        float patchyRandom = IcariaNoise.GradientNoise(samplex * 0.1f, sampley * 0.1f, MGame.Instance.seed - 10);
+                        grassed = GetVoxel(samplex, sampley + 2, samplez, terrainHeight) == 2 || sampley<terrainHeight-1 || sampley > (patchyRandom * 100+410);
                         if (voxels[x + Size * (y + Size * z)] == 2 && (!grassed || MGame.Instance.worldRandom.Next(-100, 100) == 10))
                         {
                             grassed = true;
-                            voxels[x + Size * (y + Size * z)] = sampley<10?4:1;
+
+                            voxels[x + Size * (y + Size * z)] = sampley < 10? 4 : 1;
+                        }
+
+                        if (voxels[x + Size * (y + Size * z)] == 4 && sampley < patchyRandom*40-45)
+                        {
+                            voxels[x + Size * (y + Size * z)] = 2;
                         }
 
                         float r = IcariaNoise.CellularNoise(samplex * 0.1f, samplez * 0.1f, MGame.Instance.seed - 10).r;
@@ -328,8 +334,8 @@ namespace IslandGame
             if (!CheckQueue())
             {
                 GenerateVisibility(propogate);
+                Remesh(false);
             }
-            Remesh(true);
             generated = true;
         }
 
@@ -372,10 +378,10 @@ namespace IslandGame
                             switch ((p / 2))
                             {
                                 case 0:
-                                    UVCoords = new Vector2((MathF.Abs(sampley) + 1) % 16, (MathF.Abs(samplez) + 1) % 16);
+                                    UVCoords = new Vector2((MathF.Abs(samplez) + 1) % 16, (MathF.Abs(sampley) + 1) % 16);
                                     break;
                                 case 1:
-                                    UVCoords = new Vector2((MathF.Abs(samplex) + 1) % 16, (MathF.Abs(samplez) + 1) % 16);
+                                    UVCoords = new Vector2((MathF.Abs(samplez) + 1) % 16, (MathF.Abs(samplex) + 1) % 16);
                                     break;
                                 case 2:
                                     UVCoords = new Vector2((MathF.Abs(samplex) + 1) % 16, (MathF.Abs(sampley) + 1) % 16);
@@ -415,9 +421,10 @@ namespace IslandGame
             if(lod != 4) meshUpdated[lod] = true;
 
             if (verts.Count == 0) return verts.ToArray();
+            var temp = new VertexBuffer(MGame.Instance.GraphicsDevice, typeof(VertexPositionColorNormalTexture), verts.Count, BufferUsage.WriteOnly);
+            temp.SetData(verts.ToArray());
 
-            chunkVertexBuffers[lod] = new VertexBuffer(MGame.Instance.GraphicsDevice, typeof(VertexPositionColorNormalTexture), verts.Count, BufferUsage.WriteOnly);
-            chunkVertexBuffers[lod].SetData(verts.ToArray());
+            chunkVertexBuffers[lod] = temp;
 
             return verts.ToArray();
         }
@@ -431,7 +438,7 @@ namespace IslandGame
         {
             if (CompletelyEmpty) return;
 
-            if(!all)
+            if (!all)
             {
                 MeshLOD(GetLOD());
             }
@@ -443,12 +450,13 @@ namespace IslandGame
             MeshLOD(4);
         }
 
-        public bool CheckQueue()
+        public bool CheckQueue(bool remesh = true)
         {
             queueModified = false;
             var queuedVoxels = VoxelStructurePlacer.GetQueue(chunkPos);
             if (queuedVoxels == null) return false;
             if (queuedVoxels.Count <= 1) return false;
+            List<Chunk> remeshNeighbors = new List<Chunk>();
             while (queuedVoxels.Count > 0)
             {
                 if (!queuedVoxels.TryDequeue(out var p)) continue;
@@ -458,12 +466,52 @@ namespace IslandGame
                 voxels[p.x + Size * (p.y + Size * p.z)] = p.vox;
                 voxeldata[p.x + Size * (p.y + Size * p.z)].shade = (int)(240 * Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].GetShade((p.x,p.y,p.z)));
                 MaxY = Math.Max(MaxY, p.y);
-            }
-            queuedVoxels.Clear();
-            GenerateVisibility();
-            meshUpdated = new bool[4] { false, false, false, false };
+                Chunk neighbor;
+                if (p.x == 0        && MGame.Instance.loadedChunks.TryGetValue((chunkPos.x - 1, chunkPos.y, chunkPos.z), out neighbor))
+                {
+                    if(!remeshNeighbors.Contains(neighbor)) remeshNeighbors.Add(neighbor);
+                }
+                if (p.x == Size - 1 && MGame.Instance.loadedChunks.TryGetValue((chunkPos.x + 1, chunkPos.y, chunkPos.z), out neighbor))
+                {
+                    if (!remeshNeighbors.Contains(neighbor)) remeshNeighbors.Add(neighbor);
+                }
 
-            Remesh();
+                if (p.y == 0        && MGame.Instance.loadedChunks.TryGetValue((chunkPos.x, chunkPos.y - 1, chunkPos.z), out neighbor))
+                {
+                    if (!remeshNeighbors.Contains(neighbor)) remeshNeighbors.Add(neighbor);
+                }
+                if (p.y == Size - 1 && MGame.Instance.loadedChunks.TryGetValue((chunkPos.x, chunkPos.y + 1, chunkPos.z), out neighbor))
+                {
+                    if (!remeshNeighbors.Contains(neighbor)) remeshNeighbors.Add(neighbor);
+                }
+
+                if (p.z == 0        && MGame.Instance.loadedChunks.TryGetValue((chunkPos.x, chunkPos.y, chunkPos.z - 1), out neighbor))
+                {
+                    if (!remeshNeighbors.Contains(neighbor)) remeshNeighbors.Add(neighbor);
+                }
+                if (p.z == Size - 1 && MGame.Instance.loadedChunks.TryGetValue((chunkPos.x, chunkPos.y, chunkPos.z + 1), out neighbor))
+                {
+                    if (!remeshNeighbors.Contains(neighbor)) remeshNeighbors.Add(neighbor);
+                }
+            }
+            GenerateVisibility();
+            queuedVoxels.Clear();
+            meshUpdated = [false, false, false, false];
+
+            foreach(var n in remeshNeighbors)
+            {
+                n.meshUpdated = [false, false, false, false];
+
+                if (remesh)
+                {
+                    n.Remesh();
+                }
+            }
+
+            if (remesh)
+            {
+                Remesh();
+            }
 
             return true;
         }
@@ -476,8 +524,8 @@ namespace IslandGame
             voxeldata[x + Size * (y + Size * z)].shade = (int)(240 * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((x, y, z)));
 
             MaxY = Math.Max(MaxY, y);
-            GenerateVisibility();
             CompletelyEmpty = false;
+            GenerateVisibility();
             meshUpdated = new bool[4] { false, false, false, false };
             Remesh();
         }
@@ -524,11 +572,20 @@ namespace IslandGame
 
             Queue<(int x, int y, int z)> internalProp = new Queue<(int x, int y, int z)>();
 
-            bool[] touchedByFlood = new bool[6];
+
+            // Initialize visibility array
+            for (int i = 0; i < 6; i++)
+            {
+                facesVisibleAtAll[i] = true;
+                for (int j = 0; j < 6; j++)
+                    sidesVisible[i, j] = false;
+            }
 
             // Flood fill
             foreach (var rootPos in propogate)
             {
+                bool[] touchedByFlood = new bool[6];
+
                 visited.Add(rootPos);
                 internalProp.Clear();
                 // Check neighboring positions and queue valid ones
@@ -577,29 +634,19 @@ namespace IslandGame
                     }
                     if (touchedByFlood[0] && touchedByFlood[1] && touchedByFlood[2] && touchedByFlood[3] && touchedByFlood[4] && touchedByFlood[5]) break;
                 }
-                if (touchedByFlood[0] && touchedByFlood[1] && touchedByFlood[2] && touchedByFlood[3] && touchedByFlood[4] && touchedByFlood[5]) break;
-            }
-
-            // Initialize visibility array
-            for (int i = 0; i < 6; i++)
-            {
-                facesVisibleAtAll[i] = true;
-                for (int j = 0; j < 6; j++)
-                    sidesVisible[i, j] = false;
-            }
-
-            // Update sidesVisible if any edge was touched
-            for (int i = 0; i < 6; i++)
-            {
-                if (touchedByFlood[i])
+                // Update sidesVisible if any edge was touched
+                for (int i = 0; i < 6; i++)
                 {
-                    facesVisibleAtAll[i] = true;
-                    for (int j = 0; j < 6; j++)
+                    if (touchedByFlood[i])
                     {
-                        if (touchedByFlood[j])
+                        facesVisibleAtAll[i] = true;
+                        for (int j = 0; j < 6; j++)
                         {
-                            sidesVisible[i, j] = true;
-                            sidesVisible[j, i] = true;
+                            if (touchedByFlood[j])
+                            {
+                                sidesVisible[i, j] = true;
+                                sidesVisible[j, i] = true;
+                            }
                         }
                     }
                 }
@@ -613,6 +660,7 @@ namespace IslandGame
         }
         public bool TestVisibility(int sideFrom, int sideTo)
         {
+            if (sideFrom < 0 || sideTo < 0) return true;
             if (sideFrom == sideTo) return false;
             return sidesVisible[sideFrom, sideTo];
         }

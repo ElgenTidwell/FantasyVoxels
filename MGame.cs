@@ -1,4 +1,4 @@
-﻿using IslandGame.Entities;
+﻿using FantasyVoxels.Entities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace IslandGame
+namespace FantasyVoxels
 {
     public class MGame : Game
     {
@@ -46,7 +46,7 @@ namespace IslandGame
         ConcurrentQueue<(int x, int y, int z)> toMesh = new ConcurrentQueue<(int x, int y, int z)>();
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 32;
+        public int RenderDistance = 64;
         public bool enableAO = true;
         float _fov = 90f;
         public float FOV {
@@ -72,6 +72,10 @@ namespace IslandGame
         int threadsActive = 0;
         TaskPool generationPool;
         TaskPool chunkUpdatePool;
+        TaskPool playerChunkUpdatePool;
+
+        int meshesWorking;
+        int generateWorking;
 
         public VertexPosition[] boxVertices =
         [
@@ -151,10 +155,14 @@ namespace IslandGame
 
             //Chunk.indexBuffer = new IndexBuffer(GraphicsDevice,IndexElementSize.SixteenBits,Chunk.triangles.Length,BufferUsage.WriteOnly);
             //Chunk.indexBuffer.SetData(Chunk.triangles);
+            base.Initialize();
+        }
+
+        public void LoadWorld()
+        {
+            player.position.Y = Chunk.GetTerrainHeight(0, 0) + 14;
 
             player.Start();
-
-            base.Initialize();
         }
 
         protected override void LoadContent()
@@ -201,15 +209,59 @@ namespace IslandGame
                 DepthBufferEnable = false,
                 DepthBufferWriteEnable = true,
             };
-            generationPool = new TaskPool(Environment.ProcessorCount);
-            chunkUpdatePool = new TaskPool(4);
+            generationPool = new TaskPool(6);
+            chunkUpdatePool = new TaskPool(2);
+            playerChunkUpdatePool = new TaskPool(2);
+
+            LoadWorld();
         }
         protected override void UnloadContent()
         {
             generationPool.Stop();
             chunkUpdatePool.Stop();
+            playerChunkUpdatePool.Stop();
             base.UnloadContent();
         }
+
+        void ProcessMesh()
+        {
+            Interlocked.Decrement(ref meshesWorking);
+            for (int i = 0; i < MathF.Min(toMesh.Count, 4); i++)
+            {
+                if (!toMesh.TryDequeue(out (int x, int y, int z) t)) continue;
+
+                BoundingBox chunkbounds = new BoundingBox(new Vector3(t.x, t.y, t.z) * Chunk.Size, (new Vector3(t.x, t.y, t.z) + Vector3.One) * Chunk.Size);
+
+                if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint || loadedChunks[t].meshUpdated[loadedChunks[t].GetLOD()])
+                {
+                    return;
+                }
+
+                loadedChunks[t].Remesh();
+            }
+        }
+        void ProcessGeneration()
+        {
+            Interlocked.Decrement(ref generateWorking);
+            for (int i = 0; i < MathF.Min(toGenerate.Count, 8); i++)
+            {
+                if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) continue;
+
+                if (loadedChunks.ContainsKey(t))
+                {
+                    return; // If chunk already loaded, exit this task
+                }
+
+                Chunk c = new Chunk();
+
+                c.chunkPos = t;
+
+                c.Generate();
+
+                loadedChunks.TryAdd(t, c);
+            }
+        }
+
         protected override void Update(GameTime gameTime)
         {
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
@@ -220,61 +272,6 @@ namespace IslandGame
 
             frustum = new BoundingFrustum(world * view * projection);
 
-            if(toGenerate.Count > 0)
-            {
-                for (int i = 0; i < toGenerate.Count; i+=4)
-                {
-                    generationPool.EnqueueTask(() =>
-                    {
-                        for (int i = 0; i < MathF.Min(toGenerate.Count, 4); i++)
-                        {
-                            if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) return;
-
-                            if (loadedChunks.ContainsKey(t))
-                            {
-                                return; // If chunk already loaded, exit this task
-                            }
-
-                            BoundingBox chunkbounds = new BoundingBox(new Vector3(t.x, t.y, t.z) * Chunk.Size, (new Vector3(t.x, t.y, t.z) + Vector3.One) * Chunk.Size);
-
-                            if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
-                            {
-                                return;
-                            }
-
-                            Chunk c = new Chunk();
-
-                            c.chunkPos = t;
-
-                            c.Generate();
-
-                            loadedChunks.TryAdd(t, c);
-                        }
-                    });
-                }
-            }
-            if (toMesh.Count > 0)
-            {
-                for (int i = 0; i < toMesh.Count; i += 4)
-                {
-                    chunkUpdatePool.EnqueueTask(() =>
-                    {
-                        for (int i = 0; i < MathF.Min(toMesh.Count, 4); i++)
-                        {
-                            if (!toMesh.TryDequeue(out (int x, int y, int z) t)) return;
-
-                            BoundingBox chunkbounds = new BoundingBox(new Vector3(t.x, t.y, t.z) * Chunk.Size, (new Vector3(t.x, t.y, t.z) + Vector3.One) * Chunk.Size);
-
-                            if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint || loadedChunks[t].meshUpdated[loadedChunks[t].GetLOD()])
-                            {
-                                return;
-                            }
-
-                            loadedChunks[t].Remesh();
-                        }
-                    });
-                }
-            }
             int cx;
             int cy;
             int cz;
@@ -344,7 +341,8 @@ namespace IslandGame
             //        }
             //    }
             //}
-
+            const bool enableBFS = true;
+            if(enableBFS)
             {
                 Queue<(int x, int y, int z, int face, int depth)> bfsQueue = new Queue<(int, int, int, int, int)>();
                 HashSet<(int, int, int)> visitedChunks = new HashSet<(int, int, int)>();
@@ -359,29 +357,31 @@ namespace IslandGame
                     // Check if we have exceeded the render distance
                     if (MathF.Abs(x - cx) + MathF.Abs(y - cy) + MathF.Abs(z - cz) >= RenderDistance) continue;
 
+                    BoundingBox chunkbounds = new BoundingBox(new Vector3(x, y, z) * Chunk.Size, (new Vector3(x + 1, y + 1, z + 1) * Chunk.Size));
+                    if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
+                        continue;
+
                     if (!loadedChunks.TryGetValue((x, y, z), out var currentChunk))
                     {
                         // If chunk is not yet generated or queued, add it to generate queue
-                        if (!toGenerate.Contains((x, y, z)))
+                        if (!toGenerate.Contains((x, y, z)) && toGenerate.Count < 8)
                         {
                             toGenerate.Enqueue((x, y, z));
+                            generationPool.EnqueueTask(ProcessGeneration);
                         }
                         continue;
                     }
 
-                    BoundingBox chunkbounds = new BoundingBox(new Vector3(x, y, z) * Chunk.Size, (new Vector3(x+1, y+1, z+1) * Chunk.Size));
-                    if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
-                        continue;
-
                     if (currentChunk.queueModified)
                     {
                         currentChunk.queueModified = false;
-                        if (x == cx && z == cz) currentChunk.CheckQueue();
-                        else chunkUpdatePool.EnqueueTask(() => currentChunk.CheckQueue());
+                        if (x == cx && z == cz) currentChunk.CheckQueue(true);
+                        else chunkUpdatePool.EnqueueTask(() => currentChunk.CheckQueue(false));
                     }
-                    if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)))
+                    if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)) && !toMesh.Contains((x, y, z)) && toMesh.Count < 8)
                     {
                         toMesh.Enqueue((x,y,z));
+                        chunkUpdatePool.EnqueueTask(ProcessMesh);
                     }
 
                     if (visitedChunks.Contains((x, y, z))) continue;
@@ -389,10 +389,9 @@ namespace IslandGame
 
                     // Add to render queue if the chunk is not completely empty
                     if (!currentChunk.CompletelyEmpty)
-                    {
                         toRender.Add((x, y, z));
-                    }
 
+                    var cameraDir = new Vector3(cx, cy, cz) - new Vector3(x, y, z);
                     // BFS to neighbors through visible faces
                     foreach (var (neighborX, neighborY, neighborZ, exitFace) in GetVisibleNeighbors(currentChunk, fromFace))
                     {
@@ -400,7 +399,6 @@ namespace IslandGame
                         int newDepth = depth + 1;
 
                         var chunkDir = new Vector3(neighborX, neighborY, neighborZ) - new Vector3(x,y,z);
-                        var cameraDir = new Vector3(cx, cy, cz) - new Vector3(x,y,z);
 
                         if (Vector3.Dot(chunkDir, cameraDir) > 0) continue;
 
@@ -411,7 +409,6 @@ namespace IslandGame
                         }
                     }
                 }
-
                 List<(int x, int y, int z, int face)> GetVisibleNeighbors(Chunk chunk, int fromFace)
                 {
                     List<(int x, int y, int z, int face)> neighbors = new List<(int, int, int, int)>();
@@ -439,6 +436,63 @@ namespace IslandGame
 
                     return neighbors;
                 }
+            }
+            else
+            {
+                for(int _x = -RenderDistance; _x < RenderDistance; _x++)
+                {
+                    for (int _y = -RenderDistance/2; _y < RenderDistance/2; _y++)
+                    {
+                        for (int _z = -RenderDistance; _z < RenderDistance; _z++)
+                        {
+                            int x = _x + cx;
+                            int y = _y + cy;
+                            int z = _z + cz;
+
+                            // Check if we have exceeded the render distance
+                            if (MathF.Abs(x - cx) + MathF.Abs(y - cy)*2 + MathF.Abs(z - cz) >= RenderDistance) continue;
+
+                            if (!loadedChunks.TryGetValue((x, y, z), out var currentChunk))
+                            {
+                                // If chunk is not yet generated or queued, add it to generate queue
+                                if (!toGenerate.Contains((x, y, z)) && toGenerate.Count < 32)
+                                {
+                                    toGenerate.Enqueue((x, y, z));
+                                    generationPool.EnqueueTask(ProcessGeneration);
+                                }
+                                continue;
+                            }
+
+                            BoundingBox chunkbounds = new BoundingBox(new Vector3(x, y, z) * Chunk.Size, (new Vector3(x + 1, y + 1, z + 1) * Chunk.Size));
+                            if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
+                                continue;
+
+                            if (currentChunk.queueModified)
+                            {
+                                currentChunk.queueModified = false;
+                                if (x == cx && z == cz) currentChunk.CheckQueue(true);
+                                else chunkUpdatePool.EnqueueTask(() => currentChunk.CheckQueue(false));
+                            }
+                            if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)) && toMesh.Count < 32)
+                            {
+                                toMesh.Enqueue((x, y, z));
+                                chunkUpdatePool.EnqueueTask(ProcessMesh);
+                            }
+
+                            // Add to render queue if the chunk is not completely empty
+                            if (!currentChunk.CompletelyEmpty)
+                                toRender.Add((x, y, z));
+                        }
+                    }
+                }
+
+                toRender.Sort(((int x, int y, int z) a, (int x, int y, int z) b) =>
+                {
+                    float adist = MathF.Abs(a.x - cx) + MathF.Abs(a.y - cy) + MathF.Abs(a.z - cz);
+                    float bdist = MathF.Abs(b.x - cx) + MathF.Abs(b.y - cy) + MathF.Abs(b.z - cz);
+
+                    return adist.CompareTo(bdist);
+                });
             }
 
             base.Update(gameTime);
@@ -493,7 +547,9 @@ namespace IslandGame
 
                 int LOD = loadedChunks[c].GetLOD();
 
-                if (loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0) 
+                if ((loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0) && LOD > 0)
+                    LOD--;
+                if (loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0)
                     continue;
 
                 GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
@@ -532,22 +588,22 @@ namespace IslandGame
 
             player.Render();
             GraphicsDevice.DepthStencilState = DepthStencilState.None;
-            foreach (var c in toRender.ToArray().AsSpan())
-            {
-                effect.Alpha = 0.4f;
-                effect.DiffuseColor = Color.Black.ToVector3();
+            //foreach (var c in toRender.ToArray().AsSpan())
+            //{
+            //    effect.Alpha = 0.4f;
+            //    effect.DiffuseColor = Color.Black.ToVector3();
 
-                effect.Projection = MGame.Instance.projection;
-                effect.View = MGame.Instance.view;
+            //    effect.Projection = MGame.Instance.projection;
+            //    effect.View = MGame.Instance.view;
 
-                effect.World = Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
+            //    effect.World = Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
 
-                foreach (var pass in effect.CurrentTechnique.Passes)
-                {
-                    pass.Apply();
-                    Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
-                }
-            }
+            //    foreach (var pass in effect.CurrentTechnique.Passes)
+            //    {
+            //        pass.Apply();
+            //        Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
+            //    }
+            //}
 
 
             GraphicsDevice.SetRenderTarget(SSAOTarget);
@@ -692,9 +748,9 @@ namespace IslandGame
                         {
                             if (x + 1 < min.X || y + 1 < min.Y || z + 1 < min.Z || x > max.X || y > max.Y || z > max.Z) continue;
 
-                            if (step && y + 1 > min.Y && (y + 1 - min.Y) < 2 && !IsSolidTile(x, y + 1, z) && !IsSolidTile(x, (int)max.Y, z))
+                            if (step && y + 1 > min.Y && (y + 1 - min.Y) < 3 && !IsSolidTile(x, y + 1, z) && !IsSolidTile(x, (int)max.Y, z))
                             {
-                                stepy = MathF.Abs(y + 1 - min.Y);
+                                stepy = MathF.Abs(y + 1 - min.Y)+0.01f;
                                 continue;
                             }
 

@@ -8,47 +8,39 @@ public class TaskPool
 {
     private readonly BlockingCollection<Action> _taskQueue;
     private readonly List<Task> _workers;
-    private bool stop = false;
+    private readonly CancellationTokenSource _cancellationTokenSource;
 
     public TaskPool(int numberOfWorkers)
     {
         _taskQueue = new BlockingCollection<Action>();
         _workers = new List<Task>(numberOfWorkers);
-        stop = false;
+        _cancellationTokenSource = new CancellationTokenSource();
 
         for (int i = 0; i < numberOfWorkers; i++)
         {
-            var worker = new Task(Work);
-            worker.Start();
-            _workers.Add(worker);
+            _workers.Add(Task.Factory.StartNew(Work, _cancellationTokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default));
         }
     }
 
     private void Work()
     {
-        while (true)
+        foreach (var task in _taskQueue.GetConsumingEnumerable(_cancellationTokenSource.Token))
         {
-            if (stop) break;
-
-            if(_taskQueue.Count == 0)
-            {
-                Thread.Sleep(150);
-                continue;
-            }
-
-            if(_taskQueue.TryTake(out Action task))
-                task.Invoke(); // Execute the task
+            task.Invoke();
         }
     }
 
     public void EnqueueTask(Action task)
     {
-        _taskQueue.Add(task);
+        if (!_taskQueue.IsAddingCompleted)
+        {
+            _taskQueue.Add(task);
+        }
     }
 
     public void Stop()
     {
-        stop = true;
+        _cancellationTokenSource.Cancel();
         _taskQueue.CompleteAdding();
         _taskQueue.Dispose();
     }

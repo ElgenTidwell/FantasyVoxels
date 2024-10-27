@@ -76,22 +76,25 @@ VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR
     [branch]
     if (effect == 1)
     {
-                //Water
-        voxShadeEffect = lerp((vox.g / 255.f), ((vox.g / 255.f) - 0.5f) * 2, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
-        voxAlphaEffect = (abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))))*0.1f + 1;
+        float sin1 = sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180));
+        float sin2 = sin(time * 0.2 + radians(((tile.z / ChunkSize)) * 180));
         
-        finPos.y += sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180)) * sin(time * 0.2 + radians(((tile.z / ChunkSize)) * 180));
+        //Water
+        voxShadeEffect = lerp((vox.g / 255.f), ((vox.g / 255.f) - 0.5f) * 2, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
+        voxAlphaEffect = abs(sin1) * 0.1f + 1;
+        
+        finPos.y += sin1 * sin2;
     }
     else if (effect == 2)
     {
-                //Double wave
+        //Double wave
         voxShadeEffect = (vox.g / 255.f) - (abs(sin(time * 1 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180) + 1) / 2) * (abs(sin(time * 0.01 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180)) + 1) / 2) * 0.1f);
     }
     output.Color = float4(voxShadeEffect, 0, 0, voxAlphaEffect);
     
     output.Position = mul(mul(mul(finPos, World), View), Projection); // Apply standard transformations
     
-    output.Depth = float2(output.Position.w, abs(normal.x) * 0.1f + abs(normal.y) * 0.5f + abs(normal.z) * 0.8f);
+    output.Depth = float2(distance(output.WorldPos, cameraPosition), abs(normal.x) * 0.1f + abs(normal.y) * 0.5f + abs(normal.z) * 0.8f);
     
     return output;
 }
@@ -123,7 +126,7 @@ PSOut MainPS(PSInput input)
     
     float4 color = tex2D(colorsSampler,input.Coord);
     
-    output.Color0 = float4(lerp(color.xyz * dat.r, skyColor, pow(saturate(fog), 2)), color.a*dat.a);
+    output.Color0 = float4(lerp(color.xyz * dat.r, skyColor, saturate(fog)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {
