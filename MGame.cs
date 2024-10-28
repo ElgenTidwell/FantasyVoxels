@@ -19,7 +19,7 @@ namespace FantasyVoxels
         public static float dt = 0;
         public static float totalTime = 0;
 
-        public int seed = Random.Shared.Next(0,int.MaxValue/2);
+        public int seed = Environment.TickCount;
         public Random worldRandom;
 
         private GraphicsDeviceManager _graphics;
@@ -46,7 +46,7 @@ namespace FantasyVoxels
         ConcurrentQueue<(int x, int y, int z)> toMesh = new ConcurrentQueue<(int x, int y, int z)>();
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 64;
+        public int RenderDistance = 32;
         public bool enableAO = true;
         float _fov = 90f;
         public float FOV {
@@ -71,8 +71,6 @@ namespace FantasyVoxels
 
         int threadsActive = 0;
         TaskPool generationPool;
-        TaskPool chunkUpdatePool;
-        TaskPool playerChunkUpdatePool;
 
         int meshesWorking;
         int generateWorking;
@@ -209,57 +207,35 @@ namespace FantasyVoxels
                 DepthBufferEnable = false,
                 DepthBufferWriteEnable = true,
             };
-            generationPool = new TaskPool(6);
-            chunkUpdatePool = new TaskPool(2);
-            playerChunkUpdatePool = new TaskPool(2);
+            generationPool = new TaskPool(4);
 
             LoadWorld();
         }
         protected override void UnloadContent()
         {
             generationPool.Stop();
-            chunkUpdatePool.Stop();
-            playerChunkUpdatePool.Stop();
             base.UnloadContent();
         }
 
         void ProcessMesh()
         {
             Interlocked.Decrement(ref meshesWorking);
-            for (int i = 0; i < MathF.Min(toMesh.Count, 4); i++)
-            {
-                if (!toMesh.TryDequeue(out (int x, int y, int z) t)) continue;
+            if (!toMesh.TryDequeue(out (int x, int y, int z) t)) return;
 
-                BoundingBox chunkbounds = new BoundingBox(new Vector3(t.x, t.y, t.z) * Chunk.Size, (new Vector3(t.x, t.y, t.z) + Vector3.One) * Chunk.Size);
-
-                if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint || loadedChunks[t].meshUpdated[loadedChunks[t].GetLOD()])
-                {
-                    return;
-                }
-
-                loadedChunks[t].Remesh();
-            }
+            loadedChunks[t].Remesh();
         }
         void ProcessGeneration()
         {
             Interlocked.Decrement(ref generateWorking);
-            for (int i = 0; i < MathF.Min(toGenerate.Count, 8); i++)
-            {
-                if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) continue;
+            if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) return;
 
-                if (loadedChunks.ContainsKey(t))
-                {
-                    return; // If chunk already loaded, exit this task
-                }
+            Chunk c = new Chunk();
 
-                Chunk c = new Chunk();
+            c.chunkPos = t;
 
-                c.chunkPos = t;
+            c.Generate();
 
-                c.Generate();
-
-                loadedChunks.TryAdd(t, c);
-            }
+            loadedChunks.TryAdd(t, c);
         }
 
         protected override void Update(GameTime gameTime)
@@ -376,12 +352,12 @@ namespace FantasyVoxels
                     {
                         currentChunk.queueModified = false;
                         if (x == cx && z == cz) currentChunk.CheckQueue(true);
-                        else chunkUpdatePool.EnqueueTask(() => currentChunk.CheckQueue(false));
+                        else generationPool.EnqueueTask(() => currentChunk.CheckQueue(false));
                     }
                     if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)) && !toMesh.Contains((x, y, z)) && toMesh.Count < 8)
                     {
                         toMesh.Enqueue((x,y,z));
-                        chunkUpdatePool.EnqueueTask(ProcessMesh);
+                        generationPool.EnqueueTask(ProcessMesh);
                     }
 
                     if (visitedChunks.Contains((x, y, z))) continue;
@@ -471,12 +447,12 @@ namespace FantasyVoxels
                             {
                                 currentChunk.queueModified = false;
                                 if (x == cx && z == cz) currentChunk.CheckQueue(true);
-                                else chunkUpdatePool.EnqueueTask(() => currentChunk.CheckQueue(false));
+                                else generationPool.EnqueueTask(() => currentChunk.CheckQueue(false));
                             }
                             if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)) && toMesh.Count < 32)
                             {
                                 toMesh.Enqueue((x, y, z));
-                                chunkUpdatePool.EnqueueTask(ProcessMesh);
+                                generationPool.EnqueueTask(ProcessMesh);
                             }
 
                             // Add to render queue if the chunk is not completely empty
@@ -559,7 +535,7 @@ namespace FantasyVoxels
                 foreach (var pass in chunk.CurrentTechnique.Passes)
                 {
                     pass.Apply();
-                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[c].chunkVertexBuffers[LOD].VertexCount/3);
+                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[c].chunkVertexBuffers[LOD].VertexCount / 3);
                 }
             }
 
@@ -588,22 +564,22 @@ namespace FantasyVoxels
 
             player.Render();
             GraphicsDevice.DepthStencilState = DepthStencilState.None;
-            //foreach (var c in toRender.ToArray().AsSpan())
-            //{
-            //    effect.Alpha = 0.4f;
-            //    effect.DiffuseColor = Color.Black.ToVector3();
+            foreach (var c in toRender.ToArray().AsSpan())
+            {
+                effect.Alpha = 0.4f;
+                effect.DiffuseColor = Color.Black.ToVector3();
 
-            //    effect.Projection = MGame.Instance.projection;
-            //    effect.View = MGame.Instance.view;
+                effect.Projection = MGame.Instance.projection;
+                effect.View = MGame.Instance.view;
 
-            //    effect.World = Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
+                effect.World = Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
 
-            //    foreach (var pass in effect.CurrentTechnique.Passes)
-            //    {
-            //        pass.Apply();
-            //        Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
-            //    }
-            //}
+                foreach (var pass in effect.CurrentTechnique.Passes)
+                {
+                    pass.Apply();
+                    Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
+                }
+            }
 
 
             GraphicsDevice.SetRenderTarget(SSAOTarget);
@@ -751,6 +727,10 @@ namespace FantasyVoxels
                             if (step && y + 1 > min.Y && (y + 1 - min.Y) < 3 && !IsSolidTile(x, y + 1, z) && !IsSolidTile(x, (int)max.Y, z))
                             {
                                 stepy = MathF.Abs(y + 1 - min.Y)+0.01f;
+                                resolvedPosition.Y += stepy;
+                                position = resolvedPosition;
+                                min = aabb.Min + position;
+                                max = aabb.Max + position;
                                 continue;
                             }
 
@@ -795,7 +775,6 @@ namespace FantasyVoxels
                     }
                 }
             }
-            resolvedPosition.Y += stepy;    
             // Return the resolved position
             return resolvedPosition;
         }

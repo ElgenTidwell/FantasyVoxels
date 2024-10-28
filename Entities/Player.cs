@@ -14,7 +14,7 @@ namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 18f, run = 32f;
+        static float walk = 18f, run = 32f, sneak = 8f, swim = 0.5f;
 
         MouseState oldState;
 
@@ -24,7 +24,7 @@ namespace FantasyVoxels.Entities
 
         float autoDigTime = 0f;
 
-        bool running;
+        bool running,crouched;
 
         SecondOrderDynamics cameraBounce;
 
@@ -94,7 +94,9 @@ namespace FantasyVoxels.Entities
         public override void Update()
         {
             if (MathF.Abs(velocity.X + velocity.Z) < 4f) running = false;
-            running = Keyboard.GetState().IsKeyDown(Keys.LeftControl) || running;
+            running = (Keyboard.GetState().IsKeyDown(Keys.LeftControl) || running) && !crouched;
+
+            crouched = Keyboard.GetState().IsKeyDown(Keys.LeftShift);
 
             float xsin, ysin;
             float bobMulti = !grounded ?0: new Vector2(velocity.X,velocity.Z).Length()/walk;
@@ -119,12 +121,12 @@ namespace FantasyVoxels.Entities
             forward = rotmat.Forward;
             right = rotmat.Right;
 
-            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > 8f ? 10 : 0),MGame.dt*60);
+            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > 8f ? 5 : 0),MGame.dt*30);
             MGame.Instance.cameraPosition = new Vector3(position.X+0.5f, cameraY, position.Z + 0.5f) -right*xsin*0.03f;
             MGame.Instance.view =
                 Matrix.CreateRotationY(-rotation.Y) *
                 Matrix.CreateRotationX(-rotation.X+MathF.Abs(xsin)*0.004f) *
-                Matrix.CreateRotationZ(-rotation.Z+(xsin) * 0.004f);
+                Matrix.CreateRotationZ(-rotation.Z);
             MGame.Instance.world = Matrix.CreateWorld(-MGame.Instance.cameraPosition, Vector3.Forward, Vector3.Up);
 
             Vector3 wishDir = Vector3.Zero;
@@ -133,13 +135,13 @@ namespace FantasyVoxels.Entities
             if (Keyboard.GetState().IsKeyDown(Keys.D)) wishDir += right * MGame.dt;
             if (Keyboard.GetState().IsKeyDown(Keys.A)) wishDir -= right * MGame.dt;
 
-            if (Keyboard.GetState().IsKeyDown(Keys.Space) && grounded)
+            if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming))
             {
-                gravity = 24;
+                gravity = swimming?14:28;
                 grounded = false;
             }
 
-            curwalkspeed = running ? run : walk;
+            curwalkspeed = crouched? sneak : (running ? run : walk) * (swimming?swim:1);
 
             rotmat = Matrix.CreateRotationX(rotation.X)*Matrix.CreateRotationY(rotation.Y);
 
@@ -175,7 +177,7 @@ namespace FantasyVoxels.Entities
             }
             if (Mouse.GetState().RightButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
             {
-                BoundingBox placeBox = new BoundingBox(prevHitTile - position, prevHitTile + Vector3.One*4-position);
+                BoundingBox placeBox = new BoundingBox(prevHitTile - position+Vector3.One*0.1f, prevHitTile + Vector3.One*3.9f-position);
                 if (placeBox.Contains(bounds) == ContainmentType.Disjoint)
                 {
                     autoDigTime = 0.25f;
@@ -199,9 +201,9 @@ namespace FantasyVoxels.Entities
         void applyVelocity(Vector3 wishDir)
         {
             float speed = new Vector2(velocity.X, velocity.Z).Length();
-            if (speed != 0 && grounded)
+            if (speed != 0 && (grounded||swimming))
             {
-                float drop = speed * 12f * MGame.dt;
+                float drop = speed * (swimming? 2f : 12f) * MGame.dt;
                 velocity *= MathF.Max(speed - drop, 0) / speed;
             }
 
@@ -214,7 +216,7 @@ namespace FantasyVoxels.Entities
             wishDir *= multiplier;
 
             float curSpeed = Vector3.Dot(wishDir, velocity);
-            float addSpeed = MathHelper.Clamp((grounded? curwalkspeed*10 : 10f) - curSpeed, 0, float.MaxValue);
+            float addSpeed = MathHelper.Clamp((grounded||swimming? curwalkspeed*10 : 10f) - curSpeed, 0, float.MaxValue);
 
             Vector3 initWish = addSpeed * wishDir;
             velocity += initWish;

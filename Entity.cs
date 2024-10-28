@@ -13,14 +13,14 @@ namespace FantasyVoxels
         public BoundingBox bounds;
         public float gravity;
         public bool grounded;
-
+        public bool swimming;
         public abstract void Start();
         public virtual void Update()
         {
             if (grounded) gravity = -4;
             else
             {
-                gravity -= 64 * MGame.dt;
+                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*40f) : gravity - 80 * MGame.dt;
             }
 
             velocity.Y = grounded ? 0 : gravity;
@@ -58,6 +58,7 @@ namespace FantasyVoxels
 
             grounded = false;
             bool ceiling = false;
+            swimming = false;
 
             {
                 int minx = (int)MathF.Floor(min.X);
@@ -72,6 +73,11 @@ namespace FantasyVoxels
                         (int x, int y, int z) checkpos = (x, 0, z);
 
                         if (x+0.9f <= min.X || x+0.1f >= max.X || z+ 0.9f <= min.Z || z + 0.1f >= max.Z) continue;
+
+                        int v1 = MGame.Instance.GrabVoxel(new Vector3(x, (int)min.Y, z));
+                        int v2 = MGame.Instance.GrabVoxel(new Vector3(x, (int)max.Y, z));
+
+                        if ((v1 >= 0 && Voxel.voxelTypes[v1].isLiquid) || (v2 >= 0 && Voxel.voxelTypes[v2].isLiquid)) swimming = true;
 
                         grounded = CollisionDetector.IsSolidTile(checkpos.x, (int)MathF.Floor(min.Y - 0.5f), checkpos.z) || grounded;
                         ceiling = CollisionDetector.IsSolidTile(checkpos.x, (int)MathF.Floor(max.Y), checkpos.z) || ceiling;

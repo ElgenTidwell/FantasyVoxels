@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Media;
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace FantasyVoxels
 {
@@ -29,7 +30,7 @@ namespace FantasyVoxels
             new Voxel(((int x, int y, int z) pos) =>
             {
                 return MathF.Abs(MathF.Sin((IcariaNoise.GradientNoise3D(pos.x * 0.1f, pos.y * 0.1f, pos.z * 0.1f))))*0.1f + 0.9f + (float)(Random.Shared.NextDouble() * 0.05f);
-            },true,1,true),
+            },true,1,true,true),
             //Sand
             new Voxel(((int x, int y, int z) pos) =>
             {
@@ -68,15 +69,16 @@ namespace FantasyVoxels
         ];
 
         public Func<(int x, int y, int z),float> GetShade;
-        public bool ignoreCollision,isTransparent;
+        public bool ignoreCollision,isTransparent,isLiquid;
         public int shaderEffect;
 
-        public Voxel(Func<(int x, int y, int z), float> GetShade, bool ignoreCollision = false, int shaderEffect = 0, bool isTransparent = false)
+        public Voxel(Func<(int x, int y, int z), float> GetShade, bool ignoreCollision = false, int shaderEffect = 0, bool isTransparent = false, bool isLiquid = false)
         {
             this.GetShade = GetShade;
             this.ignoreCollision = ignoreCollision;
             this.isTransparent = isTransparent;
             this.shaderEffect = shaderEffect;
+            this.isLiquid = isLiquid;
         }
     }
     public struct VoxelData
@@ -152,7 +154,7 @@ namespace FantasyVoxels
             new (1,1,0),
             new (0,1,0),
         };
-        static (int x, int y, int z)[] positionChecks =
+        public static (int x, int y, int z)[] positionChecks =
         {
             (1,0,0),
             (-1,0,0),
@@ -163,6 +165,7 @@ namespace FantasyVoxels
         };
         public static VertexBuffer chunkBuffer;
         public VertexBuffer[] chunkVertexBuffers;
+        public ushort[,] vSidesStart = new ushort[5,6];
 
         public bool[,] sidesVisible = new bool[6,6];
         public bool[] facesVisibleAtAll = new bool[6];
@@ -170,24 +173,13 @@ namespace FantasyVoxels
         public bool[] meshUpdated = new bool[4];
         public int MaxY;
         Random tRandom;
+
+        private bool[,,] visibilityPropogation = new bool[Size, Size, Size];
+
         public Chunk()
         {
             chunkVertexBuffers = new VertexBuffer[5];
             tRandom = new Random(MGame.Instance.seed + 4);
-        }
-        public static float GetOctaveNoise(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
-        {
-            float totalNoise = 0;
-            float amplitude = 1;
-            float maxAmplitude = 0; // Used to normalize the result
-            for (int i = 0; i < octaveCount; i++)
-            {
-                totalNoise += IcariaNoise.GradientNoise(x * frequency, z * frequency, MGame.Instance.seed+seedOffset) * amplitude;
-                maxAmplitude += amplitude;
-                amplitude *= persistence;    // Decrease amplitude for each octave
-                frequency *= lacunarity;     // Increase frequency for each octave
-            }
-            return totalNoise;
         }
         public static float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
@@ -196,7 +188,7 @@ namespace FantasyVoxels
             float maxAmplitude = 0; // Used to normalize the result
             for (int i = 0; i < octaveCount; i++)
             {
-                totalNoise += IcariaNoise.GradientNoise3D(x * frequency, y*frequency, z * frequency, MGame.Instance.seed + seedOffset) * amplitude;
+                totalNoise += IcariaNoise.GradientNoise3D(x * frequency, y * frequency, z * frequency,MGame.Instance.seed-10) * amplitude;
                 maxAmplitude += amplitude;
                 amplitude *= persistence;    // Decrease amplitude for each octave
                 frequency *= lacunarity;     // Increase frequency for each octave
@@ -205,52 +197,21 @@ namespace FantasyVoxels
         }
         public static int GetTerrainHeight(float samplex, float samplez)
         {
-            float valleyNoise = GetOctaveNoise(samplex, samplez, 0.00002f, 5, 1.02f, 3.0f,14);
-            if (valleyNoise < -0.0f) valleyNoise = 1 - MathF.Pow(1 - valleyNoise, 4);
-            else valleyNoise = MathF.Min(valleyNoise*100,1);
+            float terrainHeight = IcariaNoise.GradientNoise(samplex * 0.01f, samplez * 0.01f, MGame.Instance.seed) * 80;
 
-            // Base mountainous terrain layer with large-scale ridges
-            float elevation = GetOctaveNoise(samplex, samplez, 0.000001f, 6, 1.2f, 2.7f) * 240;
-
-            float baseMountainNoise = GetOctaveNoise(samplex, samplez, 0.00004f, 6, 1.2f, 2.7f) * 80 * valleyNoise + elevation;
-
-            // Jagged, rugged noise for pointy peaks
-            float ruggedNoise = IcariaNoise.GradientNoise(samplex * 0.006f, samplez * 0.006f, MGame.Instance.seed + 10) * 15;
-
-            // Cliff and steep drop noise layer
-            float cliffNoise = MathF.Pow(MathF.Abs(IcariaNoise.GradientNoise(samplex * 0.00001f, samplez * 0.00001f, MGame.Instance.seed - 5)),10) * 20;
-
-            // Create sharp ridges and pointy features
-            float peakNoise = GetOctaveNoise(samplex, samplez, 0.0002f, 3, 1.5f, 3.0f) * 30;
-
-            // Combine layers to form dramatic terrain
-            int terrainHeight = (int)(baseMountainNoise + ruggedNoise + cliffNoise + peakNoise);
-
-            // Add additional points to make the terrain more interesting near peaks
-            if (terrainHeight > 80)
-            {
-                terrainHeight = (int)(terrainHeight *(1+MathF.Min(((terrainHeight-80)/2000f),1)*(IcariaNoise.GradientNoise(samplex*0.001f, samplez * 0.001f,MGame.Instance.seed-10)+1)*0.5f));  // Raise terrain further to create peaks
-            }
-
-            return terrainHeight;
+            return (int)terrainHeight;
         }
+
         public static int GetVoxel(float x, float y, float z, int terrainHeight)
         {
-            int voxel = 0;
             // Main terrain voxel assignment with 3D noise layers
-            voxel = y <= terrainHeight ? y < 5 ? 4 : 2 : 0;
+            int voxel = y <= terrainHeight ? y < 5 ? 4 : 2 : 0;
 
             // Water voxel assignment for regions below sea level
             if (y < 5 && y >= terrainHeight)
                 voxel = 3;
 
-            // 3D noise-based erosion layer with varying frequencies
-            if ((GetOctaveNoise3D(x, y*2f, z, 0.008f, 2, 0.5f, 1.4f)) > MathF.Abs(GetOctaveNoise3D(x, y * 2f, z, 0.001f, 1, 0, 0))+0.6f)
-            {
-                voxel = 0;
-            }
-
-            if (y < terrainHeight - 30 - IcariaNoise.GradientNoise(x * 0.9f, z * 0.9f, MGame.Instance.seed - 24) * 20 && voxel != 0)
+            if (y < terrainHeight - 30 - IcariaNoise.GradientNoise(x * 0.9f, z * 0.9f) * 20 && voxel != 0)
                 voxel = 9;
 
             return voxel;
@@ -260,7 +221,6 @@ namespace FantasyVoxels
             CompletelyEmpty = true;
             Array.Fill(voxels,0);
             Array.Fill(voxeldata,new VoxelData());
-            HashSet<(int x, int y, int z)> propogate = new HashSet<(int x, int y, int z)>();
             int elementsCount = 0;
             for (int x = 0; x < Size; x++)
             {
@@ -291,7 +251,7 @@ namespace FantasyVoxels
                         }
                         if(voxels[x + Size * (y + Size * z)] == 0 || Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent)
                         {
-                            propogate.Add((x, y, z));
+                            visibilityPropogation[x, y, z] = true;
                         }
                         elementsCount++;
                     }
@@ -333,7 +293,7 @@ namespace FantasyVoxels
 
             if (!CheckQueue())
             {
-                GenerateVisibility(propogate);
+                GenerateVisibility(true);
                 Remesh(false);
             }
             generated = true;
@@ -345,25 +305,26 @@ namespace FantasyVoxels
 
             int scale = lod!=4? (int)MathF.Pow(2, lod) :1;
 
-            for (int x = 0; x < Size; x += scale)
+            for (int p = 0; p < positionChecks.Length; p++)
             {
-                for (int z = 0; z < Size; z += scale)
+                vSidesStart[lod,p] = (ushort)verts.Count;
+                for (int x = 0; x < Size; x += scale)
                 {
-                    int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
-
-                    int terrainHeight = (int)(GetTerrainHeight(samplex / 2f, samplez / 2f));
-                    for (int y = 0; y < Size; y += scale)
+                    for (int z = 0; z < Size; z += scale)
                     {
-                        int sampley = y + chunkPos.y * Size;
+                        int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
 
-                        if (IsOutOfBounds((x, y, z))) continue;
-
-                        if (voxels[x + Size * (y + Size * z)] == 0) continue;
-                        if (Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod != 4) continue;
-                        if (!Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod == 4) continue;
-
-                        for (int p = 0; p < positionChecks.Length; p++)
+                        int terrainHeight = x == 0 || z == 0 || x == Size - 1 || z == Size - 1 ? (int)(GetTerrainHeight(samplex / 2f, samplez / 2f)) : 0;
+                        for (int y = 0; y <= MaxY; y += scale)
                         {
+                            int sampley = y + chunkPos.y * Size;
+
+                            if (IsOutOfBounds((x, y, z))) continue;
+
+                            if (voxels[x + Size * (y + Size * z)] == 0) continue;
+                            if (Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod != 4) continue;
+                            if (!Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod == 4) continue;
+
                             (int x, int y, int z) checkPos = (positionChecks[p].x*scale + x, positionChecks[p].y * scale + y, positionChecks[p].z * scale + z);
                             bool placeFace = false;
 
@@ -535,7 +496,7 @@ namespace FantasyVoxels
             queueModified = true;
             CompletelyEmpty = false;
         }
-        public void GenerateVisibility(HashSet<(int x, int y, int z)> propogate = null)
+        public void GenerateVisibility(bool alreadyPopulatedPropogation = false)
         {
             if (CompletelyEmpty)
             {
@@ -549,29 +510,10 @@ namespace FantasyVoxels
 
                 return;
             }
-            if(propogate == null)
-            {
-                propogate = new HashSet<(int x, int y, int z)>();
-
-                for (int x = 0; x < Size; x++)
-                {
-                    for (int z = 0; z < Size; z++)
-                    {
-                        for (int y = 0; y < Size; y++)
-                        {
-                            if (voxels[x + Size * (y + Size * z)] == 0)
-                            {
-                                propogate.Add((x, y, z));
-                            }
-                        }
-                    }
-                }
-            }
-
-            HashSet<(int x, int y, int z)> visited = new HashSet<(int x, int y, int z)>();
 
             Queue<(int x, int y, int z)> internalProp = new Queue<(int x, int y, int z)>();
 
+            bool[,,] visited = new bool[Size, Size, Size];
 
             // Initialize visibility array
             for (int i = 0; i < 6; i++)
@@ -581,71 +523,84 @@ namespace FantasyVoxels
                     sidesVisible[i, j] = false;
             }
 
-            // Flood fill
-            foreach (var rootPos in propogate)
+            for (int x = 0; x < Size; x++)
             {
-                bool[] touchedByFlood = new bool[6];
-
-                visited.Add(rootPos);
-                internalProp.Clear();
-                // Check neighboring positions and queue valid ones
-                for (int i = 0; i < 6; i++)
+                for (int z = 0; z < Size; z++)
                 {
-                    (int x, int y, int z) p = (positionChecks[i].x + rootPos.x, positionChecks[i].y + rootPos.y, positionChecks[i].z + rootPos.z);
-
-                    // Check boundaries
-                    if (IsOutOfBounds(p))
+                    for (int y = 0; y <= MaxY; y++)
                     {
-                        touchedByFlood[i] = true; // Mark that we touched an edge
-                        continue;
-                    }
-
-                    // If it's not a solid voxel, add to internal propagation queue
-                    if (voxels[p.x + Size * (p.y + Size * p.z)] == 0 || Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].isTransparent)
-                    {
-                        internalProp.Enqueue(p);
-                    }
-                    if (touchedByFlood[0]&& touchedByFlood[1]&& touchedByFlood[2]&& touchedByFlood[3]&& touchedByFlood[4]&& touchedByFlood[5]) break;
-                }
-
-                // Process the internal propagation queue
-                while (internalProp.Count > 0)
-                {
-                    (int x, int y, int z) pos = internalProp.Dequeue();
-
-                    if (visited.Contains(pos)) continue;
-
-                    visited.Add(pos);
-
-                    for (int i = 0; i < 6; i++)
-                    {
-                        (int x, int y, int z) p = (positionChecks[i].x + pos.x, positionChecks[i].y + pos.y, positionChecks[i].z + pos.z);
-
-                        if (IsOutOfBounds(p))
+                        if (!alreadyPopulatedPropogation)
                         {
-                            touchedByFlood[i] = true;
-                            continue;
+                            visibilityPropogation[x, y, z] = voxels[x + Size * (y + Size * z)] == 0 || Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent;
                         }
 
-                        if (voxels[p.x + Size * (p.y + Size * p.z)] == 0 || Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].isTransparent)
+                        if (!visibilityPropogation[x, y, z]) continue;
+
+                        bool[] touchedByFlood = new bool[6];
+
+                        visited[x,y,z] = true;
+
+                        internalProp.Clear();
+                        // Check neighboring positions and queue valid ones
+                        for (int i = 0; i < 6; i++)
                         {
-                            internalProp.Enqueue(p);
-                        }
-                    }
-                    if (touchedByFlood[0] && touchedByFlood[1] && touchedByFlood[2] && touchedByFlood[3] && touchedByFlood[4] && touchedByFlood[5]) break;
-                }
-                // Update sidesVisible if any edge was touched
-                for (int i = 0; i < 6; i++)
-                {
-                    if (touchedByFlood[i])
-                    {
-                        facesVisibleAtAll[i] = true;
-                        for (int j = 0; j < 6; j++)
-                        {
-                            if (touchedByFlood[j])
+                            (int x, int y, int z) p = (positionChecks[i].x + x, positionChecks[i].y + y, positionChecks[i].z + z);
+
+                            // Check boundaries
+                            if (IsOutOfBounds(p))
                             {
-                                sidesVisible[i, j] = true;
-                                sidesVisible[j, i] = true;
+                                touchedByFlood[i] = true; // Mark that we touched an edge
+                                continue;
+                            }
+
+                            // If it's not a solid voxel, add to internal propagation queue
+                            if (voxels[p.x + Size * (p.y + Size * p.z)] == 0 || Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].isTransparent)
+                            {
+                                internalProp.Enqueue(p);
+                            }
+                            if (touchedByFlood[0]&& touchedByFlood[1]&& touchedByFlood[2]&& touchedByFlood[3]&& touchedByFlood[4]&& touchedByFlood[5]) break;
+                        }
+
+                        // Process the internal propagation queue
+                        while (internalProp.Count > 0)
+                        {
+                            (int x, int y, int z) pos = internalProp.Dequeue();
+
+                            if (visited[pos.x,pos.y,pos.z]) continue;
+
+                            visited[pos.x, pos.y, pos.z] = true;
+
+                            for (int i = 0; i < 6; i++)
+                            {
+                                (int x, int y, int z) p = (positionChecks[i].x + pos.x, positionChecks[i].y + pos.y, positionChecks[i].z + pos.z);
+
+                                if (IsOutOfBounds(p))
+                                {
+                                    touchedByFlood[i] = true;
+                                    continue;
+                                }
+
+                                if (voxels[p.x + Size * (p.y + Size * p.z)] == 0 || Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].isTransparent)
+                                {
+                                    internalProp.Enqueue(p);
+                                }
+                            }
+                            if (touchedByFlood[0] && touchedByFlood[1] && touchedByFlood[2] && touchedByFlood[3] && touchedByFlood[4] && touchedByFlood[5]) break;
+                        }
+                        // Update sidesVisible if any edge was touched
+                        for (int i = 0; i < 6; i++)
+                        {
+                            if (touchedByFlood[i])
+                            {
+                                facesVisibleAtAll[i] = true;
+                                for (int j = 0; j < 6; j++)
+                                {
+                                    if (touchedByFlood[j])
+                                    {
+                                        sidesVisible[i, j] = true;
+                                        sidesVisible[j, i] = true;
+                                    }
+                                }
                             }
                         }
                     }
@@ -683,6 +638,132 @@ namespace FantasyVoxels
             if (relativePosition.Z < 0) return 5;
             if (relativePosition.Z >= Size) return 4;
             return -1;
+        }
+    }
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct VoxelVertex : IVertexType
+    {
+        public Vector3 Position;
+
+        public Color Color;
+
+        public Vector3 Normal;
+
+        public Vector2 TextureCoordinate;
+
+        public static readonly VertexDeclaration VertexDeclaration;
+
+        VertexDeclaration IVertexType.VertexDeclaration => VertexDeclaration;
+
+        //
+        // Summary:
+        //     Creates an instance of Microsoft.Xna.Framework.Graphics.VertexPositionColorTexture.
+        //
+        //
+        // Parameters:
+        //   position:
+        //     Position of the vertex.
+        //
+        //   color:
+        //     Color of the vertex.
+        //
+        //   normal:
+        //     The vertex normal.
+        //
+        //   textureCoordinate:
+        //     Texture coordinate of the vertex.
+        public VoxelVertex(Vector3 position, Color color, Vector3 normal, Vector2 textureCoordinate)
+        {
+            Position = position;
+            Color = color;
+            Normal = normal;
+            TextureCoordinate = textureCoordinate;
+        }
+
+        public override int GetHashCode()
+        {
+            return (((((Position.GetHashCode() * 397) ^ Color.GetHashCode()) * 397) ^ Normal.GetHashCode()) * 397) ^ TextureCoordinate.GetHashCode();
+        }
+
+        public override string ToString()
+        {
+            string[] obj = new string[9] { "{{Position:", null, null, null, null, null, null, null, null };
+            Vector3 position = Position;
+            obj[1] = position.ToString();
+            obj[2] = " Color:";
+            Color color = Color;
+            obj[3] = color.ToString();
+            obj[4] = " Normal:";
+            position = Normal;
+            obj[5] = position.ToString();
+            obj[6] = " TextureCoordinate:";
+            Vector2 textureCoordinate = TextureCoordinate;
+            obj[7] = textureCoordinate.ToString();
+            obj[8] = "}}";
+            return string.Concat(obj);
+        }
+
+        //
+        // Summary:
+        //     Returns a value that indicates whether two Microsoft.Xna.Framework.Graphics.VertexPositionColorNormalTexture
+        //     are equal
+        //
+        // Parameters:
+        //   left:
+        //     The object on the left of the equality operator.
+        //
+        //   right:
+        //     The object on the right of the equality operator.
+        //
+        // Returns:
+        //     true if the objects are the same; false otherwise.
+        public static bool operator ==(VoxelVertex left, VoxelVertex right)
+        {
+            if (left.Position == right.Position && left.Color == right.Color && left.Normal == right.Normal)
+            {
+                return left.TextureCoordinate == right.TextureCoordinate;
+            }
+
+            return false;
+        }
+
+        //
+        // Summary:
+        //     Returns a value that indicates whether two Microsoft.Xna.Framework.Graphics.VertexPositionColorNormalTexture
+        //     are different
+        //
+        // Parameters:
+        //   left:
+        //     The object on the left of the inequality operator.
+        //
+        //   right:
+        //     The object on the right of the inequality operator.
+        //
+        // Returns:
+        //     true if the objects are different; false otherwise.
+        public static bool operator !=(VoxelVertex left, VoxelVertex right)
+        {
+            return !(left == right);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj == null)
+            {
+                return false;
+            }
+
+            if (obj.GetType() != GetType())
+            {
+                return false;
+            }
+
+            return this == (VoxelVertex)obj;
+        }
+
+        static VoxelVertex()
+        {
+            VertexDeclaration = new VertexDeclaration(new VertexElement(0, VertexElementFormat.Short4, VertexElementUsage.Position, 0), new VertexElement(12, VertexElementFormat.Color, VertexElementUsage.Color, 0), new VertexElement(16, VertexElementFormat.Vector3, VertexElementUsage.Normal, 0), new VertexElement(28, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0));
         }
     }
 }

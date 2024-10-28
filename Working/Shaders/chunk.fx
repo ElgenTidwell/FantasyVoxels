@@ -76,8 +76,10 @@ VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR
     [branch]
     if (effect == 1)
     {
-        float sin1 = sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180));
-        float sin2 = sin(time * 0.2 + radians(((tile.z / ChunkSize)) * 180));
+        float timeOffset = radians(((tile.x / ChunkSize)) * 180);
+        float timeOffset2 = radians(((tile.z / ChunkSize)) * 180);
+        float sin1 = sin(time * 0.6 + timeOffset);
+        float sin2 = sin(time * 0.2 + timeOffset2);
         
         //Water
         voxShadeEffect = lerp((vox.g / 255.f), ((vox.g / 255.f) - 0.5f) * 2, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
@@ -126,7 +128,7 @@ PSOut MainPS(PSInput input)
     
     float4 color = tex2D(colorsSampler,input.Coord);
     
-    output.Color0 = float4(lerp(color.xyz * dat.r, skyColor, saturate(fog)), color.a * dat.a);
+    output.Color0 = float4(lerp(color.xyz * dat.r, skyColor, pow(saturate(fog),2)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {
