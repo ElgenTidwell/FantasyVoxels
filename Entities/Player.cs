@@ -140,6 +140,10 @@ namespace FantasyVoxels.Entities
                 gravity = swimming?14:28;
                 grounded = false;
             }
+            if(crouched && swimming)
+            {
+                gravity = -10f;
+            }
 
             curwalkspeed = crouched? sneak : (running ? run : walk) * (swimming?swim:1);
 
@@ -169,7 +173,7 @@ namespace FantasyVoxels.Entities
                         {
                             for (int z = 0; z < 4; z++)
                             {
-                                MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + (Vector3.Floor(hitTile / 4) * 4), 0);
+                                MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + (Vector3.Floor(hitTile / 4) * 4), 0, true);
                             }
                         }
                     }
@@ -187,7 +191,7 @@ namespace FantasyVoxels.Entities
                         {
                             for (int y = 0; y < 4; y++)
                             {
-                                MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + prevHitTile, 10);
+                                MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + prevHitTile, 10, true);
                             }
                         }
                     }
@@ -237,7 +241,7 @@ namespace FantasyVoxels.Entities
             {
                 MGame.Instance.GraphicsDevice.SetVertexBuffer(vertBuffer);
 
-                effect.Alpha = 0.6f;
+                effect.Alpha = 1f;
                 effect.DiffuseColor = Color.Black.ToVector3();
 
                 effect.Projection = MGame.Instance.projection;
@@ -265,7 +269,7 @@ namespace FantasyVoxels.Entities
                         MGame.Instance.GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, voxelBoxVert.Length / 2);
                     }
                     effect.DiffuseColor = Color.Black.ToVector3();
-                    effect.Alpha = 0.4f;
+                    effect.Alpha = 0.8f;
                     effect.World = Matrix.CreateScale(3.2f) * MGame.Instance.world * Matrix.CreateTranslation(Vector3.Floor(prevHitTile / 4) * 4+Vector3.One*0.4f);
 
                     foreach (var pass in effect.CurrentTechnique.Passes)

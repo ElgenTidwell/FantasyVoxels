@@ -40,13 +40,13 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(min.Y / Chunk.Size);
             int cz = (int)MathF.Floor(min.Z / Chunk.Size);
 
-            if (!MGame.Instance.loadedChunks.ContainsKey((cx, cy, cz))) return;
+            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
 
             cx = (int)MathF.Floor(max.X / Chunk.Size);
             cy = (int)MathF.Floor(max.Y / Chunk.Size);
             cz = (int)MathF.Floor(max.Z / Chunk.Size);
 
-            if (!MGame.Instance.loadedChunks.ContainsKey((cx, cy, cz))) return;
+            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
 
             for (int i = 0; i < 4; i++)
             {

@@ -1,14 +1,18 @@
 ﻿using FantasyVoxels.Entities;
+using FantasyVoxels.Saves;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using static Icaria.Engine.Procedural.IcariaNoise;
 
 namespace FantasyVoxels
 {
@@ -27,23 +31,27 @@ namespace FantasyVoxels
 
         public SpriteBatch spriteBatch => _spriteBatch;
 
-        public Matrix world, view, projection;
+        public Matrix world, view, projection, sunProjection, sunView;
         public Vector3 cameraPosition;
         public Vector3 cameraForward;
 
-        private RenderTarget2D screenTexture, normalTexture, SSAOTarget;
+        private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
         public Texture2D colors,noise,uiTextures;
         private Effect raymarcher;
         private Effect chunk;
+        private Effect chunkBuilder;
+        private Effect sky;
         private Effect postProcessing;
 
         private int Width => GraphicsDevice.Viewport.Width;
         private int Height => GraphicsDevice.Viewport.Height;
 
         public Player player;
-        public ConcurrentDictionary<(int x, int y, int z), Chunk> loadedChunks = new ConcurrentDictionary<(int x, int y, int z), Chunk>();
+        public ConcurrentDictionary<long, Chunk> loadedChunks = new ConcurrentDictionary<long, Chunk>();
         ConcurrentQueue<(int x, int y, int z)> toGenerate = new ConcurrentQueue<(int x, int y, int z)>();
         ConcurrentQueue<(int x, int y, int z)> toMesh = new ConcurrentQueue<(int x, int y, int z)>();
+        Queue<long> instantRemesh = new Queue<long>();
+
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
         public int RenderDistance = 32;
@@ -67,10 +75,12 @@ namespace FantasyVoxels
         BoundingFrustum frustum;
 
         DepthStencilState stencilDraw;
-        (int x, int y, int z) chunkPos;
+        (int x, int y, int z) playerChunkPos;
 
         int threadsActive = 0;
         TaskPool generationPool;
+        CancellationTokenSource chunkThreadCancel;
+        Thread chunkUpdateThread;
 
         int meshesWorking;
         int generateWorking;
@@ -116,7 +126,61 @@ namespace FantasyVoxels
             new VertexPosition(new Vector3(1, 1, 1)),
             new VertexPosition(new Vector3(0, 1, 1)),
         ];
+
+        public static VertexPosition[] skyboxVerts =
+        [
+            new VertexPosition(new Vector3(0, 0, 0)),
+            new VertexPosition(new Vector3(1, 0, 0)),
+            new VertexPosition(new Vector3(1, 1, 0)),
+            new VertexPosition(new Vector3(0, 1, 0)),
+            new VertexPosition(new Vector3(0, 1, 1)),
+            new VertexPosition(new Vector3(1, 1, 1)),
+            new VertexPosition(new Vector3(1, 0, 1)),
+            new VertexPosition(new Vector3(0, 0, 1)),
+        ];
+        public static short[] triangles =
+        [
+            1,
+            2,
+            5, //face right
+            1,
+            5,
+            6,
+            0,
+            7,
+            4, //face left
+            0,
+            4,
+            3,
+            0,
+            2,
+            1, //face front
+            0,
+            3,
+            2,
+            5,
+            4,
+            7, //face back
+            5,
+            7,
+            6,
+            2,
+            3,
+            4, //face top
+            2,
+            4,
+            5,
+            0,
+            6,
+            7, //face bottom
+            0,
+            1,
+            6
+        ];
+
         BasicEffect effect;
+
+        BlendState shadowBlend;
 
         public MGame()
         {
@@ -146,29 +210,36 @@ namespace FantasyVoxels
         {
             world = Matrix.CreateWorld(Vector3.Zero,Vector3.Forward,Vector3.Up);
             view = Matrix.Identity;
-            projection = Matrix.CreateOrthographic(MathHelper.ToRadians(FOV),GraphicsDevice.Viewport.AspectRatio,0.01f,10000f);
+            projection = Matrix.CreateOrthographic(MathHelper.ToRadians(FOV),GraphicsDevice.Viewport.AspectRatio,0.01f,4000f);
+
+            sunProjection = Matrix.CreateOrthographicOffCenter(Chunk.Size* -8, Chunk.Size* 8, Chunk.Size * -8, Chunk.Size * 8, -Chunk.Size * 8, Chunk.Size * 8);
+            sunView = Matrix.CreateRotationX(MathHelper.ToRadians(90));
 
             Chunk.chunkBuffer = new VertexBuffer(GraphicsDevice,typeof(VertexPosition),Chunk.chunkVerts.Length,BufferUsage.WriteOnly);
             Chunk.chunkBuffer.SetData(Chunk.chunkVerts);
+
+            shadowBlend = new BlendState
+            {
+                ColorBlendFunction = BlendFunction.Min
+            };
+
+            chunkUpdateThread = new Thread(()=> ChunkThread(chunkThreadCancel.Token));
+            chunkUpdateThread.Name = "Background Chunk Update Thread";
+            chunkUpdateThread.Priority = ThreadPriority.AboveNormal;
+            chunkUpdateThread.IsBackground = false;
 
             //Chunk.indexBuffer = new IndexBuffer(GraphicsDevice,IndexElementSize.SixteenBits,Chunk.triangles.Length,BufferUsage.WriteOnly);
             //Chunk.indexBuffer.SetData(Chunk.triangles);
             base.Initialize();
         }
-
-        public void LoadWorld()
-        {
-            player.position.Y = Chunk.GetTerrainHeight(0, 0) + 14;
-
-            player.Start();
-        }
-
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
             raymarcher = Content.Load<Effect>("Shaders/screencomp");
             chunk = Content.Load<Effect>("Shaders/chunk");
+            chunkBuilder = Content.Load<Effect>("Shaders/chunkbuilder");
+            sky = Content.Load<Effect>("Shaders/skybox");
             postProcessing = Content.Load<Effect>("Shaders/pscreen");
 
             effect = new BasicEffect(MGame.Instance.GraphicsDevice);
@@ -188,13 +259,17 @@ namespace FantasyVoxels
                 new Vector2((float)Random.Shared.NextDouble(),(float)Random.Shared.NextDouble()),
                 new Vector2((float)Random.Shared.NextDouble(),(float)Random.Shared.NextDouble()),
             });
-            screenTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable, DepthFormat.Depth24Stencil8);
+            screenTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.Color, DepthFormat.Depth24Stencil8);
             normalTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable,DepthFormat.Depth24Stencil8);
-            SSAOTarget = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable,DepthFormat.Depth24Stencil8);
+            SSAOTarget = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable,DepthFormat.None);
+            shadowMap = new RenderTarget2D(GraphicsDevice, 512, 512, false, SurfaceFormat.Single, DepthFormat.Depth24Stencil8);
 
             colors = Content.Load<Texture2D>("Textures/colors");
             noise = Content.Load<Texture2D>("Textures/noise");
             uiTextures = Content.Load<Texture2D>("Textures/UITextures");
+
+            chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
+            chunk.Parameters["colors"]?.SetValue(colors);
 
             postProcessing.Parameters["NoiseTexture"]?.SetValue(noise);
 
@@ -214,19 +289,54 @@ namespace FantasyVoxels
         protected override void UnloadContent()
         {
             generationPool.Stop();
+
             base.UnloadContent();
+        }
+
+        public void LoadWorld()
+        {
+            chunkThreadCancel = new();
+
+            chunkUpdateThread.Start();
+
+            player.position.Y = Chunk.GetTerrainHeight(0, 0) + 14;
+
+            player.Start();
+        }
+        public void QuitWorld()
+        {
+            Save.SaveToFile(Environment.ExpandEnvironmentVariables($"%appdata%/FantasyVoxels/Saves/savetest"));
+
+            chunkThreadCancel.Cancel();
+
+            chunkUpdateThread.Interrupt();
+            chunkUpdateThread.Join();
+
+            chunkThreadCancel.Dispose();
+
+            foreach (var c in loadedChunks)
+            {
+                c.Value.voxelDataTexture?.Dispose();
+            }
+            loadedChunks.Clear();
+
+            player.Destroyed();
+        }
+
+        public static long CCPos((int x, int y, int z) pos)
+        {
+            const short shift = short.MaxValue/2;
+            return (((long)((short)pos.z + shift) | ((long)((short)pos.y + shift) << 16) | ((long)((short)pos.x + shift) << 32)));
         }
 
         void ProcessMesh()
         {
-            Interlocked.Decrement(ref meshesWorking);
             if (!toMesh.TryDequeue(out (int x, int y, int z) t)) return;
 
-            loadedChunks[t].Remesh();
+            loadedChunks[CCPos(t)].Remesh();
         }
         void ProcessGeneration()
         {
-            Interlocked.Decrement(ref generateWorking);
             if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) return;
 
             Chunk c = new Chunk();
@@ -235,13 +345,71 @@ namespace FantasyVoxels
 
             c.Generate();
 
-            loadedChunks.TryAdd(t, c);
+            loadedChunks.TryAdd(CCPos(t), c);
         }
 
+        void ChunkThread(CancellationToken cancel)
+        {
+            List<long> deleteChunks = new List<long>();
+            try
+            {
+                while (!cancel.IsCancellationRequested)
+                {
+                    foreach (var c in loadedChunks.ToArray().AsSpan())
+                    {
+                        Chunk currentChunk = c.Value;
+                        BoundingBox chunkbounds = new BoundingBox(new Vector3(currentChunk.chunkPos.x, currentChunk.chunkPos.y, currentChunk.chunkPos.z) * Chunk.Size,
+                                                                 (new Vector3(currentChunk.chunkPos.x + 1, currentChunk.chunkPos.y + 1, currentChunk.chunkPos.z + 1) * Chunk.Size));
+
+                        float cDist = MathF.Abs(currentChunk.chunkPos.x - playerChunkPos.x) + MathF.Abs(currentChunk.chunkPos.y - playerChunkPos.y) + MathF.Abs(currentChunk.chunkPos.z - playerChunkPos.z);
+                        if (cDist >= RenderDistance + 4)
+                        {
+                            deleteChunks.Add(c.Key);
+                            continue;
+                        }
+                        if (currentChunk.queueModified)
+                        {
+                            currentChunk.queueModified = false;
+                            currentChunk.CheckQueue(true);
+                        }
+
+                        if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint) continue;
+
+                        //Mesh related things
+                        if (currentChunk.lightOutOfDate)
+                        {
+                            currentChunk.lightOutOfDate = false;
+                            currentChunk.ReLight(cDist > 4);
+                        }
+                        if (!currentChunk.CompletelyEmpty && !currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains(currentChunk.chunkPos) && toMesh.Count < 8)
+                        {
+                            toMesh.Enqueue(currentChunk.chunkPos);
+                            ProcessMesh();
+                        }
+                    }
+
+                    if (deleteChunks.Count == 0) continue;
+
+                    foreach (long id in deleteChunks)
+                    {
+                        loadedChunks.TryRemove(id, out _);
+                    }
+                    deleteChunks.Clear();
+                }
+            }
+            catch(ThreadInterruptedException ex)
+            {
+                Console.WriteLine(ex.ToString());
+                return;
+            }
+        }
         protected override void Update(GameTime gameTime)
         {
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
+            {
+                QuitWorld();
                 Exit();
+            }
             player.Update();
 
             dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -257,13 +425,13 @@ namespace FantasyVoxels
                 cx = (int)MathF.Floor(cameraPosition.X / Chunk.Size);
                 cy = (int)MathF.Floor(cameraPosition.Y / Chunk.Size);
                 cz = (int)MathF.Floor(cameraPosition.Z / Chunk.Size);
-                chunkPos = (cx, cy, cz);
+                playerChunkPos = (cx, cy, cz);
             }
             else
             {
-                cx = chunkPos.x;
-                cy = chunkPos.y;
-                cz = chunkPos.z;
+                cx = playerChunkPos.x;
+                cy = playerChunkPos.y;
+                cz = playerChunkPos.z;
             }
 
             toRender.Clear();
@@ -317,52 +485,43 @@ namespace FantasyVoxels
             //        }
             //    }
             //}
+
             const bool enableBFS = true;
             if(enableBFS)
             {
-                Queue<(int x, int y, int z, int face, int depth)> bfsQueue = new Queue<(int, int, int, int, int)>();
+                Queue<(int x, int y, int z, int face, int depth, bool fromEmpty)> bfsQueue = new Queue<(int, int, int, int, int, bool)>();
                 HashSet<(int, int, int)> visitedChunks = new HashSet<(int, int, int)>();
 
                 // Start the BFS with the current chunk and all its visible faces
-                bfsQueue.Enqueue((cx,cy,cz, -1, 0)); // -1 means no face restriction initially
+                bfsQueue.Enqueue((cx,cy,cz, -1, 0,false)); // -1 means no face restriction initially
 
                 while (bfsQueue.Count > 0)
                 {
-                    var (x, y, z, fromFace, depth) = bfsQueue.Dequeue();
+                    var (x, y, z, fromFace, depth, fromEmpty) = bfsQueue.Dequeue();
+
+                    if (visitedChunks.Contains((x, y, z))) continue;
 
                     // Check if we have exceeded the render distance
-                    if (MathF.Abs(x - cx) + MathF.Abs(y - cy) + MathF.Abs(z - cz) >= RenderDistance) continue;
+                    float cDist = MathF.Abs(x - cx) + MathF.Abs(y - cy) + MathF.Abs(z - cz);
+                    if (cDist >= RenderDistance) continue;
 
                     BoundingBox chunkbounds = new BoundingBox(new Vector3(x, y, z) * Chunk.Size, (new Vector3(x + 1, y + 1, z + 1) * Chunk.Size));
                     if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
                         continue;
 
-                    if (!loadedChunks.TryGetValue((x, y, z), out var currentChunk))
+                    visitedChunks.Add((x, y, z));
+                    Chunk currentChunk;
+
+                    if (!loadedChunks.TryGetValue(CCPos((x, y, z)), out currentChunk))
                     {
                         // If chunk is not yet generated or queued, add it to generate queue
-                        if (!toGenerate.Contains((x, y, z)) && toGenerate.Count < 8)
+                        if (!toGenerate.Contains((x, y, z)) && toGenerate.Count < 12)
                         {
                             toGenerate.Enqueue((x, y, z));
                             generationPool.EnqueueTask(ProcessGeneration);
                         }
                         continue;
                     }
-
-                    if (currentChunk.queueModified)
-                    {
-                        currentChunk.queueModified = false;
-                        if (x == cx && z == cz) currentChunk.CheckQueue(true);
-                        else generationPool.EnqueueTask(() => currentChunk.CheckQueue(false));
-                    }
-                    if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)) && !toMesh.Contains((x, y, z)) && toMesh.Count < 8)
-                    {
-                        toMesh.Enqueue((x,y,z));
-                        generationPool.EnqueueTask(ProcessMesh);
-                    }
-
-                    if (visitedChunks.Contains((x, y, z))) continue;
-                    visitedChunks.Add((x, y, z));
-
                     // Add to render queue if the chunk is not completely empty
                     if (!currentChunk.CompletelyEmpty)
                         toRender.Add((x, y, z));
@@ -381,7 +540,7 @@ namespace FantasyVoxels
                         // Enqueue the neighbor only if it hasn't been visited and we are within the depth limit
                         if (!visitedChunks.Contains((neighborX, neighborY, neighborZ)))
                         {
-                            bfsQueue.Enqueue((neighborX, neighborY, neighborZ, exitFace, newDepth));
+                            bfsQueue.Enqueue((neighborX, neighborY, neighborZ, exitFace, newDepth,currentChunk.CompletelyEmpty));
                         }
                     }
                 }
@@ -428,7 +587,7 @@ namespace FantasyVoxels
                             // Check if we have exceeded the render distance
                             if (MathF.Abs(x - cx) + MathF.Abs(y - cy)*2 + MathF.Abs(z - cz) >= RenderDistance) continue;
 
-                            if (!loadedChunks.TryGetValue((x, y, z), out var currentChunk))
+                            if (!loadedChunks.TryGetValue(CCPos((x, y, z)), out var currentChunk))
                             {
                                 // If chunk is not yet generated or queued, add it to generate queue
                                 if (!toGenerate.Contains((x, y, z)) && toGenerate.Count < 32)
@@ -471,116 +630,190 @@ namespace FantasyVoxels
                 });
             }
 
+            while(instantRemesh.Count > 0)
+            {
+                loadedChunks[instantRemesh.Dequeue()].CheckQueue(false);
+            }
+
             base.Update(gameTime);
+        }
+
+        void RenderChunks(bool transparent)
+        {
+            if (transparent) goto transparent;
+
+            foreach (var c in toRender.ToArray().AsSpan())
+            {
+                long pos = CCPos(c);
+
+                BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[pos].MaxY + 1, Chunk.Size)));
+                if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
+                    continue;
+
+                int LOD = loadedChunks[pos].GetLOD();
+
+                if ((loadedChunks[pos].chunkVertexBuffers[LOD] == null || loadedChunks[pos].chunkVertexBuffers[LOD].VertexCount == 0) && LOD > 0)
+                    LOD--;
+                if (loadedChunks[pos].chunkVertexBuffers[LOD] == null || loadedChunks[pos].chunkVertexBuffers[LOD].VertexCount == 0)
+                    continue;
+
+                GraphicsDevice.SetVertexBuffer(loadedChunks[pos].chunkVertexBuffers[LOD]);
+
+                chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
+                chunk.Parameters["voxel"]?.SetValue(loadedChunks[pos].voxelDataTexture);
+
+                foreach (var pass in chunk.CurrentTechnique.Passes)
+                {
+                    pass.Apply();
+                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[pos].chunkVertexBuffers[LOD].VertexCount / 3);
+                }
+            }
+
+            if (!transparent) return;
+
+            transparent:
+
+            //Transparent
+            foreach (var c in toRender.ToArray().AsSpan())
+            {
+                long pos = CCPos(c);
+
+                BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[pos].MaxY + 1, Chunk.Size)));
+                if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
+                    continue;
+                int LOD = 4;
+
+                if (loadedChunks[pos].chunkVertexBuffers[LOD] == null || loadedChunks[pos].chunkVertexBuffers[LOD].VertexCount == 0)
+                    continue;
+
+                GraphicsDevice.SetVertexBuffer(loadedChunks[pos].chunkVertexBuffers[LOD]);
+
+                chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
+                chunk.Parameters["voxel"]?.SetValue(loadedChunks[pos].voxelDataTexture);
+
+                foreach (var pass in chunk.CurrentTechnique.Passes)
+                {
+                    pass.Apply();
+                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[pos].chunkVertexBuffers[LOD].VertexCount / 3);
+                }
+            }
         }
 
         protected override void Draw(GameTime gameTime)
         {
-            //raymarcher.Parameters["Texture"].SetValue(screenTexture);
-            //raymarcher.Parameters["cameraViewMatrix"].SetValue(Matrix.Invert(view));
-            //raymarcher.Parameters["cameraPosition"].SetValue(cameraPosition);
-
-            //foreach (var pass in raymarcher.CurrentTechnique.Passes)
-            //{
-            //    const int threadsize = 8;
-            //    pass.ApplyCompute();
-            //    GraphicsDevice.DispatchCompute(Width/ threadsize, Height/ threadsize, 1);
-            //}
-
-            //_spriteBatch.Begin(samplerState:SamplerState.PointClamp);
-
-            //_spriteBatch.Draw(screenTexture,GraphicsDevice.Viewport.Bounds,Color.White);
-
-            //_spriteBatch.End();
-
             totalTime = (float)gameTime.TotalGameTime.TotalSeconds;
 
-            GraphicsDevice.SetRenderTargets(screenTexture,normalTexture);
-            GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, Color.LightSkyBlue, 1000f, 1);
-
-            GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
+            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             GraphicsDevice.BlendState = BlendState.NonPremultiplied;
             GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
             GraphicsDevice.SamplerStates[0] = SamplerState.PointWrap;
             GraphicsDevice.SamplerStates[1] = SamplerState.PointWrap;
 
+            sky.Parameters["skyColor"].SetValue(Color.LightSkyBlue.ToVector3());
+
             chunk.Parameters["skyColor"].SetValue(Color.LightSkyBlue.ToVector3());
             chunk.Parameters["renderDistance"]?.SetValue(RenderDistance);
-            chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             chunk.Parameters["cameraPosition"]?.SetValue(cameraPosition);
+            chunk.Parameters["time"]?.SetValue((float)gameTime.TotalGameTime.TotalSeconds);
+            //Shadows
+            /* 
+            chunk.Parameters["View"].SetValue(sunView);
+            chunk.Parameters["Projection"].SetValue(sunProjection);
+            
+            chunk.CurrentTechnique = chunk.Techniques["Shadow"];
+            
+            GraphicsDevice.SetRenderTarget(shadowMap);
+            GraphicsDevice.Clear(Color.White);
+
+            Matrix lightWorld = Matrix.CreateWorld(Vector3.Floor(-cameraPosition),Vector3.Forward,Vector3.Up);
+
+            
+            for (int _x = -8; _x < 8; _x++)
+            {
+                for (int _y = -8; _y < 8; _y++)
+                {
+                    for (int _z = -8; _z < 8; _z++)
+                    {
+                        int x = _x + chunkPos.x;
+                        int y = _y + chunkPos.y;
+                        int z = _z + chunkPos.z;
+
+                        (int x, int y, int z) c = (x, y, z);
+
+                        if (!loadedChunks.ContainsKey(c))
+                            continue;
+
+                        int LOD = loadedChunks[c].GetLOD();
+
+                        if ((loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0) && LOD > 0)
+                            LOD--;
+                        if (loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0)
+                            continue;
+
+                        GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
+
+                        chunk.Parameters["World"].SetValue(lightWorld * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
+
+                        foreach (var pass in chunk.CurrentTechnique.Passes)
+                        {
+                            pass.Apply();
+                            GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[c].chunkVertexBuffers[LOD].VertexCount / 3);
+                        }
+                    }
+                }
+            }*/
+
+            chunk.CurrentTechnique = chunk.Techniques["Terrain"];
+            
+            GraphicsDevice.SetRenderTargets(screenTexture, normalTexture);
+            GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, Color.LightSkyBlue, 1000f, 1);
+
+
+            sky.Parameters["World"].SetValue(Matrix.CreateWorld(Vector3.One*-0.5f,Vector3.Forward,Vector3.Up)*Matrix.CreateScale(10));
+            sky.Parameters["View"].SetValue(view);
+            sky.Parameters["Projection"].SetValue(projection);
+
+            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
+            GraphicsDevice.DepthStencilState = DepthStencilState.None;
+
+            foreach(var pass in sky.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.DrawUserIndexedPrimitives(PrimitiveType.TriangleList,skyboxVerts,0,skyboxVerts.Length,triangles,0,triangles.Length/3);
+            }
+
+            GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
+            GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
             chunk.Parameters["View"].SetValue(view);
             chunk.Parameters["Projection"].SetValue(projection);
-            chunk.Parameters["time"]?.SetValue((float)gameTime.TotalGameTime.TotalSeconds);
-            chunk.Parameters["colors"]?.SetValue(colors);
+            //chunk.Parameters["LightViewProj"]?.SetValue(lightWorld * sunView*sunProjection);
+            //chunk.Parameters["shadowmap"]?.SetValue(shadowMap);
 
-            foreach (var c in toRender.ToArray().AsSpan())
-            {
-                BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size)));
-                if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
-                    continue;
-
-                int LOD = loadedChunks[c].GetLOD();
-
-                if ((loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0) && LOD > 0)
-                    LOD--;
-                if (loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0)
-                    continue;
-
-                GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
-
-                chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
-
-                foreach (var pass in chunk.CurrentTechnique.Passes)
-                {
-                    pass.Apply();
-                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[c].chunkVertexBuffers[LOD].VertexCount / 3);
-                }
-            }
-
-            //Transparent
-            foreach (var c in toRender.ToArray().AsSpan())
-            {
-                BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size)));
-                if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
-                    continue;
-
-                int LOD = 4;
-
-                if (loadedChunks[c].chunkVertexBuffers[LOD] == null || loadedChunks[c].chunkVertexBuffers[LOD].VertexCount == 0)
-                    continue;
-
-                GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
-
-                chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
-
-                foreach (var pass in chunk.CurrentTechnique.Passes)
-                {
-                    pass.Apply();
-                    GraphicsDevice.DrawPrimitives(PrimitiveType.TriangleList, 0, loadedChunks[c].chunkVertexBuffers[LOD].VertexCount / 3);
-                }
-            }
+            RenderChunks(false);
 
             player.Render();
-            GraphicsDevice.DepthStencilState = DepthStencilState.None;
-            foreach (var c in toRender.ToArray().AsSpan())
-            {
-                effect.Alpha = 0.4f;
-                effect.DiffuseColor = Color.Black.ToVector3();
 
-                effect.Projection = MGame.Instance.projection;
-                effect.View = MGame.Instance.view;
+            RenderChunks(true);
 
-                effect.World = Matrix.CreateScale(Chunk.Size, loadedChunks[c].MaxY + 1, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
+            //GraphicsDevice.DepthStencilState = DepthStencilState.None;
+            //foreach (var c in toRender.ToArray().AsSpan())
+            //{
+            //    effect.Alpha = 0.4f;
+            //    effect.DiffuseColor = Color.Black.ToVector3();
 
-                foreach (var pass in effect.CurrentTechnique.Passes)
-                {
-                    pass.Apply();
-                    Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
-                }
-            }
+            //    effect.Projection = MGame.Instance.projection;
+            //    effect.View = MGame.Instance.view;
 
+            //    effect.World = Matrix.CreateScale(Chunk.Size, Chunk.Size, Chunk.Size) * MGame.Instance.world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size);
+
+            //    foreach (var pass in effect.CurrentTechnique.Passes)
+            //    {
+            //        pass.Apply();
+            //        Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineList, boxVertices, 0, boxVertices.Length / 2);
+            //    }
+            //}
 
             GraphicsDevice.SetRenderTarget(SSAOTarget);
 
@@ -626,6 +859,13 @@ namespace FantasyVoxels
 
             _spriteBatch.End();
 
+
+            //_spriteBatch.Begin();
+
+            //_spriteBatch.Draw(shadowMap, Vector2.Zero, Color.White);
+
+            //_spriteBatch.End();
+
             player.RenderUI();
 
             base.Draw(gameTime);
@@ -637,13 +877,13 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey((cx, cy, cz)))
+            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
 
-                return loadedChunks[(cx, cy, cz)].voxels[x + Chunk.Size * (y + Chunk.Size * z)];
+                return loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)];
             }
             return -1;
         }
@@ -653,28 +893,30 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey((cx, cy, cz)))
+            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
 
-                loadedChunks[(cx, cy, cz)].Modify(x, y, z, newVoxel);
+                loadedChunks[CCPos((cx, cy, cz))].Modify(x, y, z, newVoxel);
             }
         }
-        public void SetVoxel_Q(Vector3 p, int newVoxel)
+        public void SetVoxel_Q(Vector3 p, int newVoxel, bool instantRegen = false)
         {
             int cx = (int)MathF.Floor(p.X / Chunk.Size);
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey((cx, cy, cz)))
+            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
 
-                loadedChunks[(cx, cy, cz)].ModifyQueue(x, y, z, newVoxel);
+                loadedChunks[CCPos((cx, cy, cz))].ModifyQueue(x, y, z, newVoxel);
+
+                if (instantRegen && !instantRemesh.Contains(CCPos((cx, cy, cz)))) instantRemesh.Enqueue(CCPos((cx, cy, cz)));
             }
             else if (!toGenerate.Contains((cx, cy, cz)))
             {
@@ -775,6 +1017,7 @@ namespace FantasyVoxels
                     }
                 }
             }
+
             // Return the resolved position
             return resolvedPosition;
         }

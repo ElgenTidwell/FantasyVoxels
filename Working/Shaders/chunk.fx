@@ -11,6 +11,7 @@ float4x4 World;
 float4x4 View;
 float4x4 Projection;
 float4x4 InvProjection;
+float4x4 LightViewProj;
 
 float FOV;
 float renderDistance;
@@ -23,16 +24,22 @@ float time;
 
 int ChunkSize = 512;
 
-texture voxels;
-sampler3D voxelsSampler : register(s0) = sampler_state
+texture voxel;
+sampler3D voxelSampler : register(s0) = sampler_state
 {
-    Texture = <voxels>;
+    Texture = <voxel>;
 };
 texture colors;
 sampler2D colorsSampler : register(s1) = sampler_state
 {
     Texture = <colors>;
 };
+texture shadowmap;
+sampler2D shadowmapSampler : register(s2) = sampler_state
+{
+    Texture = <shadowmap>;
+};
+
 
 
 struct Ray
@@ -51,14 +58,17 @@ struct VSOutput
     float3 WorldPos : NORMAL1;
     float4 Normal : NORMAL0;
     float4 Color : COLOR0;
-    float2 Depth : TEXCOORD1;
+    float3 Depth : TEXCOORD1;
     float2 Coord : TEXCOORD2;
+    nointerpolation float3 LightCoord : TEXCOORD3;
+    //nointerpolation float4 ShadowCoord : TEXCOORD4;
 };
 
 VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR0, float4 normal : NORMAL0, float2 texcoord : TEXCOORD0)
 {
     VSOutput output = (VSOutput) 0;
-    output.WorldPos = mul(position, World) + cameraPosition;
+    output.WorldPos = mul(position, World).xyz + cameraPosition;
+    output.LightCoord = position.xyz-normal*0.1f;
     output.Normal = normal;
     
     output.Coord = texcoord;
@@ -74,12 +84,12 @@ VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR
     float4 finPos = position;
             
     [branch]
-    if (effect == 1)
+    if (effect == 1) //waving water
     {
         float timeOffset = radians(((tile.x / ChunkSize)) * 180);
         float timeOffset2 = radians(((tile.z / ChunkSize)) * 180);
-        float sin1 = sin(time * 0.6 + timeOffset);
-        float sin2 = sin(time * 0.2 + timeOffset2);
+        float sin1 = sin(time * 0.6 + timeOffset)*0.8f;
+        float sin2 = sin(time * 0.2 + timeOffset2)*0.8f;
         
         //Water
         voxShadeEffect = lerp((vox.g / 255.f), ((vox.g / 255.f) - 0.5f) * 2, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
@@ -89,46 +99,109 @@ VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR
     }
     else if (effect == 2)
     {
-        //Double wave
         voxShadeEffect = (vox.g / 255.f) - (abs(sin(time * 1 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180) + 1) / 2) * (abs(sin(time * 0.01 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180)) + 1) / 2) * 0.1f);
     }
+    
+    
+    /*
+    float4 lightingPosition = mul(float4(output.WorldPos+normal.xyz*0.8f,1), LightViewProj);
+    
+    // Find the position in the shadow map for this pixel
+    float2 ShadowTexCoord = mad(0.5f, lightingPosition.xy / lightingPosition.w, float2(0.5f, 0.5f));
+    ShadowTexCoord.y = 1.0f - ShadowTexCoord.y;
+    
+	// Get the current depth stored in the shadow map
+    float ourdepth = (lightingPosition.z / lightingPosition.w);
+    
+    output.ShadowCoord = float4(ShadowTexCoord, (lightingPosition.z / lightingPosition.w), dot(float3(0, 1, 0), normal.xyz));
+    */
+    
     output.Color = float4(voxShadeEffect, 0, 0, voxAlphaEffect);
     
     output.Position = mul(mul(mul(finPos, World), View), Projection); // Apply standard transformations
     
-    output.Depth = float2(distance(output.WorldPos, cameraPosition), abs(normal.x) * 0.1f + abs(normal.y) * 0.5f + abs(normal.z) * 0.8f);
+    output.Depth = float3(distance(output.WorldPos, cameraPosition), abs(normal.x) * 0.1f + abs(normal.y) * 0.5f + abs(normal.z) * 0.8f, output.Position.z / output.Position.w);
     
     return output;
 }
-struct PSInput
-{
-    float4 Position : SV_POSITION;
-    float3 WorldPos : NORMAL1;
-    float4 Normal : NORMAL0;
-    float2 Coord : TEXCOORD2;
-    float2 Depth : TEXCOORD1;
-    float4 Color : COLOR0;
-};
 struct PSOut
 {
     float4 Color0 : SV_Target0;
     float4 Color1 : SV_Target1;
 };
 
+float getShadowMultiplier(float d1, float d2)
+{
+    float distanceM = saturate(distance(d1, d2)*80);
+    float distanceF = saturate(1 - (distance(d1, d2) * 150))*0.5f;
+    return distanceM+ distanceF;
+}
 
-PSOut MainPS(PSInput input)
+// Calculates the shadow term using PCF with edge tap smoothing
+float CalcShadowTermSoftPCF(float light_space_depth, float ndotl, float2 shadow_coord, int iSqrtSamples)
+{
+    float fShadowTerm = 0.0f;
+    
+    float variableBias = clamp(0.02f * tan(acos(ndotl)), 0.0003f, 0.0005f);
+    
+    //safe to assume it's a square
+    float shadowMapSize = 2048;
+    	
+    float fRadius = (iSqrtSamples - 1)*2; //mad(iSqrtSamples, 0.5, -0.5);//(iSqrtSamples - 1.0f) / 2;
+
+    for (float y = -fRadius; y <= fRadius; y++)
+    {
+        for (float x = -fRadius; x <= fRadius; x++)
+        {
+            float2 vOffset = 0;
+            vOffset = float2(x, y);
+            vOffset /= shadowMapSize;
+            //vOffset *= 2;
+            //vOffset /= variableBias*200;
+            float2 vSamplePoint = shadow_coord + vOffset;
+            float fDepth = tex2D(shadowmapSampler, vSamplePoint).x;
+            float fSample = getShadowMultiplier(light_space_depth, fDepth + variableBias) * (light_space_depth > fDepth + variableBias);
+            
+            // Edge tap smoothing
+            float xWeight = 1;
+            float yWeight = 1;
+            
+                
+            fShadowTerm += fSample * xWeight * yWeight;
+        }
+    }
+    
+    fShadowTerm /= (fRadius * fRadius * 4);
+    
+    return fShadowTerm;
+}
+
+PSOut MainPS(VSOutput input)
 {
     PSOut output = (PSOut) 0;
     
-    float2 depth = input.Depth;
+    float2 depth = input.Depth.xy;
     
-    float fog = abs(depth.x) / (renderDistance*ChunkSize*0.5f);
+    float fog = abs(depth.x) / (renderDistance * ChunkSize * 0.5f);
     
     float4 dat = input.Color;
     
-    float4 color = tex2D(colorsSampler,input.Coord);
+    float4 color = tex2D(colorsSampler, input.Coord);
     
-    output.Color0 = float4(lerp(color.xyz * dat.r, skyColor, pow(saturate(fog),2)), color.a * dat.a);
+    float4 voxelInfo = tex3D(voxelSampler, floor(input.LightCoord + 0.001f) / float3(ChunkSize, ChunkSize, ChunkSize));
+    
+    /*
+    float4 shadowCoords = input.ShadowCoord;
+    float shadowContributioncasc1 = CalcShadowTermSoftPCF(shadowCoords.z, shadowCoords.w, shadowCoords.xy, 3);
+    
+    //OUTPUT COLOR
+    
+    float3 desCol = color.xyz * dat.r * max(saturate(1 - shadowContributioncasc1*0.5f), 0.6f) * voxelInfo.r;
+    
+    */
+    float3 desCol = color.xyz * dat.r * voxelInfo.r;
+
+    output.Color0 = float4(lerp(desCol, skyColor, pow(saturate(fog), 2)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {
@@ -136,12 +209,18 @@ PSOut MainPS(PSInput input)
     }
     else
     {
-        output.Color1 = float4(0,0,0,0);
+        output.Color1 = float4(0, 0, 0, 0);
     }
     
     return output;
 }
 
+float4 ShadowPS(VSOutput input) : SV_Target0
+{
+    float3 depth = input.Depth;
+    
+    return float4(depth.z, 0, 0, 1);
+}
 
 technique Terrain
 {
@@ -149,5 +228,14 @@ technique Terrain
     {
         VertexShader = compile VS_SHADERMODEL MainVS();
         PixelShader = compile PS_SHADERMODEL MainPS();
+    }
+};
+
+technique Shadow
+{
+    pass P0
+    {
+        VertexShader = compile VS_SHADERMODEL MainVS();
+        PixelShader = compile PS_SHADERMODEL ShadowPS();
     }
 };

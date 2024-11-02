@@ -63,3 +63,13 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/UITextures.png;Textures/UITextures.png
+
+#begin ../Working/Shaders/skybox.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/skybox.fx;Shaders/skybox.fx
+
+#begin ../Working/Shaders/chunkbuilder.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/chunkbuilder.fx;Shaders/chunkbuilder.fx

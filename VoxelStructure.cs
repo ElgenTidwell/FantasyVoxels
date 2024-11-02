@@ -24,7 +24,7 @@ namespace FantasyVoxels
             if (queudChunks.ContainsKey(chunkPos))
             {
                 queudChunks[chunkPos].Enqueue(vox);
-                if (MGame.Instance.loadedChunks.TryGetValue(chunkPos,out Chunk chunk))
+                if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos),out Chunk chunk))
                 {
                     chunk.queueModified = true;
                 }
@@ -33,7 +33,7 @@ namespace FantasyVoxels
             {
                 queudChunks.TryAdd(chunkPos, new ConcurrentQueue<(int x, int y, int z, int vox)>());
                 queudChunks[chunkPos].Enqueue(vox);
-                if (MGame.Instance.loadedChunks.TryGetValue(chunkPos, out Chunk chunk))
+                if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos), out Chunk chunk))
                 {
                     chunk.queueModified = true;
                 }
@@ -54,13 +54,14 @@ namespace FantasyVoxels
 
         protected void SetVoxel(int x, int y, int z, int voxel)
         {
-            int cx = (int)((float)x / Chunk.Size);
-            int cy = (int)((float)y / Chunk.Size);
-            int cz = (int)((float)z / Chunk.Size);
+            int cx = (int)MathF.Floor((float)x / Chunk.Size);
+            int cy = (int)MathF.Floor((float)y / Chunk.Size);
+            int cz = (int)MathF.Floor((float)z / Chunk.Size);
 
-            int px = (x)-cx*Chunk.Size;
-            int py = (y)-cy*Chunk.Size;
-            int pz = (z)-cz*Chunk.Size;
+
+            int px = ((x) - cx * Chunk.Size);
+            int py = ((y) - cy * Chunk.Size);
+            int pz = ((z) - cz * Chunk.Size);
 
             VoxelStructurePlacer.Enqueue((cx,cy,cz),(px,py,pz,voxel));
         }
