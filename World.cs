@@ -55,7 +55,7 @@ namespace FantasyVoxels
             new Voxel(((int x, int y, int z) pos) =>
             {
                 return (float)(Random.Shared.NextDouble() * 0.2f + 0.8f);
-            }, shaderEffect: 2,lightPassthrough:10),
+            }, shaderEffect: 2,lightPassthrough:35),
             //stone
             new Voxel(((int x, int y, int z) pos) =>
             {
@@ -214,6 +214,7 @@ namespace FantasyVoxels
         public bool[] facesVisibleAtAll = new bool[6];
         public bool generated = false, modified = false,lightOutOfDate = false;
         public bool[] meshUpdated = new bool[4];
+        public bool[] meshLayer = new bool[Size];
         public int MaxY;
         Random tRandom;
 
@@ -227,6 +228,20 @@ namespace FantasyVoxels
 
             voxelDataTexture = new Texture3D(MGame.Instance.GraphicsDevice,Size,Size,Size,false,SurfaceFormat.Color);
         }
+        public static float GetOctaveNoise2D(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
+        {
+            float totalNoise = 0;
+            float amplitude = 1;
+            float maxAmplitude = 0; // Used to normalize the result
+            for (int i = 0; i < octaveCount; i++)
+            {
+                totalNoise += IcariaNoise.GradientNoise(x * frequency, z * frequency, MGame.Instance.seed - 10) * amplitude;
+                maxAmplitude += amplitude;
+                amplitude *= persistence;    // Decrease amplitude for each octave
+                frequency *= lacunarity;     // Increase frequency for each octave
+            }
+            return totalNoise/maxAmplitude;
+        }
         public static float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
             float totalNoise = 0;
@@ -239,13 +254,13 @@ namespace FantasyVoxels
                 amplitude *= persistence;    // Decrease amplitude for each octave
                 frequency *= lacunarity;     // Increase frequency for each octave
             }
-            return totalNoise;
+            return totalNoise / maxAmplitude;
         }
         public static int GetTerrainHeight(float samplex, float samplez)
         {
             float ocean = MathF.Pow((MathF.Min(IcariaNoise.GradientNoise(samplex * 0.004f, samplez * 0.004f, MGame.Instance.seed - 1), 0)), 2);
-            float hill = MathF.Abs(IcariaNoise.GradientNoise(samplex * 0.002f, samplez * 0.002f, MGame.Instance.seed)) *220;
-            float terrainHeight = ocean * -220 + 10+hill*(1-(MathF.Min(ocean*50,1)));
+            float baseTerrainHeight = MathF.Abs(IcariaNoise.GradientNoise(float.Floor(samplex/2)*2 * 0.002f, float.Floor(samplez / 2) * 2 * 0.002f, MGame.Instance.seed)) * 220;
+            float terrainHeight = ocean * -220 + 10 + baseTerrainHeight * (1 - (MathF.Min(ocean * 50, 1)));
 
             return (int)terrainHeight;
         }
@@ -259,7 +274,7 @@ namespace FantasyVoxels
             if (y < 5 && y >= terrainHeight)
                 voxel = 3;
 
-            if (y < terrainHeight - 30 - IcariaNoise.GradientNoise(x * 0.9f, z * 0.9f) * 20 && voxel != 0)
+            if (y < terrainHeight && y < terrainHeight - 30 - IcariaNoise.GradientNoise(x * 0.9f, z * 0.9f) * 20 && voxel != 0)
                 voxel = 9;
 
             return voxel;
@@ -296,6 +311,7 @@ namespace FantasyVoxels
                         {
                             CompletelyEmpty = false;
                             MaxY = Math.Max(MaxY, y);
+                            meshLayer[y] = true;
                         }
                         if(voxels[x + Size * (y + Size * z)] == 0 || Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent)
                         {
@@ -411,7 +427,9 @@ namespace FantasyVoxels
                         voxelDataColors[x + Size * (y + Size * z)].R = (byte)MathF.Min(MathF.Max(sunLight,0),255);
 
                         if (voxels[x + Size * (y + Size * z)] != 0) 
-                            sunLight = (int)MathF.Max(sunLight - Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].lightPassthrough, 0);
+                            sunLight = (int)MathF.Max(sunLight - Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].lightPassthrough, 10);
+
+                        if (sunLight <= 10) break;
                     }
 
                     if (sunLight > 0) propDownward = true; 
@@ -419,44 +437,44 @@ namespace FantasyVoxels
                     previousSkylight[x, z] = sunLight;
                 }
             }
-            for (int x = 0; x < Size; x++)
-            {
-                for (int z = 0; z < Size; z++)
-                {
-                    for (int y = Size-1; y >= 0; y--)
-                    {
-                        if ((x > 0 && x < Size - 1) && (z > 0 && z < Size - 1) && (y > 0 && y < Size - 1)) continue;
+            //for (int x = 0; x < Size; x++)
+            //{
+            //    for (int z = 0; z < Size; z++)
+            //    {
+            //        for (int y = Size-1; y >= 0; y--)
+            //        {
+            //            if ((x > 0 && x < Size - 1) && (z > 0 && z < Size - 1) && (y > 0 && y < Size - 1)) continue;
 
-                        for (int p = 0; p < 6; p++)
-                        {
-                            int ourLight = voxelDataColors[x + Size * (y + Size * z)].R;
+            //            for (int p = 0; p < 6; p++)
+            //            {
+            //                int ourLight = voxelDataColors[x + Size * (y + Size * z)].R;
 
-                            (int x, int y, int z) newpos = (x + positionChecks[p].x, y + positionChecks[p].y, z + positionChecks[p].z);
-                            if (IsOutOfBounds(newpos))
-                            {
-                                int cx = (int)MathF.Floor((float)newpos.x / Chunk.Size);
-                                int cy = (int)MathF.Floor((float)newpos.y / Chunk.Size);
-                                int cz = (int)MathF.Floor((float)newpos.z / Chunk.Size);
+            //                (int x, int y, int z) newpos = (x + positionChecks[p].x, y + positionChecks[p].y, z + positionChecks[p].z);
+            //                if (IsOutOfBounds(newpos))
+            //                {
+            //                    int cx = (int)MathF.Floor((float)newpos.x / Chunk.Size);
+            //                    int cy = (int)MathF.Floor((float)newpos.y / Chunk.Size);
+            //                    int cz = (int)MathF.Floor((float)newpos.z / Chunk.Size);
 
-                                long pos = MGame.CCPos((cx + chunkPos.x, cy + chunkPos.y, cz + chunkPos.z));
+            //                    long pos = MGame.CCPos((cx + chunkPos.x, cy + chunkPos.y, cz + chunkPos.z));
 
-                                if (MGame.Instance.loadedChunks.ContainsKey(pos))
-                                {
-                                    int _x = (int)(newpos.x - cx * Chunk.Size);
-                                    int _y = (int)(newpos.y - cy * Chunk.Size);
-                                    int _z = (int)(newpos.z - cz * Chunk.Size);
+            //                    if (MGame.Instance.loadedChunks.ContainsKey(pos))
+            //                    {
+            //                        int _x = (int)(newpos.x - cx * Chunk.Size);
+            //                        int _y = (int)(newpos.y - cy * Chunk.Size);
+            //                        int _z = (int)(newpos.z - cz * Chunk.Size);
 
-                                    int otherlight = MGame.Instance.loadedChunks[pos].voxelDataColors[_x + Size * (_y + Size * _z)].R;
+            //                        int otherlight = MGame.Instance.loadedChunks[pos].voxelDataColors[_x + Size * (_y + Size * _z)].R;
 
-                                    voxelDataColors[x + Size * (y + Size * z)].R = (byte)MathF.Max(otherlight, ourLight);
+            //                        voxelDataColors[x + Size * (y + Size * z)].R = (byte)MathF.Max(otherlight, ourLight);
 
-                                    if (ourLight - otherlight > 5) MGame.Instance.loadedChunks[pos].lightOutOfDate = true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            //                        if (ourLight - otherlight > 5) MGame.Instance.loadedChunks[pos].lightOutOfDate = true;
+            //                    }
+            //                }
+            //            }
+            //        }
+            //    }
+            //}
             Queue<(int tx, int ty, int tz, int x, int y, int z)> prop = new Queue<(int tx, int ty, int tz, int x, int y, int z)>();
 
             void grabandqueue(int x, int y, int z, int dx, int dy, int dz, int light)
@@ -506,7 +524,6 @@ namespace FantasyVoxels
                 grabandqueue(x, y, z, 0, 1, 0, ourLight);
                 grabandqueue(x, y, z, 0, 0, -1, ourLight);
                 grabandqueue(x, y, z, 0, 0, 1, ourLight);
-
                 //if(y == 0)
                 //{
                 //    if (ourLight > 0) propDownward = true;
@@ -534,17 +551,20 @@ namespace FantasyVoxels
 
             for (int p = 0; p < positionChecks.Length; p++)
             {
-                vSidesStart[lod,p] = (ushort)numVerts;
-                for (int x = 0; x < Size; x += scale)
+                vSidesStart[lod,p] = (ushort)numVerts; 
+                for (int y = 0; y <= MaxY; y += scale)
                 {
-                    for (int z = 0; z < Size; z += scale)
-                    {
-                        int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
+                    int sampley = y + chunkPos.y * Size;
 
-                        int terrainHeight = x == 0 || z == 0 || x == Size - 1 || z == Size - 1 ? (int)(GetTerrainHeight(samplex / 2f, samplez / 2f)) : 0;
-                        for (int y = 0; y <= MaxY; y += scale)
+                    if (!meshLayer[y]) continue;
+
+                    for (int x = 0; x < Size; x += scale)
+                    {
+                        for (int z = 0; z < Size; z += scale)
                         {
-                            int sampley = y + chunkPos.y * Size;
+                            int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
+
+                            int terrainHeight = x == 0 || z == 0 || x == Size - 1 || z == Size - 1 ? (int)(GetTerrainHeight(samplex / 2f, samplez / 2f)) : 0;
 
                             if (IsOutOfBounds((x, y, z))) continue;
 
@@ -596,8 +616,14 @@ namespace FantasyVoxels
                             {
                                 int grabbed = MGame.Instance.GrabVoxel(new Vector3(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale)));
 
-                                if (grabbed == -1) vox = GetVoxel(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale), terrainHeight);
-                                else vox = grabbed;
+                                if (grabbed == -1)
+                                {
+                                    vox = GetVoxel(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale), terrainHeight);
+                                }
+                                else
+                                {
+                                    vox = grabbed;
+                                }
                             }
                             else
                             {
@@ -679,6 +705,7 @@ namespace FantasyVoxels
                 CompletelyEmpty = false;
                 voxels[p.x + Size * (p.y + Size * p.z)] = (byte)p.vox;
                 voxeldata[p.x + Size * (p.y + Size * p.z)].shade = (int)(240 * Voxel.voxelTypes[voxels[p.x + Size * (p.y + Size * p.z)]].GetShade((p.x,p.y,p.z)));
+                meshLayer[p.y] = true;
                 MaxY = Math.Max(MaxY, p.y);
                 Chunk neighbor;
                 if (p.x == 0        && MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos((chunkPos.x - 1, chunkPos.y, chunkPos.z)), out neighbor))
@@ -741,6 +768,7 @@ namespace FantasyVoxels
 
             voxels[x + Size * (y + Size * z)] = (byte)newVoxel;
             voxeldata[x + Size * (y + Size * z)].shade = (int)(240 * Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].GetShade((x, y, z)));
+            meshLayer[y] = true;
 
             MaxY = Math.Max(MaxY, y);
             CompletelyEmpty = false;

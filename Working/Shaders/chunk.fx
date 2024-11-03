@@ -64,7 +64,7 @@ struct VSOutput
     //nointerpolation float4 ShadowCoord : TEXCOORD4;
 };
 
-VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR0, float4 normal : NORMAL0, float2 texcoord : TEXCOORD0)
+VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0, float4 normal : NORMAL0, float2 texcoord : TEXCOORD0)
 {
     VSOutput output = (VSOutput) 0;
     output.WorldPos = mul(position, World).xyz + cameraPosition;

@@ -54,7 +54,7 @@ namespace FantasyVoxels
 
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 32;
+        public int RenderDistance = 64;
         public bool enableAO = true;
         float _fov = 90f;
         public float FOV {
@@ -339,6 +339,10 @@ namespace FantasyVoxels
         {
             if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) return;
 
+            BoundingBox chunkbounds = new BoundingBox(new Vector3(t.x, t.y, t.z) * Chunk.Size, (new Vector3(t.x + 1, t.y + 1, t.z + 1) * Chunk.Size));
+            if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
+                return;
+
             Chunk c = new Chunk();
 
             c.chunkPos = t;
@@ -487,6 +491,7 @@ namespace FantasyVoxels
             //}
 
             const bool enableBFS = true;
+            int generatedWithPreference = 0;
             if(enableBFS)
             {
                 Queue<(int x, int y, int z, int face, int depth, bool fromEmpty)> bfsQueue = new Queue<(int, int, int, int, int, bool)>();
@@ -498,35 +503,54 @@ namespace FantasyVoxels
                 while (bfsQueue.Count > 0)
                 {
                     var (x, y, z, fromFace, depth, fromEmpty) = bfsQueue.Dequeue();
+                    var cameraDir = new Vector3(cx, cy, cz) - new Vector3(x, y, z);
 
                     if (visitedChunks.Contains((x, y, z))) continue;
 
                     // Check if we have exceeded the render distance
                     float cDist = MathF.Abs(x - cx) + MathF.Abs(y - cy) + MathF.Abs(z - cz);
-                    if (cDist >= RenderDistance) continue;
+                    if (cDist >= RenderDistance+4) continue;
+
+                    visitedChunks.Add((x, y, z));
 
                     BoundingBox chunkbounds = new BoundingBox(new Vector3(x, y, z) * Chunk.Size, (new Vector3(x + 1, y + 1, z + 1) * Chunk.Size));
                     if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
                         continue;
 
-                    visitedChunks.Add((x, y, z));
                     Chunk currentChunk;
 
                     if (!loadedChunks.TryGetValue(CCPos((x, y, z)), out currentChunk))
                     {
+                        if (generatedWithPreference > 256) continue;
+
                         // If chunk is not yet generated or queued, add it to generate queue
-                        if (!toGenerate.Contains((x, y, z)) && toGenerate.Count < 12)
+                        if (!toGenerate.Contains((x, y, z)))
                         {
                             toGenerate.Enqueue((x, y, z));
                             generationPool.EnqueueTask(ProcessGeneration);
                         }
+
+                        // Mark any existing neighbors, it's safer to not tunnel or fly with it. This is the "chunk zipping"
+                        foreach (var (neighborX, neighborY, neighborZ, exitFace) in GetAllHorizontalNeighbors((x, y, z)))
+                        {
+                            // Calculate the new depth for the neighbor
+                            int newDepth = depth + 1;
+
+                            // Enqueue the neighbor only if it hasn't been visited and we are within the depth limit
+                            if (!visitedChunks.Contains((neighborX, neighborY, neighborZ)) && !loadedChunks.TryGetValue(CCPos((neighborX, neighborY, neighborZ)),out _))
+                            {
+                                generatedWithPreference++;
+                                bfsQueue.Enqueue((neighborX, neighborY, neighborZ, exitFace, newDepth, true));
+                            }
+                        }
+
                         continue;
                     }
+
                     // Add to render queue if the chunk is not completely empty
                     if (!currentChunk.CompletelyEmpty)
                         toRender.Add((x, y, z));
 
-                    var cameraDir = new Vector3(cx, cy, cz) - new Vector3(x, y, z);
                     // BFS to neighbors through visible faces
                     foreach (var (neighborX, neighborY, neighborZ, exitFace) in GetVisibleNeighbors(currentChunk, fromFace))
                     {
@@ -556,18 +580,34 @@ namespace FantasyVoxels
                     const int BACK_FACE = 4;
 
                     // Check if we can travel through each face of the chunk
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[TOP_FACE]) || (chunk.TestVisibility(TOP_FACE, fromFace)))
+                        neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y + 1, chunk.chunkPos.z, BOTTOM_FACE));
                     if ((fromFace == -1 && chunk.facesVisibleAtAll[LEFT_FACE]) || (chunk.TestVisibility(LEFT_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x - 1, chunk.chunkPos.y, chunk.chunkPos.z, RIGHT_FACE));
                     if ((fromFace == -1 && chunk.facesVisibleAtAll[RIGHT_FACE]) || (chunk.TestVisibility(RIGHT_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x + 1, chunk.chunkPos.y, chunk.chunkPos.z, LEFT_FACE));
-                    if ((fromFace == -1 && chunk.facesVisibleAtAll[BOTTOM_FACE]) || (chunk.TestVisibility(BOTTOM_FACE, fromFace)))
-                        neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y - 1, chunk.chunkPos.z, TOP_FACE));
-                    if ((fromFace == -1 && chunk.facesVisibleAtAll[TOP_FACE]) || (chunk.TestVisibility(TOP_FACE, fromFace)))
-                        neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y + 1, chunk.chunkPos.z, BOTTOM_FACE));
                     if ((fromFace == -1 && chunk.facesVisibleAtAll[FRONT_FACE]) || (chunk.TestVisibility(FRONT_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z - 1, BACK_FACE));
                     if ((fromFace == -1 && chunk.facesVisibleAtAll[BACK_FACE]) || (chunk.TestVisibility(BACK_FACE, fromFace)))
                         neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z + 1, FRONT_FACE));
+                    if ((fromFace == -1 && chunk.facesVisibleAtAll[BOTTOM_FACE]) || (chunk.TestVisibility(BOTTOM_FACE, fromFace)))
+                        neighbors.Add((chunk.chunkPos.x, chunk.chunkPos.y - 1, chunk.chunkPos.z, TOP_FACE));
+
+                    return neighbors;
+                }
+                List<(int x, int y, int z, int face)> GetAllHorizontalNeighbors((int x, int y, int z) cPos)
+                {
+                    List<(int x, int y, int z, int face)> neighbors = new List<(int, int, int, int)>();
+
+                    const int LEFT_FACE = 1;
+                    const int RIGHT_FACE = 0;
+                    const int FRONT_FACE = 5;
+                    const int BACK_FACE = 4;
+
+                    neighbors.Add((cPos.x - 1, cPos.y, cPos.z, RIGHT_FACE));
+                    neighbors.Add((cPos.x + 1, cPos.y, cPos.z, LEFT_FACE));
+                    neighbors.Add((cPos.x, cPos.y, cPos.z - 1, BACK_FACE));
+                    neighbors.Add((cPos.x, cPos.y, cPos.z + 1, FRONT_FACE));
 
                     return neighbors;
                 }
@@ -877,7 +917,7 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
+            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))) && loadedChunks[CCPos((cx, cy, cz))].generated)
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
