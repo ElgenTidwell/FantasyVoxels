@@ -17,10 +17,10 @@ namespace FantasyVoxels
         public abstract void Start();
         public virtual void Update()
         {
-            if (grounded) gravity = -4;
+            if (grounded) gravity = -1;
             else
             {
-                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*40f) : gravity - 80 * MGame.dt;
+                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*40f) : gravity - 18 * MGame.dt;
             }
 
             velocity.Y = grounded ? 0 : gravity;
@@ -52,7 +52,7 @@ namespace FantasyVoxels
             {
                 position += velocity * MGame.dt * (1 / 4f);
 
-                Vector3 push = CollisionDetector.ResolveCollision(bounds, position, ref velocity, grounded);
+                Vector3 push = CollisionDetector.ResolveCollision(bounds, position, ref velocity);
                 position = push;
             }
 
@@ -79,7 +79,7 @@ namespace FantasyVoxels
 
                         if ((v1 >= 0 && Voxel.voxelTypes[v1].isLiquid) || (v2 >= 0 && Voxel.voxelTypes[v2].isLiquid)) swimming = true;
 
-                        grounded = CollisionDetector.IsSolidTile(checkpos.x, (int)MathF.Floor(min.Y - 0.5f), checkpos.z) || grounded;
+                        grounded = CollisionDetector.IsSolidTile(checkpos.x, (int)MathF.Floor(min.Y - 0.01f), checkpos.z) || grounded;
                         ceiling = CollisionDetector.IsSolidTile(checkpos.x, (int)MathF.Floor(max.Y), checkpos.z) || ceiling;
                     }
                 }

@@ -24,10 +24,10 @@ float time;
 
 int ChunkSize = 512;
 
-texture voxel;
-sampler3D voxelSampler : register(s0) = sampler_state
+texture normal;
+sampler2D normalMapSampler : register(s0) = sampler_state
 {
-    Texture = <voxel>;
+    Texture = <normal>;
 };
 texture colors;
 sampler2D colorsSampler : register(s1) = sampler_state
@@ -57,10 +57,10 @@ struct VSOutput
     float4 Position : SV_POSITION;
     float3 WorldPos : NORMAL1;
     float4 Normal : NORMAL0;
+    float3 NormalPS : TEXCOORD3;
     float4 Color : COLOR0;
     float3 Depth : TEXCOORD1;
     float2 Coord : TEXCOORD2;
-    nointerpolation float3 LightCoord : TEXCOORD3;
     //nointerpolation float4 ShadowCoord : TEXCOORD4;
 };
 
@@ -68,8 +68,9 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
 {
     VSOutput output = (VSOutput) 0;
     output.WorldPos = mul(position, World).xyz + cameraPosition;
-    output.LightCoord = position.xyz-normal*0.1f;
     output.Normal = normal;
+    
+    output.NormalPS = normal.xyz;
     
     output.Coord = texcoord;
     
@@ -77,8 +78,8 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     
     float3 vox = floor(color.xyz * 255);
     
-    float effect = vox.b;
-    float voxShadeEffect = (vox.g / 255.f);
+    float effect = vox.r;
+    float voxShadeEffect = 1;
     float voxAlphaEffect = 1;
     
     float4 finPos = position;
@@ -88,18 +89,18 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     {
         float timeOffset = radians(((tile.x / ChunkSize)) * 180);
         float timeOffset2 = radians(((tile.z / ChunkSize)) * 180);
-        float sin1 = sin(time * 0.6 + timeOffset)*0.8f;
-        float sin2 = sin(time * 0.2 + timeOffset2)*0.8f;
+        float sin1 = (sin(time * 0.6 + timeOffset)+1)*0.5f * 0.6f;
+        float sin2 = (sin(time * 0.2 + timeOffset2)+1)*0.5f * 0.6f;
         
         //Water
-        voxShadeEffect = lerp((vox.g / 255.f), ((vox.g / 255.f) - 0.5f) * 2, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
+        voxShadeEffect = lerp(1, 0.5f, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
         voxAlphaEffect = abs(sin1) * 0.1f + 1;
         
         finPos.y += sin1 * sin2;
     }
     else if (effect == 2)
     {
-        voxShadeEffect = (vox.g / 255.f) - (abs(sin(time * 1 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180) + 1) / 2) * (abs(sin(time * 0.01 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180)) + 1) / 2) * 0.1f);
+        voxShadeEffect = 1 - (abs(sin(time * 1 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180) + 1) / 2) * (abs(sin(time * 0.01 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180)) + 1) / 2) * 0.1f);
     }
     
     
@@ -116,7 +117,7 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     output.ShadowCoord = float4(ShadowTexCoord, (lightingPosition.z / lightingPosition.w), dot(float3(0, 1, 0), normal.xyz));
     */
     
-    output.Color = float4(voxShadeEffect, 0, 0, voxAlphaEffect);
+    output.Color = float4(voxShadeEffect, color.g, color.b, voxAlphaEffect);
     
     output.Position = mul(mul(mul(finPos, World), View), Projection); // Apply standard transformations
     
@@ -188,7 +189,31 @@ PSOut MainPS(VSOutput input)
     
     float4 color = tex2D(colorsSampler, input.Coord);
     
-    float4 voxelInfo = tex3D(voxelSampler, floor(input.LightCoord + 0.001f) / float3(ChunkSize, ChunkSize, ChunkSize));
+    //float3 tangent;
+    //float3 binormal;
+    //float3 c1 = cross(input.NormalPS, float3(0.0, 0.0, 1.0));
+    //float3 c2 = cross(input.NormalPS, float3(0.0, 1.0, 0.0));
+
+    //if (length(c1) > length(c2))
+    //{
+    //    tangent = c1;
+    //}
+    //else
+    //{
+    //    tangent = c2;
+    //}
+
+    //tangent = normalize(tangent);
+
+    //binormal = cross(input.NormalPS, tangent);
+    //binormal = normalize(binormal);
+    
+    //// Calculate the normal, including the information in the bump map
+    //float3 bump = 0.5f * (tex2D(normalMapSampler, input.Coord) - float3(0.5, 0.5, 0.5));
+    //float3 normal = input.NormalPS + (bump.x * tangent + bump.y * binormal);
+    //normal = normalize(normal);
+    
+    float3 normal = input.NormalPS;
     
     /*
     float4 shadowCoords = input.ShadowCoord;
@@ -199,9 +224,9 @@ PSOut MainPS(VSOutput input)
     float3 desCol = color.xyz * dat.r * max(saturate(1 - shadowContributioncasc1*0.5f), 0.6f) * voxelInfo.r;
     
     */
-    float3 desCol = color.xyz * dat.r * voxelInfo.r;
+    float3 desCol = color.xyz * dat.r * dat.g * (abs(normal.x) * 0.6f + abs(normal.y) * 0.9f + abs(normal.z) * 0.8f);
 
-    output.Color0 = float4(lerp(desCol, skyColor, pow(saturate(fog), 2)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, skyColor, pow(saturate(fog), 5)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {

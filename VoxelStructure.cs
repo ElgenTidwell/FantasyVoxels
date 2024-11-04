@@ -77,50 +77,36 @@ namespace FantasyVoxels
             var rand = MGame.Instance.worldRandom;
             int treeHeight = 24 + rand.Next(-2, 64);
 
-            for (int x = -12; x < 12; x++)
-            {
-                for (int z = -12; z < 12; z++)
-                {
-                    for (int y = -12; y < 12; y++)
-                    {
-                        float d = new Vector3(x, y, z).Length();
+            //for (int x = -12; x < 12; x++)
+            //{
+            //    for (int z = -12; z < 12; z++)
+            //    {
+            //        for (int y = -12; y < 12; y++)
+            //        {
+            //            float d = new Vector3(x, y, z).Length();
 
-                        if (IcariaNoise.GradientNoise3D((x + worldX)*0.5f,(y + worldY + treeHeight) * 0.5f, (z + worldZ) * 0.5f)*10 / d < 0.1f) continue;
+            //            if (IcariaNoise.GradientNoise3D((x + worldX)*0.5f,(y + worldY + treeHeight) * 0.5f, (z + worldZ) * 0.5f)*10 / d < 0.1f) continue;
 
-                        SetVoxel(x + worldX, y+treeHeight+worldY, z + worldZ, LEAVES);
-                    }
-                }
-            }
-            for (int y = worldY-4; y < worldY + treeHeight; y++)
-            {
-                radius = (int)MathF.Max(6-MathF.Pow((y + worldY - 6) / (float)(treeHeight/2 + worldY),2)*2,3);
+            //            SetVoxel(x + worldX, y+treeHeight+worldY, z + worldZ, LEAVES);
+            //        }
+            //    }
+            //}
+            //for (int y = worldY-4; y < worldY + treeHeight; y++)
+            //{
+            //    radius = (int)MathF.Max(6-MathF.Pow((y + worldY - 6) / (float)(treeHeight/2 + worldY),2)*2,3);
 
-                for (int x = worldX- radius; x < worldX + radius; x++)
-                {
-                    for (int z = worldZ- radius; z < worldZ+ radius; z++)
-                    {
-                        int d = (int)(MathF.Abs(x - worldX+0.5f)+MathF.Abs(z - worldZ+0.5f));
+            //    for (int x = worldX- radius; x < worldX + radius; x++)
+            //    {
+            //        for (int z = worldZ- radius; z < worldZ+ radius; z++)
+            //        {
+            //            int d = (int)(MathF.Abs(x - worldX+0.5f)+MathF.Abs(z - worldZ+0.5f));
 
-                        if (d > radius) continue;
+            //            if (d > radius) continue;
 
-                        SetVoxel(x, y, z, BARK);
-                    }
-                }
-            }
-        }
-    }
-    public class ShortGrass : VoxelStructure
-    {
-        const int GRASS = 7;
-
-        public override void Place(int worldX, int worldY, int worldZ)
-        {
-            int height = 2 + MGame.Instance.worldRandom.Next(-1, 2);
-
-            for (int y = worldY; y < worldY+height; y++)
-            {
-                SetVoxel(worldX,y,worldZ,GRASS);
-            }
+            //            SetVoxel(x, y, z, BARK);
+            //        }
+            //    }
+            //}
         }
     }
 }

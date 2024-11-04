@@ -14,7 +14,7 @@ namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 18f, run = 32f, sneak = 8f, swim = 0.5f;
+        static float walk = 4f, run = 6.5f, sneak = 2f, swim = 0.5f;
 
         MouseState oldState;
 
@@ -25,8 +25,6 @@ namespace FantasyVoxels.Entities
         float autoDigTime = 0f;
 
         bool running,crouched;
-
-        SecondOrderDynamics cameraBounce;
 
 
         public VertexPosition[] voxelBoxVert =
@@ -78,8 +76,7 @@ namespace FantasyVoxels.Entities
 
         public override void Start()
         {
-            bounds = new BoundingBox(new Vector3(-1.5f,-8,-1.5f), new Vector3(1.5f, 1, 1.5f));
-            cameraBounce = new SecondOrderDynamics(3.8f, 0.7f, 0.6f, position.Y);
+            bounds = new BoundingBox(new Vector3(-0.2f,-1.7f,-0.2f), new Vector3(0.2f, 0.2f, 0.2f));
 
             vertBuffer = new VertexBuffer(MGame.Instance.GraphicsDevice, typeof(VertexPosition), voxelBoxVert.Length, BufferUsage.WriteOnly);
             vertBuffer.SetData(voxelBoxVert);
@@ -99,9 +96,9 @@ namespace FantasyVoxels.Entities
             crouched = Keyboard.GetState().IsKeyDown(Keys.LeftShift);
 
             float xsin, ysin;
-            float bobMulti = !grounded ?0: new Vector2(velocity.X,velocity.Z).Length()/walk;
-            xsin = MathF.Sin(MGame.totalTime * (running ? 8 : 6))* bobMulti;
-            ysin = MathF.Sin(MGame.totalTime * (running ? 8 : 6) * 2)* bobMulti;
+            float bobMulti = !grounded ?0: new Vector2(velocity.X,velocity.Z).Length()/run;
+            xsin = MathF.Sin(MGame.totalTime * (running ? 9 : 7))* bobMulti;
+            ysin = MathF.Sin(MGame.totalTime * (running ? 9 : 7) * 2)* bobMulti;
 
             var state = Mouse.GetState();
             rotation.Y += MathHelper.ToRadians(oldState.X - state.X) * 0.1f;
@@ -112,22 +109,21 @@ namespace FantasyVoxels.Entities
             Mouse.SetPosition(200, 200);
             oldState = Mouse.GetState();
 
-            float cameraY = cameraBounce.Update(MGame.dt, position.Y) + MathF.Abs(xsin) * 0.3f;
-
-            cameraY = MathF.Min(MathF.Max(cameraY, bounds.Min.Y+position.Y), bounds.Max.Y + position.Y);
+            float cameraY = position.Y + MathF.Abs(xsin) * 0.18f;
 
             var rotmat = Matrix.CreateRotationY(rotation.Y);
+            var rotmat_cam = Matrix.CreateRotationX(rotation.X)*Matrix.CreateRotationY(rotation.Y);
 
             forward = rotmat.Forward;
             right = rotmat.Right;
 
-            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > 8f ? 5 : 0),MGame.dt*30);
-            MGame.Instance.cameraPosition = new Vector3(position.X+0.5f, cameraY, position.Z + 0.5f) -right*xsin*0.03f;
+            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > walk ? 5 : 0),MGame.dt*30);
+            MGame.Instance.cameraPosition = new Vector3(position.X, cameraY, position.Z);
             MGame.Instance.view =
                 Matrix.CreateRotationY(-rotation.Y) *
-                Matrix.CreateRotationX(-rotation.X+MathF.Abs(xsin)*0.004f) *
-                Matrix.CreateRotationZ(-rotation.Z);
-            MGame.Instance.world = Matrix.CreateWorld(-MGame.Instance.cameraPosition, Vector3.Forward, Vector3.Up);
+                Matrix.CreateRotationX(-rotation.X + MathF.Abs(xsin) * 0.004f) *
+                Matrix.CreateRotationZ(-rotation.Z + (xsin) * 0.001f);
+            MGame.Instance.world = Matrix.CreateWorld(-(new Vector3(position.X, cameraY, position.Z) - right * xsin * 0.03f), Vector3.Forward, Vector3.Up);
 
             Vector3 wishDir = Vector3.Zero;
             if (Keyboard.GetState().IsKeyDown(Keys.W)) wishDir += forward * MGame.dt;
@@ -137,7 +133,7 @@ namespace FantasyVoxels.Entities
 
             if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming))
             {
-                gravity = swimming?14:28;
+                gravity = swimming?4:6.5f;
                 grounded = false;
             }
             if(crouched && swimming)
@@ -153,48 +149,21 @@ namespace FantasyVoxels.Entities
             MGame.Instance.cameraForward = forward;
             right = rotmat.Right;
 
-            voxelHit = Maths.Raycast(MGame.Instance.cameraPosition,forward,24,out prevHitTile, out hitTile);
-
-            prevHitTile = Vector3.Floor(prevHitTile / 4) * 4;
+            voxelHit = Maths.Raycast(position,forward,5,out prevHitTile, out hitTile);
 
             autoDigTime -= MGame.dt;
             if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
             {
                 autoDigTime = 0.25f;
-                if (Keyboard.GetState().IsKeyDown(Keys.LeftShift))
-                {
-                    MGame.Instance.SetVoxel(hitTile, 0);
-                }
-                else
-                {
-                    for (int y = 0; y < 4; y++)
-                    {
-                        for (int x = 0; x < 4; x++)
-                        {
-                            for (int z = 0; z < 4; z++)
-                            {
-                                MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + (Vector3.Floor(hitTile / 4) * 4), 0, true);
-                            }
-                        }
-                    }
-                }
+                MGame.Instance.SetVoxel(hitTile, 0);
             }
             if (Mouse.GetState().RightButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
             {
-                BoundingBox placeBox = new BoundingBox(prevHitTile - position+Vector3.One*0.1f, prevHitTile + Vector3.One*3.9f-position);
+                BoundingBox placeBox = new BoundingBox(prevHitTile - position+Vector3.One*0.1f, prevHitTile + Vector3.One*0.9f-position);
                 if (placeBox.Contains(bounds) == ContainmentType.Disjoint)
                 {
                     autoDigTime = 0.25f;
-                    for (int x = 0; x < 4; x++)
-                    {
-                        for (int z = 0; z < 4; z++)
-                        {
-                            for (int y = 0; y < 4; y++)
-                            {
-                                MGame.Instance.SetVoxel_Q(new Vector3(x, y, z) + prevHitTile, 10, true);
-                            }
-                        }
-                    }
+                    MGame.Instance.SetVoxel(prevHitTile, 10);
                 }
             }
             if (Mouse.GetState().RightButton == ButtonState.Released && Mouse.GetState().LeftButton == ButtonState.Released) autoDigTime = 0f;
@@ -237,7 +206,7 @@ namespace FantasyVoxels.Entities
         }
         public override void Render()
         {
-            if(voxelHit)
+            if (voxelHit)
             {
                 MGame.Instance.GraphicsDevice.SetVertexBuffer(vertBuffer);
 
@@ -247,36 +216,12 @@ namespace FantasyVoxels.Entities
                 effect.Projection = MGame.Instance.projection;
                 effect.View = MGame.Instance.view;
 
-                if(Keyboard.GetState().IsKeyDown(Keys.LeftShift))
+                effect.World = Matrix.CreateScale(1.01f) * MGame.Instance.world * Matrix.CreateTranslation(hitTile-Vector3.One*0.005f);
+
+                foreach (var pass in effect.CurrentTechnique.Passes)
                 {
-                    effect.World = Matrix.CreateScale(1) * MGame.Instance.world * Matrix.CreateTranslation(hitTile);
-
-                    foreach (var pass in effect.CurrentTechnique.Passes)
-                    {
-                        pass.Apply();
-                        MGame.Instance.GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, voxelBoxVert.Length / 2);
-                    }
-                }
-                else
-                {
-                    effect.DiffuseColor = Color.Black.ToVector3();
-
-                    effect.World = Matrix.CreateScale(4.01f) * MGame.Instance.world * Matrix.CreateTranslation(Vector3.Floor(hitTile / 4) * 4 - Vector3.One * 0.005f);
-
-                    foreach (var pass in effect.CurrentTechnique.Passes)
-                    {
-                        pass.Apply();
-                        MGame.Instance.GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, voxelBoxVert.Length / 2);
-                    }
-                    effect.DiffuseColor = Color.Black.ToVector3();
-                    effect.Alpha = 0.8f;
-                    effect.World = Matrix.CreateScale(3.2f) * MGame.Instance.world * Matrix.CreateTranslation(Vector3.Floor(prevHitTile / 4) * 4+Vector3.One*0.4f);
-
-                    foreach (var pass in effect.CurrentTechnique.Passes)
-                    {
-                        pass.Apply();
-                        MGame.Instance.GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, voxelBoxVert.Length / 2);
-                    }
+                    pass.Apply();
+                    MGame.Instance.GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, voxelBoxVert.Length / 2);
                 }
             }
         }

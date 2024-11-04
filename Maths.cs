@@ -56,9 +56,9 @@ namespace FantasyVoxels
         public static bool Raycast(Vector3 start, Vector3 direction, float distance, out Vector3 prevHitTile, out Vector3 hitTile)
         {
             // Current position in the grid (tilemap coordinates)
-            int x = (int)Math.Round(start.X);
-            int y = (int)Math.Round(start.Y);
-            int z = (int)Math.Round(start.Z);
+            int x = (int)Math.Floor(start.X);
+            int y = (int)Math.Floor(start.Y);
+            int z = (int)Math.Floor(start.Z);
 
             // Direction signs
             int stepX = direction.X > 0 ? 1 : -1;

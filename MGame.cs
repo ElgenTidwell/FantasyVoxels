@@ -36,7 +36,7 @@ namespace FantasyVoxels
         public Vector3 cameraForward;
 
         private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
-        public Texture2D colors,noise,uiTextures;
+        public Texture2D colors,normals,noise,uiTextures;
         private Effect raymarcher;
         private Effect chunk;
         private Effect chunkBuilder;
@@ -54,7 +54,7 @@ namespace FantasyVoxels
 
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 64;
+        public int RenderDistance = 12;
         public bool enableAO = true;
         float _fov = 90f;
         public float FOV {
@@ -265,11 +265,13 @@ namespace FantasyVoxels
             shadowMap = new RenderTarget2D(GraphicsDevice, 512, 512, false, SurfaceFormat.Single, DepthFormat.Depth24Stencil8);
 
             colors = Content.Load<Texture2D>("Textures/colors");
+            normals = Content.Load<Texture2D>("Textures/normals");
             noise = Content.Load<Texture2D>("Textures/noise");
             uiTextures = Content.Load<Texture2D>("Textures/UITextures");
 
             chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             chunk.Parameters["colors"]?.SetValue(colors);
+            chunk.Parameters["normal"]?.SetValue(normals);
 
             postProcessing.Parameters["NoiseTexture"]?.SetValue(noise);
 
@@ -314,10 +316,6 @@ namespace FantasyVoxels
 
             chunkThreadCancel.Dispose();
 
-            foreach (var c in loadedChunks)
-            {
-                c.Value.voxelDataTexture?.Dispose();
-            }
             loadedChunks.Clear();
 
             player.Destroyed();
@@ -371,24 +369,25 @@ namespace FantasyVoxels
                             deleteChunks.Add(c.Key);
                             continue;
                         }
+                        if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint) continue;
+
                         if (currentChunk.queueModified)
                         {
                             currentChunk.queueModified = false;
                             currentChunk.CheckQueue(true);
                         }
 
-                        if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint) continue;
-
-                        //Mesh related things
                         if (currentChunk.lightOutOfDate)
                         {
-                            currentChunk.lightOutOfDate = false;
-                            currentChunk.ReLight(cDist > 4);
+                            if (currentChunk.CompletelyEmpty)
+                                currentChunk.ReLight(false);
+                            else
+                                currentChunk.Remesh();
                         }
-                        if (!currentChunk.CompletelyEmpty && !currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains(currentChunk.chunkPos) && toMesh.Count < 8)
+
+                        if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains(currentChunk.chunkPos) && toMesh.Count < 8)
                         {
-                            toMesh.Enqueue(currentChunk.chunkPos);
-                            ProcessMesh();
+                            currentChunk.Remesh();
                         }
                     }
 
@@ -682,9 +681,11 @@ namespace FantasyVoxels
         {
             if (transparent) goto transparent;
 
+            GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
             foreach (var c in toRender.ToArray().AsSpan())
             {
                 long pos = CCPos(c);
+                if (!loadedChunks.TryGetValue(pos, out _)) continue;
 
                 BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[pos].MaxY + 1, Chunk.Size)));
                 if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
@@ -700,7 +701,6 @@ namespace FantasyVoxels
                 GraphicsDevice.SetVertexBuffer(loadedChunks[pos].chunkVertexBuffers[LOD]);
 
                 chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
-                chunk.Parameters["voxel"]?.SetValue(loadedChunks[pos].voxelDataTexture);
 
                 foreach (var pass in chunk.CurrentTechnique.Passes)
                 {
@@ -713,10 +713,12 @@ namespace FantasyVoxels
 
             transparent:
 
+            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             //Transparent
             foreach (var c in toRender.ToArray().AsSpan())
             {
                 long pos = CCPos(c);
+                if (!loadedChunks.TryGetValue(pos, out _)) continue;
 
                 BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[pos].MaxY + 1, Chunk.Size)));
                 if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
@@ -729,7 +731,6 @@ namespace FantasyVoxels
                 GraphicsDevice.SetVertexBuffer(loadedChunks[pos].chunkVertexBuffers[LOD]);
 
                 chunk.Parameters["World"].SetValue(world * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
-                chunk.Parameters["voxel"]?.SetValue(loadedChunks[pos].voxelDataTexture);
 
                 foreach (var pass in chunk.CurrentTechnique.Passes)
                 {
@@ -927,6 +928,24 @@ namespace FantasyVoxels
             }
             return -1;
         }
+        public bool GrabVoxelData(Vector3 p, out VoxelData data)
+        {
+            int cx = (int)MathF.Floor(p.X / Chunk.Size);
+            int cy = (int)MathF.Floor(p.Y / Chunk.Size);
+            int cz = (int)MathF.Floor(p.Z / Chunk.Size);
+
+            data = new VoxelData {skyLight = 255 };
+
+            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))) && loadedChunks[CCPos((cx, cy, cz))].generated)
+            {
+                int x = (int)(p.X - cx * Chunk.Size);
+                int y = (int)(p.Y - cy * Chunk.Size);
+                int z = (int)(p.Z - cz * Chunk.Size);
+                data = loadedChunks[CCPos((cx, cy, cz))].voxeldata[x + Chunk.Size * (y + Chunk.Size * z)];
+                return true;
+            }
+            return true;
+        }
         public void SetVoxel(Vector3 p, int newVoxel)
         {
             int cx = (int)MathF.Floor(p.X / Chunk.Size);
@@ -974,7 +993,7 @@ namespace FantasyVoxels
 
             return v != 0 && !Voxel.voxelTypes[v].ignoreCollision;
         }
-        public static Vector3 ResolveCollision(BoundingBox aabb, Vector3 position, ref Vector3 velocity, bool step)
+        public static Vector3 ResolveCollision(BoundingBox aabb, Vector3 position, ref Vector3 velocity)
         {
             // Get the bounds of the AABB
             Vector3 min = aabb.Min + position;
@@ -1005,16 +1024,6 @@ namespace FantasyVoxels
                         if (IsSolidTile(x, y, z))
                         {
                             if (x + 1 < min.X || y + 1 < min.Y || z + 1 < min.Z || x > max.X || y > max.Y || z > max.Z) continue;
-
-                            if (step && y + 1 > min.Y && (y + 1 - min.Y) < 3 && !IsSolidTile(x, y + 1, z) && !IsSolidTile(x, (int)max.Y, z))
-                            {
-                                stepy = MathF.Abs(y + 1 - min.Y)+0.01f;
-                                resolvedPosition.Y += stepy;
-                                position = resolvedPosition;
-                                min = aabb.Min + position;
-                                max = aabb.Max + position;
-                                continue;
-                            }
 
                             bool flipx = x > (min.X + max.X) / 2f;
                             bool flipy = y > (min.Y + max.Y) / 2f;
