@@ -21,21 +21,24 @@ namespace FantasyVoxels
         }
         public static void Enqueue((int x, int y, int z) chunkPos,(int x, int y, int z, int voxel) vox)
         {
-            if (queudChunks.ContainsKey(chunkPos))
+            lock(lockQ)
             {
-                queudChunks[chunkPos].Enqueue(vox);
-                if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos),out Chunk chunk))
+                if (queudChunks.ContainsKey(chunkPos))
                 {
-                    chunk.queueModified = true;
+                    queudChunks[chunkPos].Enqueue(vox);
+                    if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos), out Chunk chunk))
+                    {
+                        chunk.queueModified = true;
+                    }
                 }
-            }
-            else if (!queudChunks.ContainsKey(chunkPos))
-            {
-                queudChunks.TryAdd(chunkPos, new ConcurrentQueue<(int x, int y, int z, int vox)>());
-                queudChunks[chunkPos].Enqueue(vox);
-                if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos), out Chunk chunk))
+                else if (!queudChunks.ContainsKey(chunkPos))
                 {
-                    chunk.queueModified = true;
+                    queudChunks.TryAdd(chunkPos, new ConcurrentQueue<(int x, int y, int z, int vox)>());
+                    queudChunks[chunkPos].Enqueue(vox);
+                    if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos), out Chunk chunk))
+                    {
+                        chunk.queueModified = true;
+                    }
                 }
             }
         }
@@ -75,38 +78,30 @@ namespace FantasyVoxels
         {
             int radius = 2;
             var rand = MGame.Instance.worldRandom;
-            int treeHeight = 24 + rand.Next(-2, 64);
+            int treeHeight = 4 + (int)((IcariaNoise.GradientNoise(worldX * 0.8f, worldZ * 0.8f)+1) * 4)*3;
 
-            //for (int x = -12; x < 12; x++)
-            //{
-            //    for (int z = -12; z < 12; z++)
-            //    {
-            //        for (int y = -12; y < 12; y++)
-            //        {
-            //            float d = new Vector3(x, y, z).Length();
+            for (int y = worldY + 2; y <= worldY + treeHeight+1; y++)
+            {
+                if (y % 3 == 0) continue;
 
-            //            if (IcariaNoise.GradientNoise3D((x + worldX)*0.5f,(y + worldY + treeHeight) * 0.5f, (z + worldZ) * 0.5f)*10 / d < 0.1f) continue;
+                int rad = (int)(((1 - (((float)y - worldY - 2) / (treeHeight-2)) + 2) * 1.5f) - int.Min((y) % 3, 2));
 
-            //            SetVoxel(x + worldX, y+treeHeight+worldY, z + worldZ, LEAVES);
-            //        }
-            //    }
-            //}
-            //for (int y = worldY-4; y < worldY + treeHeight; y++)
-            //{
-            //    radius = (int)MathF.Max(6-MathF.Pow((y + worldY - 6) / (float)(treeHeight/2 + worldY),2)*2,3);
+                for (int x = -rad; x <= rad; x++)
+                {
+                    for (int z = -rad; z <= rad; z++)
+                    {
+                        if (float.Abs(x) + float.Abs(z) > rad) continue;
 
-            //    for (int x = worldX- radius; x < worldX + radius; x++)
-            //    {
-            //        for (int z = worldZ- radius; z < worldZ+ radius; z++)
-            //        {
-            //            int d = (int)(MathF.Abs(x - worldX+0.5f)+MathF.Abs(z - worldZ+0.5f));
+                        SetVoxel(x + worldX, y, z + worldZ, LEAVES);
+                    }
+                }
+            }
+            for (int y = worldY - 4; y <= worldY + treeHeight; y++)
+            {
+                radius = (int)MathF.Max(6 - MathF.Pow((y + worldY - 6) / (float)(treeHeight / 2 + worldY), 2) * 2, 3);
 
-            //            if (d > radius) continue;
-
-            //            SetVoxel(x, y, z, BARK);
-            //        }
-            //    }
-            //}
+                SetVoxel(worldX, y, worldZ, BARK);
+            }
         }
     }
 }

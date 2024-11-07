@@ -13,6 +13,9 @@ float4x4 Projection;
 float4x4 InvProjection;
 float4x4 LightViewProj;
 
+float3 sunColor;
+float3 sunDir;
+
 float FOV;
 float renderDistance;
 float minSafeDistance;
@@ -39,6 +42,11 @@ sampler2D shadowmapSampler : register(s2) = sampler_state
 {
     Texture = <shadowmap>;
 };
+texture aomap;
+sampler2D aomapSampler : register(s2) = sampler_state
+{
+    Texture = <aomap>;
+};
 
 
 
@@ -61,7 +69,8 @@ struct VSOutput
     float4 Color : COLOR0;
     float3 Depth : TEXCOORD1;
     float2 Coord : TEXCOORD2;
-    //nointerpolation float4 ShadowCoord : TEXCOORD4;
+    float2 AOCoord : TEXCOORD5;
+    float4 ShadowCoord : TEXCOORD4;
 };
 
 VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0, float4 normal : NORMAL0, float2 texcoord : TEXCOORD0)
@@ -69,6 +78,30 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     VSOutput output = (VSOutput) 0;
     output.WorldPos = mul(position, World).xyz + cameraPosition;
     output.Normal = normal;
+    
+    //float2 coord = float2(0, 0);
+    
+    //if (normal.x != 0)
+    //{
+    //    coord = position.zy;
+    //}
+    //else if (normal.y != 0)
+    //{
+    //    coord = position.xz;
+    //}
+    //else
+    //{
+    //    coord = position.xy;
+    //}
+    
+    //coord.x %= 1;
+    //coord.y %= 1;
+    
+    //coord.x += color.a*9;
+    
+    //coord.x /= 9;
+    
+    //output.AOCoord = coord;
     
     output.NormalPS = normal.xyz;
     
@@ -89,22 +122,28 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     {
         float timeOffset = radians(((tile.x / ChunkSize)) * 180);
         float timeOffset2 = radians(((tile.z / ChunkSize)) * 180);
-        float sin1 = (sin(time * 0.6 + timeOffset)+1)*0.5f * 0.6f;
-        float sin2 = (sin(time * 0.2 + timeOffset2)+1)*0.5f * 0.6f;
+        float sin1 = (sin(time * 0.6 + timeOffset)+1)*0.5f;
+        float sin2 = (sin(time * 0.2 + timeOffset2)+1)*0.5f;
         
         //Water
-        voxShadeEffect = lerp(1, 0.5f, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
+        voxShadeEffect = lerp(1.8f, 0.1f, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
         voxAlphaEffect = abs(sin1) * 0.1f + 1;
         
-        finPos.y += sin1 * sin2;
+        finPos.y += (sin1 * sin2)*0.5f;
     }
     else if (effect == 2)
     {
+        float sin1 = (sin(time * 0.4 + (tile.x + tile.z - tile.y)*0.5f) + 1) * 0.5f;
+        float sin2 = (sin(time * 0.4 + (tile.x + tile.y + tile.z)*0.5f) + 1) * 0.5f;
+        
         voxShadeEffect = 1 - (abs(sin(time * 1 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180) + 1) / 2) * (abs(sin(time * 0.01 + radians(((tile.z / ChunkSize) + (tile.x / ChunkSize)) * 2 * 180)) + 1) / 2) * 0.1f);
+    
+        finPos.x += sin1 * 0.1f;
+        finPos.z += sin2 * 0.1f;
     }
     
+   
     
-    /*
     float4 lightingPosition = mul(float4(output.WorldPos+normal.xyz*0.8f,1), LightViewProj);
     
     // Find the position in the shadow map for this pixel
@@ -115,7 +154,6 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     float ourdepth = (lightingPosition.z / lightingPosition.w);
     
     output.ShadowCoord = float4(ShadowTexCoord, (lightingPosition.z / lightingPosition.w), dot(float3(0, 1, 0), normal.xyz));
-    */
     
     output.Color = float4(voxShadeEffect, color.g, color.b, voxAlphaEffect);
     
@@ -131,24 +169,17 @@ struct PSOut
     float4 Color1 : SV_Target1;
 };
 
-float getShadowMultiplier(float d1, float d2)
-{
-    float distanceM = saturate(distance(d1, d2)*80);
-    float distanceF = saturate(1 - (distance(d1, d2) * 150))*0.5f;
-    return distanceM+ distanceF;
-}
-
 // Calculates the shadow term using PCF with edge tap smoothing
 float CalcShadowTermSoftPCF(float light_space_depth, float ndotl, float2 shadow_coord, int iSqrtSamples)
 {
     float fShadowTerm = 0.0f;
     
-    float variableBias = clamp(0.02f * tan(acos(ndotl)), 0.0003f, 0.0005f);
+    float variableBias = clamp(0.0001f * tan(acos(ndotl)), 0.0f, 0.0005f);
     
     //safe to assume it's a square
     float shadowMapSize = 2048;
     	
-    float fRadius = (iSqrtSamples - 1)*2; //mad(iSqrtSamples, 0.5, -0.5);//(iSqrtSamples - 1.0f) / 2;
+    float fRadius = (iSqrtSamples); //mad(iSqrtSamples, 0.5, -0.5);//(iSqrtSamples - 1.0f) / 2;
 
     for (float y = -fRadius; y <= fRadius; y++)
     {
@@ -161,12 +192,21 @@ float CalcShadowTermSoftPCF(float light_space_depth, float ndotl, float2 shadow_
             //vOffset /= variableBias*200;
             float2 vSamplePoint = shadow_coord + vOffset;
             float fDepth = tex2D(shadowmapSampler, vSamplePoint).x;
-            float fSample = getShadowMultiplier(light_space_depth, fDepth + variableBias) * (light_space_depth > fDepth + variableBias);
+            float fSample = (light_space_depth > fDepth + variableBias);
             
             // Edge tap smoothing
             float xWeight = 1;
             float yWeight = 1;
             
+            if (x == -fRadius)
+                xWeight = 1 - frac(shadow_coord.x * shadowMapSize);
+            else if (x == fRadius)
+                xWeight = frac(shadow_coord.x * shadowMapSize);
+                
+            if (y == -fRadius)
+                yWeight = 1 - frac(shadow_coord.y * shadowMapSize);
+            else if (y == fRadius)
+                yWeight = frac(shadow_coord.y * shadowMapSize);
                 
             fShadowTerm += fSample * xWeight * yWeight;
         }
@@ -183,11 +223,12 @@ PSOut MainPS(VSOutput input)
     
     float2 depth = input.Depth.xy;
     
-    float fog = abs(depth.x) / (renderDistance * ChunkSize * 0.5f);
+    float fog = abs(depth.x) / (renderDistance * ChunkSize * 0.9f);
     
     float4 dat = input.Color;
     
     float4 color = tex2D(colorsSampler, input.Coord);
+    clip(color.a - 0.02f);
     
     //float3 tangent;
     //float3 binormal;
@@ -213,20 +254,23 @@ PSOut MainPS(VSOutput input)
     //float3 normal = input.NormalPS + (bump.x * tangent + bump.y * binormal);
     //normal = normalize(normal);
     
+    //float3 realBump = dot(normal, sunDir) - dot(input.NormalPS, sunDir);
+    
     float3 normal = input.NormalPS;
+    float realBump = 0;
     
-    /*
-    float4 shadowCoords = input.ShadowCoord;
-    float shadowContributioncasc1 = CalcShadowTermSoftPCF(shadowCoords.z, shadowCoords.w, shadowCoords.xy, 3);
+    //float4 shadowCoords = input.ShadowCoord;
+    //float shadowContributioncasc1 = CalcShadowTermSoftPCF(shadowCoords.z, shadowCoords.w, shadowCoords.xy, 2);
     
-    //OUTPUT COLOR
+    //float shadowdistance = pow(saturate(1 - (abs(depth.x) / (32 * ChunkSize))), 8);
     
-    float3 desCol = color.xyz * dat.r * max(saturate(1 - shadowContributioncasc1*0.5f), 0.6f) * voxelInfo.r;
+    //shadowContributioncasc1 *= shadowdistance;
     
-    */
-    float3 desCol = color.xyz * dat.r * dat.g * (abs(normal.x) * 0.6f + abs(normal.y) * 0.9f + abs(normal.z) * 0.8f);
+    float ao = tex2D(aomapSampler, input.AOCoord);
+    
+    float3 desCol = color.xyz * (dat.r * (realBump + 1) * sunColor) * dat.g * ao;
 
-    output.Color0 = float4(lerp(desCol, skyColor, pow(saturate(fog), 5)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, skyColor, pow(saturate(fog), 1.25f)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {

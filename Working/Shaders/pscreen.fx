@@ -87,7 +87,7 @@ float CalcAO(float2 tex,float4 reference)
     float Highlight = 0;
     for (int i = -8; i < 8; i++)
     {
-        float2 coordOffset = (((tex2D(NoiseSampler, tex * i + float2(noiseOffset, noiseOffset)).rg * 2 - float2(1, 1))) * i*4) / screenSize;
+        float2 coordOffset = (((tex2D(NoiseSampler, tex * i + float2(noiseOffset, noiseOffset)).rg - float2(1, 1))) * i*1) / screenSize;
         
         float3 testSample = tex2Dlod(NormalSampler, float4(tex+coordOffset*2, 0, 0));
         
@@ -98,7 +98,7 @@ float CalcAO(float2 tex,float4 reference)
     }
     AO /= 16;
     Highlight /= 16;
-    return 1 - (AO * 0.3) + Highlight * 0.1;
+    return 1 - (AO * 0.6) + Highlight * 0.6;
 }
 
 float4 PShader(PixelInput p) : COLOR0

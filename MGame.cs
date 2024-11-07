@@ -36,7 +36,7 @@ namespace FantasyVoxels
         public Vector3 cameraForward;
 
         private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
-        public Texture2D colors,normals,noise,uiTextures;
+        public Texture2D colors,normals,noise,uiTextures,sunTexture,moonTexture,aoMap;
         private Effect raymarcher;
         private Effect chunk;
         private Effect chunkBuilder;
@@ -54,8 +54,8 @@ namespace FantasyVoxels
 
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 12;
-        public bool enableAO = true;
+        public int RenderDistance = 16;
+        public bool enableAO = false;
         float _fov = 90f;
         public float FOV {
             get
@@ -127,17 +127,18 @@ namespace FantasyVoxels
             new VertexPosition(new Vector3(0, 1, 1)),
         ];
 
-        public static VertexPosition[] skyboxVerts =
+        public static VertexPosition[] skyboxVerts = GenerateSphereVerticesDirect(1,50,50);
+
+        public static VertexPositionTexture[] flatSprite = 
         [
-            new VertexPosition(new Vector3(0, 0, 0)),
-            new VertexPosition(new Vector3(1, 0, 0)),
-            new VertexPosition(new Vector3(1, 1, 0)),
-            new VertexPosition(new Vector3(0, 1, 0)),
-            new VertexPosition(new Vector3(0, 1, 1)),
-            new VertexPosition(new Vector3(1, 1, 1)),
-            new VertexPosition(new Vector3(1, 0, 1)),
-            new VertexPosition(new Vector3(0, 0, 1)),
+            new VertexPositionTexture(new Vector3(0, 0, 0),new Vector2(0, 0)),
+            new VertexPositionTexture(new Vector3(0, 1, 0),new Vector2(0, 1)),
+            new VertexPositionTexture(new Vector3(1, 0, 0),new Vector2(1, 0)),
+            new VertexPositionTexture(new Vector3(1, 0, 0),new Vector2(1, 0)),
+            new VertexPositionTexture(new Vector3(0, 1, 0),new Vector2(0, 1)),
+            new VertexPositionTexture(new Vector3(1, 1, 0),new Vector2(1, 1)),
         ];
+
         public static short[] triangles =
         [
             1,
@@ -180,8 +181,49 @@ namespace FantasyVoxels
 
         BasicEffect effect;
 
-        BlendState shadowBlend;
+        public static BlendState shadowBlend,crosshair;
 
+        public static VertexPosition[] GenerateSphereVerticesDirect(float radius = 1.0f, int latitudeSegments = 10, int longitudeSegments = 10)
+        {
+            List<VertexPosition> sphereVerts = new List<VertexPosition>();
+
+            for (int lat = 0; lat < latitudeSegments; lat++)
+            {
+                // Calculate angles for current and next latitudes
+                float phi1 = MathF.PI * lat / latitudeSegments;
+                float phi2 = MathF.PI * (lat + 1) / latitudeSegments;
+
+                float y1 = radius * MathF.Cos(phi1);
+                float latRadius1 = radius * MathF.Sin(phi1);
+
+                float y2 = radius * MathF.Cos(phi2);
+                float latRadius2 = radius * MathF.Sin(phi2);
+
+                for (int lon = 0; lon < longitudeSegments; lon++)
+                {
+                    // Calculate angles for current and next longitude
+                    float theta1 = 2 * MathF.PI * lon / longitudeSegments;
+                    float theta2 = 2 * MathF.PI * (lon + 1) / longitudeSegments;
+
+                    // Calculate four points defining a quad
+                    Vector3 v1 = new Vector3(latRadius1 * MathF.Cos(theta1), y1, latRadius1 * MathF.Sin(theta1));
+                    Vector3 v2 = new Vector3(latRadius1 * MathF.Cos(theta2), y1, latRadius1 * MathF.Sin(theta2));
+                    Vector3 v3 = new Vector3(latRadius2 * MathF.Cos(theta1), y2, latRadius2 * MathF.Sin(theta1));
+                    Vector3 v4 = new Vector3(latRadius2 * MathF.Cos(theta2), y2, latRadius2 * MathF.Sin(theta2));
+
+                    // Create two triangles for each quad
+                    sphereVerts.Add(new VertexPosition(v1));
+                    sphereVerts.Add(new VertexPosition(v3));
+                    sphereVerts.Add(new VertexPosition(v2));
+
+                    sphereVerts.Add(new VertexPosition(v2));
+                    sphereVerts.Add(new VertexPosition(v3));
+                    sphereVerts.Add(new VertexPosition(v4));
+                }
+            }
+
+            return sphereVerts.ToArray();
+        }
         public MGame()
         {
             _graphics = new GraphicsDeviceManager(this);
@@ -213,7 +255,7 @@ namespace FantasyVoxels
             projection = Matrix.CreateOrthographic(MathHelper.ToRadians(FOV),GraphicsDevice.Viewport.AspectRatio,0.01f,4000f);
 
             sunProjection = Matrix.CreateOrthographicOffCenter(Chunk.Size* -8, Chunk.Size* 8, Chunk.Size * -8, Chunk.Size * 8, -Chunk.Size * 8, Chunk.Size * 8);
-            sunView = Matrix.CreateRotationX(MathHelper.ToRadians(90));
+            sunView = Matrix.CreateRotationX(MathHelper.ToRadians(45));
 
             Chunk.chunkBuffer = new VertexBuffer(GraphicsDevice,typeof(VertexPosition),Chunk.chunkVerts.Length,BufferUsage.WriteOnly);
             Chunk.chunkBuffer.SetData(Chunk.chunkVerts);
@@ -261,17 +303,21 @@ namespace FantasyVoxels
             });
             screenTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.Color, DepthFormat.Depth24Stencil8);
             normalTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable,DepthFormat.Depth24Stencil8);
-            SSAOTarget = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable,DepthFormat.None);
-            shadowMap = new RenderTarget2D(GraphicsDevice, 512, 512, false, SurfaceFormat.Single, DepthFormat.Depth24Stencil8);
+            SSAOTarget = new RenderTarget2D(GraphicsDevice,Width/2,Height/2,false,SurfaceFormat.HdrBlendable,DepthFormat.None);
+            shadowMap = new RenderTarget2D(GraphicsDevice, 2048, 2048, false, SurfaceFormat.Single, DepthFormat.Depth24);
 
             colors = Content.Load<Texture2D>("Textures/colors");
             normals = Content.Load<Texture2D>("Textures/normals");
+            aoMap = Content.Load<Texture2D>("Textures/aomap");
             noise = Content.Load<Texture2D>("Textures/noise");
             uiTextures = Content.Load<Texture2D>("Textures/UITextures");
+            sunTexture = Content.Load<Texture2D>("Textures/sun");
+            moonTexture = Content.Load<Texture2D>("Textures/moon");
 
             chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             chunk.Parameters["colors"]?.SetValue(colors);
             chunk.Parameters["normal"]?.SetValue(normals);
+            chunk.Parameters["aomap"]?.SetValue(aoMap);
 
             postProcessing.Parameters["NoiseTexture"]?.SetValue(noise);
 
@@ -283,6 +329,14 @@ namespace FantasyVoxels
                 ReferenceStencil = 1,
                 DepthBufferEnable = false,
                 DepthBufferWriteEnable = true,
+            };
+            crosshair = new BlendState
+            {
+                ColorBlendFunction = BlendFunction.Add,
+                ColorSourceBlend = Blend.InverseDestinationColor,
+                ColorDestinationBlend = Blend.InverseSourceAlpha,
+                AlphaSourceBlend = Blend.One,
+                AlphaDestinationBlend = Blend.InverseSourceAlpha,
             };
             generationPool = new TaskPool(4);
 
@@ -337,10 +391,6 @@ namespace FantasyVoxels
         {
             if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) return;
 
-            BoundingBox chunkbounds = new BoundingBox(new Vector3(t.x, t.y, t.z) * Chunk.Size, (new Vector3(t.x + 1, t.y + 1, t.z + 1) * Chunk.Size));
-            if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
-                return;
-
             Chunk c = new Chunk();
 
             c.chunkPos = t;
@@ -375,6 +425,12 @@ namespace FantasyVoxels
                         {
                             currentChunk.queueModified = false;
                             currentChunk.CheckQueue(true);
+                        }
+
+                        if (currentChunk.visOutOfDate)
+                        {
+                            currentChunk.visOutOfDate = false;
+                            currentChunk.GenerateVisibility();
                         }
 
                         if (currentChunk.lightOutOfDate)
@@ -413,6 +469,8 @@ namespace FantasyVoxels
                 QuitWorld();
                 Exit();
             }
+            WorldTimeManager.Tick();
+
             player.Update();
 
             dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -600,11 +658,15 @@ namespace FantasyVoxels
 
                     const int LEFT_FACE = 1;
                     const int RIGHT_FACE = 0;
+                    const int TOP_FACE = 2;
+                    const int BOTTOM_FACE = 3;
                     const int FRONT_FACE = 5;
                     const int BACK_FACE = 4;
 
                     neighbors.Add((cPos.x - 1, cPos.y, cPos.z, RIGHT_FACE));
                     neighbors.Add((cPos.x + 1, cPos.y, cPos.z, LEFT_FACE));
+                    neighbors.Add((cPos.x, cPos.y + 1, cPos.z, BOTTOM_FACE));
+                    neighbors.Add((cPos.x, cPos.y - 1, cPos.z, TOP_FACE));
                     neighbors.Add((cPos.x, cPos.y, cPos.z - 1, BACK_FACE));
                     neighbors.Add((cPos.x, cPos.y, cPos.z + 1, FRONT_FACE));
 
@@ -671,7 +733,8 @@ namespace FantasyVoxels
 
             while(instantRemesh.Count > 0)
             {
-                loadedChunks[instantRemesh.Dequeue()].CheckQueue(false);
+                var key = instantRemesh.Dequeue();
+                loadedChunks[key].CheckQueue(true);
             }
 
             base.Update(gameTime);
@@ -744,21 +807,39 @@ namespace FantasyVoxels
         {
             totalTime = (float)gameTime.TotalGameTime.TotalSeconds;
 
+            sunView = Matrix.CreateRotationX(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15)));
+
+            float dayPerc = (MathF.Sin(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15) % 360)) + 1) / 2f;
+
             GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             GraphicsDevice.BlendState = BlendState.NonPremultiplied;
             GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
             GraphicsDevice.SamplerStates[0] = SamplerState.PointWrap;
             GraphicsDevice.SamplerStates[1] = SamplerState.PointWrap;
+            GraphicsDevice.SamplerStates[2] = SamplerState.PointWrap;
 
-            sky.Parameters["skyColor"].SetValue(Color.LightSkyBlue.ToVector3());
+            sky.Parameters["cameraPosition"]?.SetValue(cameraPosition);
+            sky.Parameters["cameraForward"]?.SetValue(cameraForward);
+            sky.Parameters["sunDirection"]?.SetValue(sunView.Forward);
 
-            chunk.Parameters["skyColor"].SetValue(Color.LightSkyBlue.ToVector3());
+            var skyColor = WorldTimeManager.GetSkyColor();
+            var skyBandColor = WorldTimeManager.GetSkyBandColor();
+
+            sky.Parameters["skyColor"].SetValue(skyColor);
+            sky.Parameters["skyBandColor"].SetValue(skyBandColor);
+
+            chunk.Parameters["skyColor"].SetValue(Vector3.Lerp(skyBandColor, skyColor, float.Clamp(float.Pow(Vector3.Dot(cameraForward, Vector3.Up),3),0,0.8f)));
+
+
             chunk.Parameters["renderDistance"]?.SetValue(RenderDistance);
             chunk.Parameters["cameraPosition"]?.SetValue(cameraPosition);
             chunk.Parameters["time"]?.SetValue((float)gameTime.TotalGameTime.TotalSeconds);
+            chunk.Parameters["sunDir"]?.SetValue(sunView.Forward);
+
+            chunk.Parameters["sunColor"]?.SetValue(Color.White.ToVector3() * MathF.Max(dayPerc, 0.04f));
             //Shadows
-            /* 
+            /*
             chunk.Parameters["View"].SetValue(sunView);
             chunk.Parameters["Projection"].SetValue(sunProjection);
             
@@ -767,7 +848,7 @@ namespace FantasyVoxels
             GraphicsDevice.SetRenderTarget(shadowMap);
             GraphicsDevice.Clear(Color.White);
 
-            Matrix lightWorld = Matrix.CreateWorld(Vector3.Floor(-cameraPosition),Vector3.Forward,Vector3.Up);
+            Matrix lightWorld = Matrix.CreateWorld(Vector3.Floor(-cameraPosition/Chunk.Size)*Chunk.Size,Vector3.Forward,Vector3.Up);
 
             
             for (int _x = -8; _x < 8; _x++)
@@ -776,13 +857,13 @@ namespace FantasyVoxels
                 {
                     for (int _z = -8; _z < 8; _z++)
                     {
-                        int x = _x + chunkPos.x;
-                        int y = _y + chunkPos.y;
-                        int z = _z + chunkPos.z;
+                        int x = _x + playerChunkPos.x;
+                        int y = _y + playerChunkPos.y;
+                        int z = _z + playerChunkPos.z;
 
-                        (int x, int y, int z) c = (x, y, z);
+                        long c = CCPos((x, y, z));
 
-                        if (!loadedChunks.ContainsKey(c))
+                        if (!loadedChunks.ContainsKey(c) || !loadedChunks[c].generated)
                             continue;
 
                         int LOD = loadedChunks[c].GetLOD();
@@ -794,7 +875,7 @@ namespace FantasyVoxels
 
                         GraphicsDevice.SetVertexBuffer(loadedChunks[c].chunkVertexBuffers[LOD]);
 
-                        chunk.Parameters["World"].SetValue(lightWorld * Matrix.CreateTranslation(new Vector3(c.x, c.y, c.z) * Chunk.Size));
+                        chunk.Parameters["World"].SetValue(lightWorld * Matrix.CreateTranslation(new Vector3(x, y, z) * Chunk.Size));
 
                         foreach (var pass in chunk.CurrentTechnique.Passes)
                         {
@@ -803,29 +884,56 @@ namespace FantasyVoxels
                         }
                     }
                 }
-            }*/
+            }
 
             chunk.CurrentTechnique = chunk.Techniques["Terrain"];
-            
+            */
             GraphicsDevice.SetRenderTargets(screenTexture, normalTexture);
             GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, Color.LightSkyBlue, 1000f, 1);
 
 
-            sky.Parameters["World"].SetValue(Matrix.CreateWorld(Vector3.One*-0.5f,Vector3.Forward,Vector3.Up)*Matrix.CreateScale(10));
+            sky.Parameters["World"].SetValue(Matrix.CreateWorld(Vector3.Zero,Vector3.Forward,Vector3.Up)*Matrix.CreateScale(10));
             sky.Parameters["View"].SetValue(view);
             sky.Parameters["Projection"].SetValue(projection);
 
             GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             GraphicsDevice.DepthStencilState = DepthStencilState.None;
-
             foreach(var pass in sky.CurrentTechnique.Passes)
             {
                 pass.Apply();
-                GraphicsDevice.DrawUserIndexedPrimitives(PrimitiveType.TriangleList,skyboxVerts,0,skyboxVerts.Length,triangles,0,triangles.Length/3);
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList,skyboxVerts,0,skyboxVerts.Length/3);
+            }
+
+            effect.TextureEnabled = true;
+            effect.Texture = sunTexture;
+
+            effect.World = (Matrix.CreateWorld(new Vector3(-0.5f,-0.5f, -5), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView)*Matrix.CreateRotationY(MathHelper.ToRadians(180)));
+            effect.View = (view);
+            effect.Projection = (projection);
+            effect.Alpha = 1.0f;
+            effect.DiffuseColor = Color.White.ToVector3();
+
+            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
+            GraphicsDevice.DepthStencilState = DepthStencilState.None;
+            GraphicsDevice.BlendState = BlendState.AlphaBlend;
+
+            foreach (var pass in effect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, flatSprite, 0, flatSprite.Length / 3);
+            }
+            effect.World = (Matrix.CreateWorld(new Vector3(-0.5f, -0.5f, 15), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView) * Matrix.CreateRotationY(MathHelper.ToRadians(180)));
+            effect.Texture = moonTexture;
+
+            foreach (var pass in effect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, flatSprite, 0, flatSprite.Length / 3);
             }
 
             GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
             GraphicsDevice.DepthStencilState = DepthStencilState.Default;
+            GraphicsDevice.BlendState = BlendState.NonPremultiplied;
 
             chunk.Parameters["View"].SetValue(view);
             chunk.Parameters["Projection"].SetValue(projection);

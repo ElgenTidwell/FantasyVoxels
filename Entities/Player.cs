@@ -14,13 +14,13 @@ namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 4f, run = 6.5f, sneak = 2f, swim = 0.5f;
+        static float walk = 4.0f, run = 7.5f, sneak = 2f, swim = 0.5f;
 
         MouseState oldState;
 
         Vector3 forward, right;
         float curwalkspeed = 12;
-        float desiredFOV = 80f;
+        float desiredFOV = 75f;
 
         float autoDigTime = 0f;
 
@@ -73,6 +73,9 @@ namespace FantasyVoxels.Entities
 
         Vector3 hitTile,prevHitTile;
         bool voxelHit;
+        float xsin, ysin;
+        float bobTime;
+        float bob;
 
         public override void Start()
         {
@@ -95,10 +98,18 @@ namespace FantasyVoxels.Entities
 
             crouched = Keyboard.GetState().IsKeyDown(Keys.LeftShift);
 
-            float xsin, ysin;
-            float bobMulti = !grounded ?0: new Vector2(velocity.X,velocity.Z).Length()/run;
-            xsin = MathF.Sin(MGame.totalTime * (running ? 9 : 7))* bobMulti;
-            ysin = MathF.Sin(MGame.totalTime * (running ? 9 : 7) * 2)* bobMulti;
+            disallowWalkingOffEdge = crouched;
+
+            float speed = new Vector2(velocity.X, velocity.Z).Length();
+            float bobMulti = grounded?speed / run:0;
+
+            bobTime += MGame.dt * ((curwalkspeed / walk-1)*0.6f+1);
+
+            xsin = MathF.Sin(bobTime * 5.8f) * bob;
+            ysin = MathF.Sin(bobTime * 5.8f * 2) * bob;
+
+            bob = Maths.MoveTowards(bob, bobMulti*1.25f, MGame.dt * 2);
+            bob = Maths.MoveTowards(bob, bobMulti*1.25f, MGame.dt * 2);
 
             var state = Mouse.GetState();
             rotation.Y += MathHelper.ToRadians(oldState.X - state.X) * 0.1f;
@@ -121,9 +132,9 @@ namespace FantasyVoxels.Entities
             MGame.Instance.cameraPosition = new Vector3(position.X, cameraY, position.Z);
             MGame.Instance.view =
                 Matrix.CreateRotationY(-rotation.Y) *
-                Matrix.CreateRotationX(-rotation.X + MathF.Abs(xsin) * 0.004f) *
-                Matrix.CreateRotationZ(-rotation.Z + (xsin) * 0.001f);
-            MGame.Instance.world = Matrix.CreateWorld(-(new Vector3(position.X, cameraY, position.Z) - right * xsin * 0.03f), Vector3.Forward, Vector3.Up);
+                Matrix.CreateRotationX(-rotation.X + MathF.Abs(xsin) * 0.004f + velocity.Y*0.0006f) *
+                Matrix.CreateRotationZ(-rotation.Z + (xsin) * 0.002f);
+            MGame.Instance.world = Matrix.CreateWorld(-(new Vector3(position.X, cameraY, position.Z)), Vector3.Forward, Vector3.Up);
 
             Vector3 wishDir = Vector3.Zero;
             if (Keyboard.GetState().IsKeyDown(Keys.W)) wishDir += forward * MGame.dt;
@@ -133,15 +144,16 @@ namespace FantasyVoxels.Entities
 
             if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming))
             {
-                gravity = swimming?4:6.5f;
+                gravity = swimming?gravity+28*MGame.dt:6.75f;
+                gravity = swimming ? MathF.Min(gravity, 4.5f) : gravity;
                 grounded = false;
             }
             if(crouched && swimming)
             {
-                gravity = -10f;
+                gravity = -3f;
             }
 
-            curwalkspeed = crouched? sneak : (running ? run : walk) * (swimming?swim:1);
+            curwalkspeed = (crouched ? sneak : running ? run : walk) * (swimming?swim:1);
 
             rotmat = Matrix.CreateRotationX(rotation.X)*Matrix.CreateRotationY(rotation.Y);
 
@@ -228,9 +240,9 @@ namespace FantasyVoxels.Entities
 
         public void RenderUI()
         {
-            MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp);
+            MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp,blendState:MGame.crosshair);
 
-            MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, MGame.Instance.GraphicsDevice.Viewport.Bounds.Size.ToVector2() / 2, new Rectangle(20, 0, 9, 9), Color.White, 0f, Vector2.Zero, 2, SpriteEffects.None, 0);
+            MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, MGame.Instance.GraphicsDevice.Viewport.Bounds.Size.ToVector2() / 2, new Rectangle(20, 0, 9, 9), Color.White, 0f, Vector2.Zero, 3, SpriteEffects.None, 0);
 
             MGame.Instance.spriteBatch.End();
         }

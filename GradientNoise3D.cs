@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 namespace Icaria.Engine.Procedural
 {
     public partial class IcariaNoise
@@ -56,6 +57,41 @@ namespace Icaria.Engine.Procedural
             float fx = x - ix;
             float fy = y - iy;
             float fz = z - iz;
+
+            ix += seed * Const.SeedPrime;
+
+            ix += Const.Offset;
+            iy += Const.Offset;
+            iz += Const.Offset;
+            int p1 = ix * Const.XPrime1 + iy * Const.YPrime1 + iz * Const.ZPrime1;
+            int p2 = ix * Const.XPrime2 + iy * Const.YPrime2 + iz * Const.ZPrime2;
+            int llHash = p1 * p2;
+            int lrHash = (p1 + Const.XPrime1) * (p2 + Const.XPrime2);
+            int ulHash = (p1 + Const.YPrime1) * (p2 + Const.YPrime2);
+            int urHash = (p1 + Const.XPlusYPrime1) * (p2 + Const.XPlusYPrime2);
+            float zLowBlend = InterpolateGradients3D(llHash, lrHash, ulHash, urHash, fx, fy, fz);
+            llHash = (p1 + Const.ZPrime1) * (p2 + Const.ZPrime2);
+            lrHash = (p1 + Const.XPlusZPrime1) * (p2 + Const.XPlusZPrime2);
+            ulHash = (p1 + Const.YPlusZPrime1) * (p2 + Const.YPlusZPrime2);
+            urHash = (p1 + Const.XPlusYPlusZPrime1) * (p2 + Const.XPlusYPlusZPrime2);
+            float zHighBlend = InterpolateGradients3D(llHash, lrHash, ulHash, urHash, fx, fy, fz - 1);
+            float sz = fz * fz * (3 - 2 * fz);
+            return zLowBlend + (zHighBlend - zLowBlend) * sz;
+        }
+        /// <summary> 3D -1 to 1 gradient noise function. Analagous to Perlin Noise. </summary>
+        [MethodImpl(512)] // aggressive optimization on supported runtimes
+        public static float BrokenGradientNoise3D(float x, float y, float z, int seed = 0)
+        {
+            // see comments in GradientNoise()
+            int ix = x > 0 ? (int)x : (int)x - 1;
+            int iy = y > 0 ? (int)y : (int)y - 1;
+            int iz = z > 0 ? (int)z : (int)z - 1;
+            float fx = x - ix;
+            float fy = y - iy;
+            float fz = z - iz;
+
+            fy = MathF.Floor((fy + float.Min(fz,fx) * 0.25f) * MathF.PI*15) / (MathF.PI*15);
+            fx = MathF.Floor((fx + float.Min(fz,fy) * 0.25f) * 1000) / (1000);
 
             ix += seed * Const.SeedPrime;
 

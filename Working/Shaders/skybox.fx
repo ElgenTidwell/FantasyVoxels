@@ -11,12 +11,17 @@ float4x4 World;
 float4x4 View;
 float4x4 Projection;
 
+float3 cameraPosition;
+float3 cameraForward;
+float3 sunDirection;
 float3 skyColor;
+float3 skyBandColor;
 
 struct VSOutput
 {
     float4 Position : SV_POSITION;
     float4 Normal : NORMAL0;
+    float4 SBoxData : TEXCOORD0;
 };
 
 VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR0, float4 normal : NORMAL0, float2 texcoord : TEXCOORD0)
@@ -25,6 +30,10 @@ VSOutput MainVS(float4 position : POSITION, nointerpolation float4 color : COLOR
     
     output.Normal = normal;
     output.Position = mul(mul(mul(position, World), View), Projection); // Apply standard transformations
+    
+    output.SBoxData.x = (saturate(normalize(position).y));
+    
+    output.SBoxData.yzw = position.xyz;
     
     return output;
 }
@@ -39,7 +48,7 @@ PSOut MainPS(VSOutput input)
 {
     PSOut output = (PSOut) 0;
     
-    output.Color0 = float4(skyColor, 1);
+    output.Color0 = float4(lerp(skyColor, skyBandColor, (1 - (pow(input.SBoxData.x, 0.8f)))), 1);
     
     return output;
 }

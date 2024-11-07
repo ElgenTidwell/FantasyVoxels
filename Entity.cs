@@ -14,13 +14,14 @@ namespace FantasyVoxels
         public float gravity;
         public bool grounded;
         public bool swimming;
+        protected bool disallowWalkingOffEdge;
         public abstract void Start();
         public virtual void Update()
         {
-            if (grounded) gravity = -1;
+            if (grounded) gravity = -0.6f;
             else
             {
-                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*40f) : gravity - 18 * MGame.dt;
+                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*14f) : gravity - 20 * MGame.dt;
             }
 
             velocity.Y = grounded ? 0 : gravity;
@@ -48,14 +49,16 @@ namespace FantasyVoxels
 
             if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
 
-            for (int i = 0; i < 4; i++)
+            Vector3 oldPos = position;
+            bool wasGrounded = grounded;
+
+            for (int i = 0; i < 8; i++)
             {
-                position += velocity * MGame.dt * (1 / 4f);
+                position += velocity * MGame.dt * (1 / 8f);
 
                 Vector3 push = CollisionDetector.ResolveCollision(bounds, position, ref velocity);
                 position = push;
             }
-
             grounded = false;
             bool ceiling = false;
             swimming = false;
@@ -72,7 +75,7 @@ namespace FantasyVoxels
                     {
                         (int x, int y, int z) checkpos = (x, 0, z);
 
-                        if (x+0.9f <= min.X || x+0.1f >= max.X || z+ 0.9f <= min.Z || z + 0.1f >= max.Z) continue;
+                        if (x+0.999f < min.X || x+0.001f > max.X || z+ 0.999f < min.Z || z + 0.001f > max.Z) continue;
 
                         int v1 = MGame.Instance.GrabVoxel(new Vector3(x, (int)min.Y, z));
                         int v2 = MGame.Instance.GrabVoxel(new Vector3(x, (int)max.Y, z));
@@ -91,8 +94,14 @@ namespace FantasyVoxels
             }
             if (ceiling)
             {
-                gravity = -4f;
+                gravity = -1f;
                 velocity.Y = gravity;
+            }
+
+            if (wasGrounded && !grounded && disallowWalkingOffEdge)
+            {
+                position = oldPos;
+                grounded = true;
             }
         }
     }
