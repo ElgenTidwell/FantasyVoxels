@@ -79,7 +79,7 @@ namespace FantasyVoxels.Entities
 
         public override void Start()
         {
-            bounds = new BoundingBox(new Vector3(-0.2f,-1.7f,-0.2f), new Vector3(0.2f, 0.2f, 0.2f));
+            bounds = new BoundingBox(new Vector3(-0.2f,-1.6f,-0.2f), new Vector3(0.2f, 0.2f, 0.2f));
 
             vertBuffer = new VertexBuffer(MGame.Instance.GraphicsDevice, typeof(VertexPosition), voxelBoxVert.Length, BufferUsage.WriteOnly);
             vertBuffer.SetData(voxelBoxVert);
@@ -89,6 +89,8 @@ namespace FantasyVoxels.Entities
             effect.LightingEnabled = false;
             effect.FogEnabled = false;
             effect.VertexColorEnabled = false;
+
+            oldState = Mouse.GetState();
         }
 
         public override void Update()
@@ -117,7 +119,7 @@ namespace FantasyVoxels.Entities
 
             rotation.X = MathHelper.Clamp(rotation.X, MathHelper.ToRadians(-90f), MathHelper.ToRadians(90f));
 
-            Mouse.SetPosition(200, 200);
+            Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
             oldState = Mouse.GetState();
 
             float cameraY = position.Y + MathF.Abs(xsin) * 0.18f;

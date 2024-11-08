@@ -35,7 +35,7 @@ PixelInput SpriteVertexShader(VertexInput v)
 
     output.Position = mul(v.Position, view_projection);
     output.Color = v.Color;
-    output.TexCoord = v.TexCoord / (screenSize * (screenAspect / 4096));
+    output.TexCoord = v.TexCoord / (screenSize * (screenAspect / (16*200)));
     return output;
 }
 float4 SpritePixelShader(PixelInput p) : SV_TARGET
