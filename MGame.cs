@@ -1,5 +1,7 @@
 ﻿using FantasyVoxels.Entities;
 using FantasyVoxels.Saves;
+using FantasyVoxels.UI;
+using GeonBit.UI;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -37,14 +39,14 @@ namespace FantasyVoxels
 
         private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
         public Texture2D colors,normals,noise,uiTextures,sunTexture,moonTexture,aoMap;
-        private Effect raymarcher;
         private Effect chunk;
-        private Effect chunkBuilder;
         private Effect sky;
         private Effect postProcessing;
 
         private int Width => GraphicsDevice.Viewport.Width;
         private int Height => GraphicsDevice.Viewport.Height;
+
+        public bool gamePaused;
 
         public Player player;
         public ConcurrentDictionary<long, Chunk> loadedChunks = new ConcurrentDictionary<long, Chunk>();
@@ -72,7 +74,7 @@ namespace FantasyVoxels
             }
         }
 
-        BoundingFrustum frustum;
+        BoundingFrustum frustum = new BoundingFrustum(Matrix.Identity);
 
         DepthStencilState stencilDraw;
         (int x, int y, int z) playerChunkPos;
@@ -240,6 +242,7 @@ namespace FantasyVoxels
             _graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
             _graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
             _graphics.IsFullScreen = true;
+            _graphics.HardwareModeSwitch = true;
             _graphics.SynchronizeWithVerticalRetrace = false;
             _graphics.PreferMultiSampling = false;
 
@@ -248,9 +251,18 @@ namespace FantasyVoxels
             _graphics.ApplyChanges();
 
             Content.RootDirectory = "Content";
-            IsMouseVisible = true;
+            IsMouseVisible = false;
             Instance = this;
             IsFixedTimeStep = false;
+            Window.AllowUserResizing = true;
+            Window.ClientSizeChanged += Window_ClientSizeChanged;
+        }
+
+        private void Window_ClientSizeChanged(object sender, EventArgs e)
+        {
+            float minlength = float.Min(Window.ClientBounds.Width/1920f, Window.ClientBounds.Height/1080f);
+
+            UserInterface.Active.GlobalScale = minlength;
         }
 
         protected override void Initialize()
@@ -270,22 +282,19 @@ namespace FantasyVoxels
                 ColorBlendFunction = BlendFunction.Min
             };
 
-            chunkUpdateThread = new Thread(()=> ChunkThread(chunkThreadCancel.Token));
-            chunkUpdateThread.Name = "Background Chunk Update Thread";
-            chunkUpdateThread.Priority = ThreadPriority.AboveNormal;
-            chunkUpdateThread.IsBackground = false;
+            // GeonBit.UI: Init the UI manager using the "hd" built-in theme
+            UserInterface.Initialize(Content, BuiltinThemes.lowres);
+            UserInterface.Active.ShowCursor = false;
 
-            //Chunk.indexBuffer = new IndexBuffer(GraphicsDevice,IndexElementSize.SixteenBits,Chunk.triangles.Length,BufferUsage.WriteOnly);
-            //Chunk.indexBuffer.SetData(Chunk.triangles);
+            TitleMenu.ReInit();
+
             base.Initialize();
         }
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-            raymarcher = Content.Load<Effect>("Shaders/screencomp");
             chunk = Content.Load<Effect>("Shaders/chunk");
-            chunkBuilder = Content.Load<Effect>("Shaders/chunkbuilder");
             sky = Content.Load<Effect>("Shaders/skybox");
             postProcessing = Content.Load<Effect>("Shaders/pscreen");
 
@@ -349,19 +358,30 @@ namespace FantasyVoxels
         }
         protected override void UnloadContent()
         {
+            UserInterface.Active.Dispose();
             generationPool.Stop();
+            chunkThreadCancel.Dispose();
 
             base.UnloadContent();
         }
 
         public void LoadWorld()
         {
+            TitleMenu.Cleanup();
+
             IsMouseVisible = false;
             player = new Player();
             worldRandom = new Random(seed);
             player.position = new Vector3(0, 256, 0);
 
+            totalTime = 0;
+
             chunkThreadCancel = new();
+
+            chunkUpdateThread = new Thread(() => ChunkThread(chunkThreadCancel.Token));
+            chunkUpdateThread.Name = "Background Chunk Update Thread";
+            chunkUpdateThread.Priority = ThreadPriority.AboveNormal;
+            chunkUpdateThread.IsBackground = false;
 
             chunkUpdateThread.Start();
 
@@ -373,18 +393,19 @@ namespace FantasyVoxels
         }
         public void QuitWorld()
         {
-            Save.SaveToFile($"{Environment.GetEnvironmentVariable("profilePath")}/user/saves/{Save.WorldName}");
+            Save.SaveToFile($"{Save.WorldName}");
 
             chunkThreadCancel.Cancel();
 
             chunkUpdateThread.Interrupt();
             chunkUpdateThread.Join();
 
-            chunkThreadCancel.Dispose();
-
             loadedChunks.Clear();
 
             player.Destroyed();
+
+            TitleMenu.ReInit();
+            currentPlayState = PlayState.Menu;
         }
 
         public static long CCPos((int x, int y, int z) pos)
@@ -476,11 +497,10 @@ namespace FantasyVoxels
         }
         protected override void Update(GameTime gameTime)
         {
-            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
-            {
-                Exit();
-            }
-            dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            dt = gamePaused ? 0 : (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+            BetterKeyboard.GetState();
+            BetterMouse.GetState(false);
 
             switch(currentPlayState)
             {
@@ -495,15 +515,36 @@ namespace FantasyVoxels
 
                     break;
             }
+            UserInterface.Active.Update(gameTime);
 
             base.Update(gameTime);
         }
 
         void UpdateWorld()
         {
-            WorldTimeManager.Tick();
+            if (BetterKeyboard.HasBeenPressed(Keys.Escape))
+            {
+                gamePaused = !gamePaused;
+                if(gamePaused)
+                {
+                    PauseMenu.Show();
+                }
+                else
+                {
+                    PauseMenu.Hide();
+                }
+            }
 
-            player.Update();
+            if (!gamePaused)
+            {
+                WorldTimeManager.Tick();
+
+                player.Update();
+            }
+            else
+            {
+                PauseMenu.Update();
+            }
 
             frustum = new BoundingFrustum(world * view * projection);
 
@@ -775,7 +816,7 @@ namespace FantasyVoxels
 
         protected override void Draw(GameTime gameTime)
         {
-            totalTime = (float)gameTime.TotalGameTime.TotalSeconds;
+            totalTime += (float)gameTime.ElapsedGameTime.TotalSeconds;
 
             switch (currentPlayState)
             {
@@ -790,6 +831,11 @@ namespace FantasyVoxels
 
                     break;
             }
+            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
+            GraphicsDevice.DepthStencilState = DepthStencilState.None;
+            GraphicsDevice.BlendState = BlendState.AlphaBlend;
+
+            UserInterface.Active.Draw(spriteBatch);
 
             base.Draw(gameTime);
         }
@@ -1166,5 +1212,96 @@ namespace FantasyVoxels
             return resolvedPosition;
         }
 
+    }
+}
+
+public class BetterKeyboard
+{
+    static KeyboardState currentKeyState;
+    static KeyboardState previousKeyState;
+
+    public static KeyboardState GetState()
+    {
+        previousKeyState = currentKeyState;
+        currentKeyState = Microsoft.Xna.Framework.Input.Keyboard.GetState();
+        return currentKeyState;
+    }
+
+
+    public static Keys[] GetPressedKeys()
+    {
+        return currentKeyState.GetPressedKeys();
+    }
+
+    public static bool IsPressed(Keys key)
+    {
+        return currentKeyState.IsKeyDown(key);
+    }
+
+    public static bool HasBeenPressed(Keys key)
+    {
+        return currentKeyState.IsKeyDown(key) && !previousKeyState.IsKeyDown(key);
+    }
+    public static bool HasBeenReleased(Keys key)
+    {
+        return previousKeyState.IsKeyDown(key) && !currentKeyState.IsKeyDown(key);
+    }
+}
+
+public class BetterMouse
+{
+    static MouseState currentMouseState;
+    static MouseState previousMouseState;
+
+    static float timeSinceLeftClick = 0;
+    static float timeSinceRightClick = 0;
+    static float timeSinceMiddleClick = 0;
+
+    const int miliAllowedTime = 250; //0.25 of a second
+
+    public static MouseState GetCurrentState() => currentMouseState;
+    public static MouseState GetPreviousState() => previousMouseState;
+
+    static bool wasleftDown, wasrightDown;
+    static bool leftDown, rightDown;
+    public static MouseState GetState(bool skipClicks)
+    {
+        previousMouseState = currentMouseState;
+        currentMouseState = Mouse.GetState();
+
+        if (skipClicks) return currentMouseState;
+
+        wasleftDown = leftDown;
+        wasrightDown = rightDown;
+
+        if (currentMouseState.LeftButton == ButtonState.Pressed) { timeSinceLeftClick = DateTime.Now.Millisecond; leftDown = true; }
+        if (currentMouseState.RightButton == ButtonState.Pressed) { timeSinceRightClick = DateTime.Now.Millisecond; rightDown = true; }
+        if (currentMouseState.MiddleButton == ButtonState.Pressed) { timeSinceMiddleClick = DateTime.Now.Millisecond; }
+        if (currentMouseState.LeftButton == ButtonState.Released) { timeSinceLeftClick = -1; leftDown = false; }
+        if (currentMouseState.RightButton == ButtonState.Released) { timeSinceRightClick = -1; rightDown = false; }
+        if (currentMouseState.MiddleButton == ButtonState.Released) { timeSinceMiddleClick = -1; }
+
+        return currentMouseState;
+    }
+
+    public static bool WasLeftPressed() => leftDown == true && wasleftDown == false;
+    public static bool WasRightPressed() => rightDown == true && wasrightDown == false;
+
+    public static bool IsDraggingLeft()
+    {
+        return (timeSinceLeftClick > 0 && Math.Abs(timeSinceLeftClick - DateTime.Now.Millisecond) > miliAllowedTime);
+    }
+    public static bool IsDraggingRight()
+    {
+        return (timeSinceRightClick > 0 && Math.Abs(timeSinceRightClick - DateTime.Now.Millisecond) > miliAllowedTime);
+    }
+    public static bool IsDraggingMiddle()
+    {
+        return (timeSinceMiddleClick > 0 && Math.Abs(timeSinceMiddleClick - DateTime.Now.Millisecond) > miliAllowedTime);
+    }
+
+    public static Vector2 GetMovement()
+    {
+        return -new Vector2(currentMouseState.X - previousMouseState.X, currentMouseState.Y - previousMouseState.Y);
     }
 }

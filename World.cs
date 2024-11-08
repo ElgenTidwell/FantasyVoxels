@@ -252,6 +252,8 @@ namespace FantasyVoxels
         {
             chunkVertexBuffers = new VertexBuffer[5];
             tRandom = new Random(MGame.Instance.seed + 4);
+            Array.Fill(voxels, (byte)0);
+            Array.Fill(voxeldata, new VoxelData());
         }
         public static float GetOctaveNoise2D(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
@@ -325,8 +327,6 @@ namespace FantasyVoxels
         public void Generate()
         {
             CompletelyEmpty = true;
-            Array.Fill(voxels,(byte)0);
-            Array.Fill(voxeldata,new VoxelData());
             int elementsCount = 0;
             for (int x = 0; x < Size; x++)
             {

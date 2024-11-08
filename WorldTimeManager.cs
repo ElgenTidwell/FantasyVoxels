@@ -13,6 +13,8 @@ namespace FantasyVoxels
         public static float WorldTime => wTime;
         public static bool NightTime = wTime > TURNOVER;
 
+        public static void SetWorldTime(float time) => wTime = time;
+
         static Color daySkyColor = new Color(122, 182, 255), nightSkyColor = new Color(5,5,10);
         static Color dawnColor = new Color(255, 147, 117), duskColor = new Color(60,60,80);
 
