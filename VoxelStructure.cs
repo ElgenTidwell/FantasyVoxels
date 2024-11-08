@@ -80,11 +80,11 @@ namespace FantasyVoxels
             var rand = MGame.Instance.worldRandom;
             int treeHeight = 4 + (int)((IcariaNoise.GradientNoise(worldX * 0.8f, worldZ * 0.8f)+1) * 4)*3;
 
-            for (int y = worldY + 2; y <= worldY + treeHeight+1; y++)
+            for (int y = worldY + 3; y <= worldY + treeHeight+1; y++)
             {
-                if (y % 3 == 0) continue;
+                if ((y - worldY) % 3 == 0) continue;
 
-                int rad = (int)(((1 - (((float)y - worldY - 2) / (treeHeight-2)) + 2) * 1.5f) - int.Min((y) % 3, 2));
+                int rad = (int)(((1 - (((float)y - worldY - 3) / (treeHeight-3)) + 2) * 1.5f) - int.Min((y - worldY) % 3, 2));
 
                 for (int x = -rad; x <= rad; x++)
                 {

@@ -829,8 +829,8 @@ namespace FantasyVoxels
             sky.Parameters["skyColor"].SetValue(skyColor);
             sky.Parameters["skyBandColor"].SetValue(skyBandColor);
 
-            chunk.Parameters["skyColor"].SetValue(Vector3.Lerp(skyBandColor, skyColor, float.Clamp(float.Pow(Vector3.Dot(cameraForward, Vector3.Up),3),0,0.8f)));
-
+            chunk.Parameters["skyColor"].SetValue(skyColor);
+            chunk.Parameters["skyBandColor"].SetValue(skyBandColor);
 
             chunk.Parameters["renderDistance"]?.SetValue(RenderDistance);
             chunk.Parameters["cameraPosition"]?.SetValue(cameraPosition);

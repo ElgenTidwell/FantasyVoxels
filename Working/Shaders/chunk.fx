@@ -21,6 +21,7 @@ float renderDistance;
 float minSafeDistance;
 float3 cameraPosition;
 float3 skyColor;
+float3 skyBandColor;
 float4x4 cameraViewMatrix;
 float2 dim;
 float time;
@@ -63,7 +64,7 @@ struct HitInfo
 struct VSOutput
 {
     float4 Position : SV_POSITION;
-    float3 WorldPos : NORMAL1;
+    float3 WorldPos : COLOR1;
     float4 Normal : NORMAL0;
     float3 NormalPS : TEXCOORD3;
     float4 Color : COLOR0;
@@ -223,7 +224,8 @@ PSOut MainPS(VSOutput input)
     
     float2 depth = input.Depth.xy;
     
-    float fog = abs(depth.x) / (renderDistance * ChunkSize * 0.9f);
+    float fog = max(depth.x, 0) / (renderDistance * ChunkSize * 0.5f);
+    float fogColor = saturate(normalize(input.WorldPos - cameraPosition).y);
     
     float4 dat = input.Color;
     
@@ -270,7 +272,7 @@ PSOut MainPS(VSOutput input)
     
     float3 desCol = color.xyz * (dat.r * (realBump + 1) * sunColor) * dat.g * ao;
 
-    output.Color0 = float4(lerp(desCol, skyColor, pow(saturate(fog), 1.25f)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, lerp(skyBandColor,skyColor,fogColor), pow(saturate(fog), 1.25f)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {

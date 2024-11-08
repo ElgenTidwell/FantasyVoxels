@@ -14,7 +14,7 @@ namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 4.0f, run = 7.5f, sneak = 2f, swim = 0.5f;
+        static float walk = 4.8f, run = 7.5f, sneak = 2f, swim = 0.5f;
 
         MouseState oldState;
 
@@ -105,11 +105,11 @@ namespace FantasyVoxels.Entities
 
             bobTime += MGame.dt * ((curwalkspeed / walk-1)*0.6f+1);
 
-            xsin = MathF.Sin(bobTime * 5.8f) * bob;
-            ysin = MathF.Sin(bobTime * 5.8f * 2) * bob;
+            xsin = MathF.Sin(bobTime * 6.8f) * bob;
+            ysin = MathF.Sin(bobTime * 6.8f * 2) * bob;
 
-            bob = Maths.MoveTowards(bob, bobMulti*1.25f, MGame.dt * 2);
-            bob = Maths.MoveTowards(bob, bobMulti*1.25f, MGame.dt * 2);
+            bob = Maths.MoveTowards(bob, bobMulti*1.2f, MGame.dt * 2);
+            bob = Maths.MoveTowards(bob, bobMulti*1.2f, MGame.dt * 2);
 
             var state = Mouse.GetState();
             rotation.Y += MathHelper.ToRadians(oldState.X - state.X) * 0.1f;
@@ -201,7 +201,7 @@ namespace FantasyVoxels.Entities
             wishDir *= multiplier;
 
             float curSpeed = Vector3.Dot(wishDir, velocity);
-            float addSpeed = MathHelper.Clamp((grounded||swimming? curwalkspeed*10 : 10f) - curSpeed, 0, float.MaxValue);
+            float addSpeed = MathHelper.Clamp((grounded||swimming? curwalkspeed*10 : 15) - curSpeed, 0, float.MaxValue);
 
             Vector3 initWish = addSpeed * wishDir;
             velocity += initWish;
