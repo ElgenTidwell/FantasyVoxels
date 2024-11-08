@@ -183,6 +183,15 @@ namespace FantasyVoxels
 
         public static BlendState shadowBlend,crosshair;
 
+
+        enum PlayState
+        {
+            World,
+            Menu,
+        }
+
+        PlayState currentPlayState = PlayState.Menu;
+
         public static VertexPosition[] GenerateSphereVerticesDirect(float radius = 1.0f, int latitudeSegments = 10, int longitudeSegments = 10)
         {
             List<VertexPosition> sphereVerts = new List<VertexPosition>();
@@ -239,13 +248,9 @@ namespace FantasyVoxels
             _graphics.ApplyChanges();
 
             Content.RootDirectory = "Content";
-            IsMouseVisible = false;
+            IsMouseVisible = true;
             Instance = this;
             IsFixedTimeStep = false;
-
-            player = new Player();
-            worldRandom = new Random(seed);
-            player.position = new Vector3(0, 256, 0);
         }
 
         protected override void Initialize()
@@ -321,6 +326,8 @@ namespace FantasyVoxels
 
             postProcessing.Parameters["NoiseTexture"]?.SetValue(noise);
 
+            TitleMenu.LoadContent();
+
             stencilDraw = new DepthStencilState
             {
                 StencilEnable = true,
@@ -339,8 +346,6 @@ namespace FantasyVoxels
                 AlphaDestinationBlend = Blend.InverseSourceAlpha,
             };
             generationPool = new TaskPool(4);
-
-            LoadWorld();
         }
         protected override void UnloadContent()
         {
@@ -351,6 +356,11 @@ namespace FantasyVoxels
 
         public void LoadWorld()
         {
+            IsMouseVisible = false;
+            player = new Player();
+            worldRandom = new Random(seed);
+            player.position = new Vector3(0, 256, 0);
+
             chunkThreadCancel = new();
 
             chunkUpdateThread.Start();
@@ -358,10 +368,12 @@ namespace FantasyVoxels
             player.position.Y = Chunk.GetTerrainHeight(0, 0) + 14;
 
             player.Start();
+
+            currentPlayState = PlayState.World;
         }
         public void QuitWorld()
         {
-            Save.SaveToFile(Environment.ExpandEnvironmentVariables($"%appdata%/FantasyVoxels/Saves/savetest"));
+            Save.SaveToFile($"{Environment.GetEnvironmentVariable("profilePath")}/user/saves/{Save.WorldName}");
 
             chunkThreadCancel.Cancel();
 
@@ -466,14 +478,32 @@ namespace FantasyVoxels
         {
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
             {
-                QuitWorld();
                 Exit();
             }
+            dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+            switch(currentPlayState)
+            {
+                case PlayState.Menu:
+
+                    TitleMenu.Update();
+
+                    break;
+                case PlayState.World:
+
+                    UpdateWorld();
+
+                    break;
+            }
+
+            base.Update(gameTime);
+        }
+
+        void UpdateWorld()
+        {
             WorldTimeManager.Tick();
 
             player.Update();
-
-            dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
             frustum = new BoundingFrustum(world * view * projection);
 
@@ -481,81 +511,22 @@ namespace FantasyVoxels
             int cy;
             int cz;
 
-            if (!Keyboard.GetState().IsKeyDown(Keys.F))
-            {
-                cx = (int)MathF.Floor(cameraPosition.X / Chunk.Size);
-                cy = (int)MathF.Floor(cameraPosition.Y / Chunk.Size);
-                cz = (int)MathF.Floor(cameraPosition.Z / Chunk.Size);
-                playerChunkPos = (cx, cy, cz);
-            }
-            else
-            {
-                cx = playerChunkPos.x;
-                cy = playerChunkPos.y;
-                cz = playerChunkPos.z;
-            }
+            cx = (int)MathF.Floor(cameraPosition.X / Chunk.Size);
+            cy = (int)MathF.Floor(cameraPosition.Y / Chunk.Size);
+            cz = (int)MathF.Floor(cameraPosition.Z / Chunk.Size);
+            playerChunkPos = (cx, cy, cz);
 
             toRender.Clear();
 
-            //{
-            //    HashSet<(int x, int y, int z)> visited = new HashSet<(int x, int y, int z)>();
-            //    Queue<(int x, int y, int z)> bfsQueue = new Queue<(int x, int y, int z)>();
-
-            //    // Initialize with the player's chunk
-            //    bfsQueue.Enqueue((cx, cy, cz));
-            //    visited.Add((cx, cy, cz));
-
-            //    while (bfsQueue.Count > 0 && toGenerate.Count < 32)
-            //    {
-            //        var currentChunk = bfsQueue.Dequeue();
-            //        (int x, int y, int z) = currentChunk;
-
-            //        // Define chunk bounds and check if in view
-            //        BoundingBox chunkBounds = new BoundingBox(new Vector3(x, y, z) * Chunk.Size, (new Vector3(x, y, z) + Vector3.One) * Chunk.Size);
-            //        if (frustum.Contains(chunkBounds) == ContainmentType.Disjoint)
-            //            continue;
-
-            //        // If chunk is not yet generated or queued, add it to generate queue
-            //        if (!loadedChunks.ContainsKey(currentChunk) && !toGenerate.Contains(currentChunk))
-            //        {
-            //            toGenerate.Enqueue(currentChunk);
-            //        }
-            //        else if (loadedChunks.TryGetValue(currentChunk, out var chunk))
-            //        {
-            //            if (chunk.queueModified) chunk.CheckQueue();
-            //        }
-
-            //        // Add neighbors to the BFS queue if they haven't been visited
-            //        var neighbors = new (int x, int y, int z)[]
-            //        {
-            //        (x + 1, y, z),
-            //        (x - 1, y, z),
-            //        (x, y + 1, z),
-            //        (x, y - 1, z),
-            //        (x, y, z + 1),
-            //        (x, y, z - 1),
-            //        };
-
-            //        foreach (var neighbor in neighbors)
-            //        {
-            //            if (!visited.Contains(neighbor) && MathF.Abs(neighbor.x - cx) + MathF.Abs(neighbor.y - cy) + MathF.Abs(neighbor.z - cz) <= RenderDistance)
-            //            {
-            //                visited.Add(neighbor);
-            //                bfsQueue.Enqueue(neighbor); // Add this chunk to the BFS queue
-            //            }
-            //        }
-            //    }
-            //}
-
             const bool enableBFS = true;
             int generatedWithPreference = 0;
-            if(enableBFS)
+            if (enableBFS)
             {
                 Queue<(int x, int y, int z, int face, int depth, bool fromEmpty)> bfsQueue = new Queue<(int, int, int, int, int, bool)>();
                 HashSet<(int, int, int)> visitedChunks = new HashSet<(int, int, int)>();
 
                 // Start the BFS with the current chunk and all its visible faces
-                bfsQueue.Enqueue((cx,cy,cz, -1, 0,false)); // -1 means no face restriction initially
+                bfsQueue.Enqueue((cx, cy, cz, -1, 0, false)); // -1 means no face restriction initially
 
                 while (bfsQueue.Count > 0)
                 {
@@ -566,7 +537,7 @@ namespace FantasyVoxels
 
                     // Check if we have exceeded the render distance
                     float cDist = MathF.Abs(x - cx) + MathF.Abs(y - cy) + MathF.Abs(z - cz);
-                    if (cDist >= RenderDistance+4) continue;
+                    if (cDist >= RenderDistance + 4) continue;
 
                     visitedChunks.Add((x, y, z));
 
@@ -594,7 +565,7 @@ namespace FantasyVoxels
                             int newDepth = depth + 1;
 
                             // Enqueue the neighbor only if it hasn't been visited and we are within the depth limit
-                            if (!visitedChunks.Contains((neighborX, neighborY, neighborZ)) && !loadedChunks.TryGetValue(CCPos((neighborX, neighborY, neighborZ)),out _))
+                            if (!visitedChunks.Contains((neighborX, neighborY, neighborZ)) && !loadedChunks.TryGetValue(CCPos((neighborX, neighborY, neighborZ)), out _))
                             {
                                 generatedWithPreference++;
                                 bfsQueue.Enqueue((neighborX, neighborY, neighborZ, exitFace, newDepth, true));
@@ -614,14 +585,14 @@ namespace FantasyVoxels
                         // Calculate the new depth for the neighbor
                         int newDepth = depth + 1;
 
-                        var chunkDir = new Vector3(neighborX, neighborY, neighborZ) - new Vector3(x,y,z);
+                        var chunkDir = new Vector3(neighborX, neighborY, neighborZ) - new Vector3(x, y, z);
 
                         if (Vector3.Dot(chunkDir, cameraDir) > 0) continue;
 
                         // Enqueue the neighbor only if it hasn't been visited and we are within the depth limit
                         if (!visitedChunks.Contains((neighborX, neighborY, neighborZ)))
                         {
-                            bfsQueue.Enqueue((neighborX, neighborY, neighborZ, exitFace, newDepth,currentChunk.CompletelyEmpty));
+                            bfsQueue.Enqueue((neighborX, neighborY, neighborZ, exitFace, newDepth, currentChunk.CompletelyEmpty));
                         }
                     }
                 }
@@ -675,9 +646,9 @@ namespace FantasyVoxels
             }
             else
             {
-                for(int _x = -RenderDistance; _x < RenderDistance; _x++)
+                for (int _x = -RenderDistance; _x < RenderDistance; _x++)
                 {
-                    for (int _y = -RenderDistance/2; _y < RenderDistance/2; _y++)
+                    for (int _y = -RenderDistance / 2; _y < RenderDistance / 2; _y++)
                     {
                         for (int _z = -RenderDistance; _z < RenderDistance; _z++)
                         {
@@ -686,7 +657,7 @@ namespace FantasyVoxels
                             int z = _z + cz;
 
                             // Check if we have exceeded the render distance
-                            if (MathF.Abs(x - cx) + MathF.Abs(y - cy)*2 + MathF.Abs(z - cz) >= RenderDistance) continue;
+                            if (MathF.Abs(x - cx) + MathF.Abs(y - cy) * 2 + MathF.Abs(z - cz) >= RenderDistance) continue;
 
                             if (!loadedChunks.TryGetValue(CCPos((x, y, z)), out var currentChunk))
                             {
@@ -731,13 +702,12 @@ namespace FantasyVoxels
                 });
             }
 
-            while(instantRemesh.Count > 0)
+            while (instantRemesh.Count > 0)
             {
                 var key = instantRemesh.Dequeue();
                 loadedChunks[key].CheckQueue(true);
             }
 
-            base.Update(gameTime);
         }
 
         void RenderChunks(bool transparent)
@@ -807,6 +777,25 @@ namespace FantasyVoxels
         {
             totalTime = (float)gameTime.TotalGameTime.TotalSeconds;
 
+            switch (currentPlayState)
+            {
+                case PlayState.Menu:
+
+                    TitleMenu.Render();
+
+                    break;
+                case PlayState.World:
+
+                    RenderWorld();
+
+                    break;
+            }
+
+            base.Draw(gameTime);
+        }
+
+        void RenderWorld()
+        {
             sunView = Matrix.CreateRotationX(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15)));
 
             float dayPerc = (MathF.Sin(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15) % 360)) + 1) / 2f;
@@ -834,7 +823,7 @@ namespace FantasyVoxels
 
             chunk.Parameters["renderDistance"]?.SetValue(RenderDistance);
             chunk.Parameters["cameraPosition"]?.SetValue(cameraPosition);
-            chunk.Parameters["time"]?.SetValue((float)gameTime.TotalGameTime.TotalSeconds);
+            chunk.Parameters["time"]?.SetValue(totalTime);
             chunk.Parameters["sunDir"]?.SetValue(sunView.Forward);
 
             chunk.Parameters["sunColor"]?.SetValue(Color.White.ToVector3() * MathF.Max(dayPerc, 0.04f));
@@ -892,22 +881,22 @@ namespace FantasyVoxels
             GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, Color.LightSkyBlue, 1000f, 1);
 
 
-            sky.Parameters["World"].SetValue(Matrix.CreateWorld(Vector3.Zero,Vector3.Forward,Vector3.Up)*Matrix.CreateScale(10));
+            sky.Parameters["World"].SetValue(Matrix.CreateWorld(Vector3.Zero, Vector3.Forward, Vector3.Up) * Matrix.CreateScale(10));
             sky.Parameters["View"].SetValue(view);
             sky.Parameters["Projection"].SetValue(projection);
 
             GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             GraphicsDevice.DepthStencilState = DepthStencilState.None;
-            foreach(var pass in sky.CurrentTechnique.Passes)
+            foreach (var pass in sky.CurrentTechnique.Passes)
             {
                 pass.Apply();
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList,skyboxVerts,0,skyboxVerts.Length/3);
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, skyboxVerts, 0, skyboxVerts.Length / 3);
             }
 
             effect.TextureEnabled = true;
             effect.Texture = sunTexture;
 
-            effect.World = (Matrix.CreateWorld(new Vector3(-0.5f,-0.5f, -5), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView)*Matrix.CreateRotationY(MathHelper.ToRadians(180)));
+            effect.World = (Matrix.CreateWorld(new Vector3(-0.5f, -0.5f, -5), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView) * Matrix.CreateRotationY(MathHelper.ToRadians(180)));
             effect.View = (view);
             effect.Projection = (projection);
             effect.Alpha = 1.0f;
@@ -973,7 +962,7 @@ namespace FantasyVoxels
 
             Matrix _projection = Matrix.CreateOrthographicOffCenter(0, SSAOTarget.Width, SSAOTarget.Height, 0, 0, 1);
 
-            if(enableAO)
+            if (enableAO)
             {
                 postProcessing.Parameters["view_projection"].SetValue(_view * _projection);
                 postProcessing.Parameters["screenSize"]?.SetValue(new Vector2(SSAOTarget.Width, SSAOTarget.Height));
@@ -1016,8 +1005,6 @@ namespace FantasyVoxels
             //_spriteBatch.End();
 
             player.RenderUI();
-
-            base.Draw(gameTime);
         }
 
         public int GrabVoxel(Vector3 p)

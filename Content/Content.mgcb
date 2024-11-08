@@ -133,3 +133,8 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/aomap.png;Textures/aomap.png
+
+#begin ../Working/Shaders/tiledBackground.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/tiledBackground.fx;Shaders/tiledBackground.fx

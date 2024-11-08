@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FantasyVoxels": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "profilePath": "C:\\Users\\tidwe_7ucbkur\\Documents\\VSFantasyVoxelsSaveLocation"
+      }
+    }
+  }
+}

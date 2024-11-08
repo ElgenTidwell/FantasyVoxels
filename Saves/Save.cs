@@ -7,13 +7,14 @@ using System.Threading.Tasks;
 
 namespace FantasyVoxels.Saves
 {
-    internal class Save
+    internal static class Save
     {
+        public static string WorldName = "";
         public static void SaveToFile(string savename)
         {
             Chunk[] chunks = MGame.Instance.loadedChunks.Values.ToArray();
 
-            Directory.Delete(savename, true);
+            if(Directory.Exists(savename)) Directory.Delete(savename, true);
 
             Directory.CreateDirectory(savename);
             Directory.CreateDirectory($"{savename}/chunk");
