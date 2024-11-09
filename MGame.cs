@@ -252,7 +252,7 @@ namespace FantasyVoxels
             _graphics.ApplyChanges();
 
             Content.RootDirectory = "Content";
-            IsMouseVisible = false;
+            IsMouseVisible = true;
             Instance = this;
             IsFixedTimeStep = false;
             Window.AllowUserResizing = true;
@@ -287,8 +287,10 @@ namespace FantasyVoxels
             UserInterface.Initialize(Content, BuiltinThemes.lowres);
             UserInterface.Active.ShowCursor = false;
 
-            //Chunk.indexBuffer = new IndexBuffer(GraphicsDevice,IndexElementSize.SixteenBits,Chunk.triangles.Length,BufferUsage.WriteOnly);
-            //Chunk.indexBuffer.SetData(Chunk.triangles);
+            Paragraph.BaseSize = 3;
+
+            TitleMenu.ReInit();
+
             base.Initialize();
         }
         protected override void LoadContent()
@@ -361,12 +363,22 @@ namespace FantasyVoxels
         {
             UserInterface.Active.Dispose();
             generationPool.Stop();
+            chunkThreadCancel?.Dispose();
 
             base.UnloadContent();
         }
 
         public void LoadWorld()
         {
+            TitleMenu.Cleanup();
+
+            chunkThreadCancel = new();
+
+            chunkUpdateThread = new Thread(() => ChunkThread(chunkThreadCancel.Token));
+            chunkUpdateThread.Name = "Background Chunk Update Thread";
+            chunkUpdateThread.Priority = ThreadPriority.AboveNormal;
+            chunkUpdateThread.IsBackground = false;
+
             IsMouseVisible = false;
 
             player = new Player();
@@ -375,12 +387,7 @@ namespace FantasyVoxels
 
             player.position = new Vector3(0, 256, 0);
 
-            chunkThreadCancel = new();
-
-            chunkUpdateThread = new Thread(() => ChunkThread(chunkThreadCancel.Token));
-            chunkUpdateThread.Name = "Background Chunk Update Thread";
-            chunkUpdateThread.Priority = ThreadPriority.AboveNormal;
-            chunkUpdateThread.IsBackground = false;
+            totalTime = 0;
 
             chunkUpdateThread.Start();
 
@@ -496,11 +503,7 @@ namespace FantasyVoxels
         }
         protected override void Update(GameTime gameTime)
         {
-            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
-            {
-                Exit();
-            }
-            dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            dt = gamePaused ? 0 : (float)gameTime.ElapsedGameTime.TotalSeconds;
 
             BetterKeyboard.GetState();
             BetterMouse.GetState(false);

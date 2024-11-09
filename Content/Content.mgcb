@@ -4607,3 +4607,12 @@
 
 #begin GeonBit.UI/Themes/lowres/ThemeData.xml
 /copy:GeonBit.UI/Themes/lowres/ThemeData.xml
+#begin ../Working/Shaders/chunkbuilder.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/chunkbuilder.fx;Shaders/chunkbuilder.fx
+
+#begin ../Working/Shaders/screencomp.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/screencomp.fx;Shaders/screencomp.fx
