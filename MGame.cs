@@ -399,8 +399,6 @@ namespace FantasyVoxels
         }
         public void QuitWorld()
         {
-            Save.SaveToFile($"{Environment.GetEnvironmentVariable("profilePath")}/user/saves/{Save.WorldName}");
-
             chunkThreadCancel.Cancel();
 
             chunkUpdateThread.Interrupt();
