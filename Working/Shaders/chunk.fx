@@ -225,7 +225,7 @@ PSOut MainPS(VSOutput input)
     float2 depth = input.Depth.xy;
     
     float fog = max(depth.x - ChunkSize * 0.5f, 0) / ((renderDistance-0.5f) * ChunkSize * 0.5f);
-    float fogColor = pow(saturate(normalize(input.WorldPos - cameraPosition).y),0.8f);
+    float fogColor = pow(saturate(normalize(input.WorldPos - cameraPosition).y),1.25f);
     
     float4 dat = input.Color;
     
@@ -272,7 +272,7 @@ PSOut MainPS(VSOutput input)
     
     float3 desCol = color.xyz * (dat.g * (realBump + 1) * sunColor + dat.b) * ao;
 
-    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), saturate(fog)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog),3)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {

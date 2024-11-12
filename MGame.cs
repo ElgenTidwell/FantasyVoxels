@@ -46,6 +46,8 @@ namespace FantasyVoxels
         private Effect sky;
         private Effect postProcessing;
 
+        public float daylightPercentage;
+
         private int Width => GraphicsDevice.Viewport.Width;
         private int Height => GraphicsDevice.Viewport.Height;
 
@@ -53,7 +55,7 @@ namespace FantasyVoxels
 
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 20;
+        public int RenderDistance = 16;
         public bool enableAO = false;
         float _fov = 70f;
         public float FOV
@@ -193,7 +195,7 @@ namespace FantasyVoxels
         ];
         #endregion
         
-        BasicEffect effect;
+        public BasicEffect basicEffect;
 
         public static BlendState shadowBlend,crosshair;
 
@@ -321,11 +323,11 @@ namespace FantasyVoxels
             sky = Content.Load<Effect>("Shaders/skybox");
             postProcessing = Content.Load<Effect>("Shaders/pscreen");
 
-            effect = new BasicEffect(MGame.Instance.GraphicsDevice);
-            effect.TextureEnabled = false;
-            effect.LightingEnabled = false;
-            effect.FogEnabled = false;
-            effect.VertexColorEnabled = false;
+            basicEffect = new BasicEffect(MGame.Instance.GraphicsDevice);
+            basicEffect.TextureEnabled = false;
+            basicEffect.LightingEnabled = false;
+            basicEffect.FogEnabled = false;
+            basicEffect.VertexColorEnabled = false;
 
             postProcessing.Parameters["AOSampleOffsets"]?.SetValue(new Vector2[8]
             {
@@ -776,6 +778,24 @@ namespace FantasyVoxels
                 });
             }
 
+            for (int _x = -RenderDistance; _x < RenderDistance; _x++)
+            {
+                for (int _y = -RenderDistance; _y < RenderDistance; _y++)
+                {
+                    for (int _z = -RenderDistance; _z < RenderDistance; _z++)
+                    {
+                        int x = _x + cx;
+                        int y = _y + cy;
+                        int z = _z + cz;
+
+                        // Check if we have exceeded the render distance
+                        if (MathF.Abs(x - cx) + MathF.Abs(y - cy) * 2 + MathF.Abs(z - cz) >= RenderDistance || !loadedChunks.TryGetValue(CCPos((x,y,z)), out _)) continue;
+
+                        EntityManager.UpdateChunk(CCPos((x,y,z)));
+                    }
+                }
+            }
+
             while (instantRemesh.Count > 0)
             {
                 var key = instantRemesh.Dequeue();
@@ -792,6 +812,7 @@ namespace FantasyVoxels
             foreach (var c in toRender.ToArray().AsSpan())
             {
                 long pos = CCPos(c);
+
                 if (!loadedChunks.TryGetValue(pos, out _)) continue;
 
                 BoundingBox chunkbounds = new BoundingBox(new Vector3(c.x, c.y, c.z) * Chunk.Size, (new Vector3(c.x, c.y, c.z) * Chunk.Size + new Vector3(Chunk.Size, loadedChunks[pos].MaxY + 1, Chunk.Size)));
@@ -878,7 +899,7 @@ namespace FantasyVoxels
         {
             sunView = Matrix.CreateRotationX(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15)));
 
-            float dayPerc = (float.Clamp(MathF.Sin(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15) % 360)) * 2, 0.1f, 0.9f) + 1) / 2f;
+            daylightPercentage = (float.Clamp(MathF.Sin(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15) % 360)) * 2f - 0.4f, -0.98f, 0f) + 1);
 
             GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             GraphicsDevice.BlendState = BlendState.NonPremultiplied;
@@ -906,7 +927,7 @@ namespace FantasyVoxels
             chunk.Parameters["time"]?.SetValue(totalTime);
             chunk.Parameters["sunDir"]?.SetValue(sunView.Forward);
 
-            chunk.Parameters["sunColor"]?.SetValue(Color.White.ToVector3() * dayPerc);
+            chunk.Parameters["sunColor"]?.SetValue(Color.White.ToVector3() * daylightPercentage);
             //Shadows
             /*
             chunk.Parameters["View"].SetValue(sunView);
@@ -973,28 +994,28 @@ namespace FantasyVoxels
                 GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, skyboxVerts, 0, skyboxVerts.Length / 3);
             }
 
-            effect.TextureEnabled = true;
-            effect.Texture = sunTexture;
+            basicEffect.TextureEnabled = true;
+            basicEffect.Texture = sunTexture;
 
-            effect.World = (Matrix.CreateWorld(new Vector3(-0.5f, -0.5f, -5), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView) * Matrix.CreateRotationY(MathHelper.ToRadians(180)));
-            effect.View = (view);
-            effect.Projection = (projection);
-            effect.Alpha = 1.0f;
-            effect.DiffuseColor = Color.White.ToVector3();
+            basicEffect.World = (Matrix.CreateWorld(new Vector3(-0.5f, -0.5f, -5), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView) * Matrix.CreateRotationY(MathHelper.ToRadians(180)));
+            basicEffect.View = (view);
+            basicEffect.Projection = (projection);
+            basicEffect.Alpha = 1.0f;
+            basicEffect.DiffuseColor = Color.White.ToVector3();
 
             GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             GraphicsDevice.DepthStencilState = DepthStencilState.None;
             GraphicsDevice.BlendState = BlendState.AlphaBlend;
 
-            foreach (var pass in effect.CurrentTechnique.Passes)
+            foreach (var pass in basicEffect.CurrentTechnique.Passes)
             {
                 pass.Apply();
                 GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, flatSprite, 0, flatSprite.Length / 3);
             }
-            effect.World = (Matrix.CreateWorld(new Vector3(-0.5f, -0.5f, 15), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView) * Matrix.CreateRotationY(MathHelper.ToRadians(180)));
-            effect.Texture = moonTexture;
+            basicEffect.World = (Matrix.CreateWorld(new Vector3(-0.5f, -0.5f, 15), Vector3.Forward, Vector3.Up) * Matrix.CreateScale(1) * (sunView) * Matrix.CreateRotationY(MathHelper.ToRadians(180)));
+            basicEffect.Texture = moonTexture;
 
-            foreach (var pass in effect.CurrentTechnique.Passes)
+            foreach (var pass in basicEffect.CurrentTechnique.Passes)
             {
                 pass.Apply();
                 GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, flatSprite, 0, flatSprite.Length / 3);
@@ -1014,6 +1035,13 @@ namespace FantasyVoxels
             player.Render();
 
             RenderChunks(true);
+
+            foreach (var c in toRender.ToArray().AsSpan())
+            {
+                long pos = CCPos(c);
+
+                EntityManager.RenderChunk(pos);
+            }
 
             //GraphicsDevice.DepthStencilState = DepthStencilState.None;
             //foreach (var c in toRender.ToArray().AsSpan())
@@ -1164,7 +1192,7 @@ namespace FantasyVoxels
                 if (Voxel.voxelTypes[vox].myClass != null) Voxel.voxelTypes[vox].myClass.TryUpdateBlock((x,y,z), loadedChunks[CCPos((cx, cy, cz))]);
             }
         }
-        public void SetVoxel(Vector3 p, int newVoxel)
+        public void SetVoxel(Vector3 p, int newVoxel, bool disableDrops = false)
         {
             int cx = (int)MathF.Floor(p.X / Chunk.Size);
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
@@ -1175,6 +1203,20 @@ namespace FantasyVoxels
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
+
+                if (newVoxel == 0 && !disableDrops)
+                {
+                    if (Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID >= 0)
+                    {
+                        var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID);
+                        droppedItem.position = p + Vector3.One * 0.6f;
+                        droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
+                        droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
+                        droppedItem.gravity = 2f;
+
+                        EntityManager.SpawnEntity(droppedItem);
+                    }
+                }
 
                 loadedChunks[CCPos((cx, cy, cz))].Modify(x, y, z, newVoxel);
             }

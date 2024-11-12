@@ -17,6 +17,7 @@ namespace FantasyVoxels.Saves
     struct EntitySaveData
     {
         public Vector3 position, velocity, rotation;
+        public byte health, maxHealth;
         public object customSaveData;
     }
     internal static class Save
@@ -36,20 +37,25 @@ namespace FantasyVoxels.Saves
             Directory.CreateDirectory(savename);
             Directory.CreateDirectory($"{savename}/chunk");
             Directory.CreateDirectory($"{savename}/entity");
+            IList<Task> writeTaskList = new List<Task>();
 
             foreach (Chunk chunk in chunks)
             {
                 int distance = int.Max(int.Max(int.Abs(Instance.playerChunkPos.x - chunk.chunkPos.x), int.Abs(Instance.playerChunkPos.y - chunk.chunkPos.y)), int.Abs(Instance.playerChunkPos.z - chunk.chunkPos.z));
                 if ((!chunk.modified && distance > 3) || chunk.CompletelyEmpty) continue;
 
-                await File.WriteAllBytesAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}"+(chunk.modified ? "" : "_unmodified") +".chunk",chunk.voxels);
+                writeTaskList.Add(File.WriteAllBytesAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}"+(chunk.modified ? "" : "_unmodified") +".chunk",chunk.voxels));
             }
+
+            await Task.WhenAll(writeTaskList);
 
             EntitySaveData playerSaveData = new EntitySaveData
             {
                 position = (Vector3)MGame.Instance.player.position,
                 velocity = MGame.Instance.player.velocity,
                 rotation = MGame.Instance.player.rotation,
+                health = MGame.Instance.player.health,
+                maxHealth = MGame.Instance.player.maxHealth,
                 customSaveData = MGame.Instance.player.CaptureCustomSaveData()
             };
 
@@ -62,7 +68,7 @@ namespace FantasyVoxels.Saves
 
             await File.WriteAllTextAsync($"{savename}/overworld.txt",sb.ToString());
 
-            await Task.Delay(1500);
+            await Task.Delay(4000);
         }
         public static string[] GetAllSavedWorlds()
         {
@@ -151,6 +157,8 @@ namespace FantasyVoxels.Saves
             entity.position = data.position;
             entity.velocity = data.velocity;
             entity.rotation = data.rotation;
+            entity.maxHealth = data.maxHealth;
+            entity.health = data.health;
             if (data.customSaveData != null) entity.RestoreCustomSaveData((JObject)data.customSaveData);
         }
         public static void DeleteSave(string _savename)

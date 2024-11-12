@@ -1,4 +1,6 @@
-﻿using Microsoft.Xna.Framework;
+﻿using GeonBit.UI.Entities;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -28,11 +30,21 @@ namespace FantasyVoxels
         public Vector3Double position;
         public Vector3 rotation, velocity;
         public BoundingBox bounds;
+        public long parentChunk;
         public float gravity;
         public bool grounded;
         public bool swimming;
         public byte health,maxHealth;
         protected bool disallowWalkingOffEdge;
+
+        private static VertexPositionTexture[] shadowVertices =
+        [
+            new(new Vector3(0, 0, 1), new Vector2(0,1)),
+            new(new Vector3(1, 0, 1), new Vector2(1,1)),
+            new(new Vector3(1, 0, 0), new Vector2(1,0)),
+            new(new Vector3(0, 0, 0), new Vector2(0,0)),
+        ];
+
         public abstract void Start();
         public virtual void Update()
         {
@@ -122,6 +134,82 @@ namespace FantasyVoxels
             {
                 position = oldPos;
                 grounded = true;
+            }
+        }
+    }
+    public static class EntityManager
+    {
+        private static Dictionary<long, List<Entity>> loadedEntities = new Dictionary<long, List<Entity>>();
+        private static Queue<Entity> delete = new Queue<Entity>();
+
+        public static void Clear()
+        {
+            loadedEntities.Clear();
+        }
+        public static void SpawnEntity(Entity entity)
+        {
+            int cx = (int)double.Floor(entity.position.X / Chunk.Size);
+            int cy = (int)double.Floor(entity.position.Y / Chunk.Size);
+            int cz = (int)double.Floor(entity.position.Z / Chunk.Size);
+
+            entity.parentChunk = MGame.CCPos((cx, cy, cz));
+
+            entity.Start();
+
+            Add(entity);
+        }
+        public static void DeleteEntity(Entity entity)
+        {
+            delete.Enqueue(entity);
+        }
+        public static void UpdateChunk(long chunk)
+        {
+            while(delete.Count > 0)
+            {
+                var entity = delete.Dequeue();
+                Remove(entity, entity.parentChunk);
+                entity.Destroyed();
+            }
+
+            if (!loadedEntities.TryGetValue(chunk, out List<Entity> value)) return;
+
+            foreach(var entity in value)
+            {
+                long oldpos = entity.parentChunk;
+
+                entity.Update();
+
+                if (entity.parentChunk != oldpos)
+                {
+                    Remove(entity, oldpos);
+                    Add(entity);
+                }
+            }
+        }
+        public static void RenderChunk(long chunk)
+        {
+            if (!loadedEntities.TryGetValue(chunk, out List<Entity> value)) return;
+
+            foreach (var entity in value)
+            {
+                entity.Render();
+            }
+        }
+        private static void Add(Entity entity)
+        {
+            List<Entity> list;
+            if(!loadedEntities.TryGetValue(entity.parentChunk,out list))
+            {
+                list = new List<Entity>();
+                loadedEntities.Add(entity.parentChunk,list);
+            }
+            list.Add(entity);
+        }
+        private static void Remove(Entity entity, long pos)
+        {
+            if (loadedEntities.TryGetValue(pos, out var list) && list.Contains(entity))
+            {
+                list.Remove(entity);
             }
         }
     }

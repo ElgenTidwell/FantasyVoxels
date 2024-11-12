@@ -18,7 +18,7 @@ namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 4.25f, run = 6.8f, sneak = 2f, swim = 0.5f;
+        static float walk = 4.15f, run = 6.8f, sneak = 2f, swim = 0.5f;
 
         MouseState oldState;
 
@@ -118,7 +118,7 @@ namespace FantasyVoxels.Entities
         public override void Update()
         {
             if (MathF.Abs(velocity.X + velocity.Z) < 4f) running = false;
-            running = (Keyboard.GetState().IsKeyDown(Keys.LeftControl) || running) && !crouched;
+            //running = (Keyboard.GetState().IsKeyDown(Keys.LeftControl) || running) && !crouched;
 
             crouched = Keyboard.GetState().IsKeyDown(Keys.LeftShift);
 
@@ -129,8 +129,8 @@ namespace FantasyVoxels.Entities
 
             bobTime += MGame.dt * ((curwalkspeed / walk-1)*0.3f+1);
 
-            xsin = MathF.Sin(bobTime * 8.1f) * bob;
-            ysin = MathF.Sin(bobTime * 8.1f * 2) * bob;
+            xsin = MathF.Sin(bobTime * 8.0f) * bob;
+            ysin = MathF.Sin(bobTime * 8.0f * 2) * bob;
 
             bob = Maths.MoveTowards(bob, bobMulti*1.2f, MGame.dt * 20 * float.Abs(bob-bobMulti*1.2f));
 
@@ -170,6 +170,20 @@ namespace FantasyVoxels.Entities
                 gravity = swimming ? 4 : 6.75f;
                 grounded = false;
             }
+            if(BetterKeyboard.HasBeenPressed(Keys.Q))
+            {
+                var item = hotbar.TakeItem(activeHotbarSlot,1);
+
+                if(item.HasValue)
+                {
+                    var droppedItem = new DroppedItem(item.Value.itemID);
+                    droppedItem.position = (Vector3)position + MGame.Instance.cameraForward * 0.6f;
+                    droppedItem.velocity = velocity + MGame.Instance.cameraForward*8;
+                    droppedItem.gravity = droppedItem.velocity.Y;
+
+                    EntityManager.SpawnEntity(droppedItem);
+                }
+            }
             if(crouched && swimming)
             {
                 gravity = -3f;
@@ -194,8 +208,6 @@ namespace FantasyVoxels.Entities
 
                 if(vID > 0)
                 {
-                    if(Voxel.voxelTypes[vID].droppedItemID >= 0) hotbar.AddItem(new Item { itemID = Voxel.voxelTypes[vID].droppedItemID, stack = 1 });
-
                     MGame.Instance.SetVoxel(hitTile, 0);
                 }
             }
@@ -235,6 +247,10 @@ namespace FantasyVoxels.Entities
 
             applyVelocity(wishDir);
             base.Update();
+        }
+        public void PickupItem(int id, byte stack = 1)
+        {
+            hotbar.AddItem(new Item { itemID = id, stack = stack });
         }
         void applyVelocity(Vector3 wishDir)
         {

@@ -18,12 +18,12 @@ namespace FantasyVoxels.ItemManagement
         public string name;
         public string displayName;
         public string texture;
+        public bool alwaysRenderAsSprite;
     }
     public struct Item
     {
         public int itemID;
         public byte stack;
-
         public Item(string name, byte stack)
         {
             itemID = ItemManager.GetItemID(name);
@@ -45,7 +45,7 @@ namespace FantasyVoxels.ItemManagement
             RegisterItem(new ItemData { type = ItemType.Block, placement = 9, name = "stone", displayName = "Stone" });
             RegisterItem(new ItemData { type = ItemType.Block, placement = 10, name = "planks", displayName = "Planks" });
             RegisterItem(new ItemData { type = ItemType.Block, placement = 11, name = "cobblestone", displayName = "Cobblestone" });
-            RegisterItem(new ItemData { type = ItemType.Block, placement = 12, name = "daisy", displayName = "Daisy" });
+            RegisterItem(new ItemData { type = ItemType.Block, placement = 12, name = "daisy", displayName = "Daisy", alwaysRenderAsSprite = true });
             RegisterItem(new ItemData { type = ItemType.Block, placement = 13, name = "lamp", displayName = "Lamp" });
         }
         public static int RegisterItem(ItemData data)

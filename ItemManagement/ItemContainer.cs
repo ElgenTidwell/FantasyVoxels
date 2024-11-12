@@ -75,8 +75,10 @@ namespace FantasyVoxels.ItemManagement
             items[slot] = new Item { itemID = -1, stack = 0 };
             return send;
         }
-        public Item TakeItem(int slot, byte quantity)
+        public Item? TakeItem(int slot, byte quantity)
         {
+            if (items[slot].stack == 0 || items[slot].itemID < 0) return null;
+
             if (quantity >= items[slot].stack) return TakeItemStack(slot);
 
             items[slot].stack = (byte)(items[slot].stack-quantity);

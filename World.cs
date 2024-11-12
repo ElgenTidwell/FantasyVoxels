@@ -1,4 +1,5 @@
 ﻿using FantasyVoxels.Blocks;
+using FantasyVoxels.Entities;
 using FantasyVoxels.ItemManagement;
 using FantasyVoxels.Saves;
 using Icaria.Engine.Procedural;
@@ -8,6 +9,7 @@ using Microsoft.Xna.Framework.Media;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Threading;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -1130,10 +1132,13 @@ namespace FantasyVoxels
 
             if (MGame.Instance.GraphicsDevice == null) return;
 
+            if (voxels[x + Size * (y + Size * z)] == newVoxel) return;
+
             modified = true;
+
             voxels[x + Size * (y + Size * z)] = (byte)newVoxel;
-            
-            for(int p = 0; p < 6; p++)
+
+            for (int p = 0; p < 6; p++)
             {
                 MGame.Instance.UpdateBlock(new Vector3(x + chunkPos.x * Size + positionChecks[p].x,y+chunkPos.y*Size + positionChecks[p].y, z+chunkPos.z*Size + positionChecks[p].z));
             }
