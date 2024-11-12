@@ -12,9 +12,14 @@ namespace FantasyVoxels
 {
     public static class VoxelStructurePlacer
     {
-        static ConcurrentDictionary<(int x, int y, int z), ConcurrentQueue<(int x, int y, int z, int vox)>> queudChunks = new ConcurrentDictionary<(int x, int y, int z), ConcurrentQueue<(int x, int y, int z, int vox)>>();
+        static ConcurrentDictionary<(int x, int y, int z), ConcurrentQueue<(int x, int y, int z, int vox)>> queuedChunks = new ConcurrentDictionary<(int x, int y, int z), ConcurrentQueue<(int x, int y, int z, int vox)>>();
         static Object lockQ = new object();
         
+        public static void Clear()
+        {
+            queuedChunks.Clear();
+        }
+
         public static void Place(int worldX, int worldY, int worldZ, VoxelStructure structure)
         {
             structure.Place(worldX, worldY, worldZ);
@@ -23,18 +28,18 @@ namespace FantasyVoxels
         {
             lock(lockQ)
             {
-                if (queudChunks.ContainsKey(chunkPos))
+                if (queuedChunks.TryGetValue(chunkPos, out ConcurrentQueue<(int x, int y, int z, int vox)> value))
                 {
-                    queudChunks[chunkPos].Enqueue(vox);
+                    value.Enqueue(vox);
                     if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos), out Chunk chunk))
                     {
                         chunk.queueModified = true;
                     }
                 }
-                else if (!queudChunks.ContainsKey(chunkPos))
+                else
                 {
-                    queudChunks.TryAdd(chunkPos, new ConcurrentQueue<(int x, int y, int z, int vox)>());
-                    queudChunks[chunkPos].Enqueue(vox);
+                    queuedChunks.TryAdd(chunkPos, new ConcurrentQueue<(int x, int y, int z, int vox)>());
+                    queuedChunks[chunkPos].Enqueue(vox);
                     if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos(chunkPos), out Chunk chunk))
                     {
                         chunk.queueModified = true;
@@ -42,13 +47,32 @@ namespace FantasyVoxels
                 }
             }
         }
-        public static ConcurrentQueue<(int x, int y, int z, int vox)> GetQueue((int x, int y, int z) chunkPos)
+        //public static ConcurrentQueue<(int x, int y, int z, int vox)> GetQueue((int x, int y, int z) chunkPos)
+        //{
+        //    if (queuedChunks.TryGetValue(chunkPos, out var queue))
+        //    {
+        //        return queue;
+        //    }
+        //    return null;
+        //}
+        public static int GetQueueLength((int x, int y, int z) chunkPos)
         {
-            if (queudChunks.TryGetValue(chunkPos, out var queue))
+            if (queuedChunks.TryGetValue(chunkPos, out var queue))
             {
-                return queue;
+                return queue.Count;
             }
-            return null;
+            return 0;
+        }
+        public static (int x, int y, int z, int vox) Dequeue((int x, int y, int z) chunkPos)
+        {
+            lock(lockQ)
+            {
+                if (queuedChunks.TryGetValue(chunkPos, out var queue) && queue.TryDequeue(out var o))
+                {
+                    return o;
+                }
+                return (-1, -1, -1, -1);
+            }
         }
     }
     public abstract class VoxelStructure
@@ -76,8 +100,6 @@ namespace FantasyVoxels
 
         public override void Place(int worldX, int worldY, int worldZ)
         {
-            int radius = 2;
-            var rand = MGame.Instance.worldRandom;
             int treeHeight = 4 + (int)((IcariaNoise.GradientNoise(worldX * 0.8f, worldZ * 0.8f)+1) * 4)*3;
 
             for (int y = worldY + 3; y <= worldY + treeHeight+1; y++)
@@ -96,10 +118,8 @@ namespace FantasyVoxels
                     }
                 }
             }
-            for (int y = worldY - 4; y <= worldY + treeHeight; y++)
+            for (int y = worldY; y <= worldY + treeHeight; y++)
             {
-                radius = (int)MathF.Max(6 - MathF.Pow((y + worldY - 6) / (float)(treeHeight / 2 + worldY), 2) * 2, 3);
-
                 SetVoxel(worldX, y, worldZ, BARK);
             }
         }

@@ -4,6 +4,7 @@ using FantasyVoxels.UI;
 using GeonBit.UI;
 using GeonBit.UI.Entities;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
@@ -29,15 +30,16 @@ namespace FantasyVoxels
         public int seed = Environment.TickCount;
         public Random worldRandom;
 
+        #region Rendering Variables
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
-
-        public SpriteBatch spriteBatch => _spriteBatch;
+        private SamplerState crunchy;
 
         public Matrix world, view, projection, sunProjection, sunView;
         public Vector3 cameraPosition;
         public Vector3 cameraForward;
 
+        public SpriteBatch spriteBatch => _spriteBatch;
         private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
         public Texture2D colors,normals,noise,uiTextures,sunTexture,moonTexture,aoMap;
         private Effect chunk;
@@ -47,20 +49,15 @@ namespace FantasyVoxels
         private int Width => GraphicsDevice.Viewport.Width;
         private int Height => GraphicsDevice.Viewport.Height;
 
-        public bool gamePaused;
-
-        public Player player;
-        public ConcurrentDictionary<long, Chunk> loadedChunks = new ConcurrentDictionary<long, Chunk>();
-        ConcurrentQueue<(int x, int y, int z)> toGenerate = new ConcurrentQueue<(int x, int y, int z)>();
-        ConcurrentQueue<(int x, int y, int z)> toMesh = new ConcurrentQueue<(int x, int y, int z)>();
-        Queue<long> instantRemesh = new Queue<long>();
+        public BoundingFrustum frustum = new BoundingFrustum(Matrix.Identity);
 
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 16;
+        public int RenderDistance = 20;
         public bool enableAO = false;
-        float _fov = 90f;
-        public float FOV {
+        float _fov = 70f;
+        public float FOV
+        {
             get
             {
                 return _fov;
@@ -75,10 +72,22 @@ namespace FantasyVoxels
             }
         }
 
-        BoundingFrustum frustum = new BoundingFrustum(Matrix.Identity);
+        #endregion
+
+        public bool gamePaused;
+
+        public Player player;
+        public (int x, int y, int z) playerChunkPos;
+
+        #region Chunking Variables
+        public ConcurrentDictionary<long, Chunk> loadedChunks = new ConcurrentDictionary<long, Chunk>();
+        public ConcurrentQueue<(int x, int y, int z)> toGenerate = new ConcurrentQueue<(int x, int y, int z)>();
+        public ConcurrentQueue<(int x, int y, int z)> toMesh = new ConcurrentQueue<(int x, int y, int z)>();
+        
+        Queue<long> instantRemesh = new Queue<long>();
+        #endregion
 
         DepthStencilState stencilDraw;
-        (int x, int y, int z) playerChunkPos;
 
         int threadsActive = 0;
         TaskPool generationPool;
@@ -88,6 +97,7 @@ namespace FantasyVoxels
         int meshesWorking;
         int generateWorking;
 
+        #region verts
         public VertexPosition[] boxVertices =
         [
             new VertexPosition(new Vector3(0, 0, 0)),
@@ -181,19 +191,28 @@ namespace FantasyVoxels
             1,
             6
         ];
-
+        #endregion
+        
         BasicEffect effect;
 
         public static BlendState shadowBlend,crosshair;
 
+        #region AudioVariables
 
-        enum PlayState
+        const int numWalkSounds = 4, numPlaceSounds = 4;
+
+        SoundEffect[,] blockSounds = new SoundEffect[Enum.GetValues(typeof(Voxel.SurfaceType)).Cast<int>().Max()-1, numPlaceSounds+numWalkSounds];
+
+        #endregion
+        public enum PlayState
         {
             World,
             Menu,
+            LoadingWorld,
+            SavingWorld,
         }
 
-        PlayState currentPlayState = PlayState.Menu;
+        public PlayState currentPlayState = PlayState.Menu;
 
         public static VertexPosition[] GenerateSphereVerticesDirect(float radius = 1.0f, int latitudeSegments = 10, int longitudeSegments = 10)
         {
@@ -243,7 +262,7 @@ namespace FantasyVoxels
             _graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
             _graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
             _graphics.IsFullScreen = true;
-            _graphics.HardwareModeSwitch = true;
+            _graphics.HardwareModeSwitch = false;
             _graphics.SynchronizeWithVerticalRetrace = false;
             _graphics.PreferMultiSampling = false;
 
@@ -263,7 +282,8 @@ namespace FantasyVoxels
         {
             float minlength = float.Min(Window.ClientBounds.Width/1920f, Window.ClientBounds.Height/1080f);
 
-            UserInterface.Active.GlobalScale = minlength;
+            UserInterface.Active.GlobalScale = float.Round(minlength*16)/16;
+            projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(_fov), GraphicsDevice.Viewport.AspectRatio, 0.01f, 1000f);
         }
 
         protected override void Initialize()
@@ -357,7 +377,29 @@ namespace FantasyVoxels
                 AlphaSourceBlend = Blend.One,
                 AlphaDestinationBlend = Blend.InverseSourceAlpha,
             };
+            crunchy = new SamplerState
+            {
+                AddressU = TextureAddressMode.Clamp,
+                AddressV = TextureAddressMode.Clamp,
+                AddressW = TextureAddressMode.Clamp,
+                Filter = TextureFilter.Point,
+                MaxMipLevel = 0,
+                MaxAnisotropy = 0
+            };
             generationPool = new TaskPool(4);
+
+
+            //for(int i = 1; i < blockSounds.GetLength(0); i++)
+            //{
+            //    for(int w = 0; w < numWalkSounds; w++)
+            //    {
+            //        blockSounds[i-1, w] = Content.Load<SoundEffect>($"Sounds/blocks/{(Voxel.SurfaceType)i}/step-{w:00}");
+            //    }
+            //    for (int p = 0; p < numPlaceSounds; p++)
+            //    {
+            //        blockSounds[i-1, p+numWalkSounds] = Content.Load<SoundEffect>($"Sounds/blocks/{(Voxel.SurfaceType)i}/place-{p:00}");
+            //    }
+            //}
         }
         protected override void UnloadContent()
         {
@@ -368,22 +410,23 @@ namespace FantasyVoxels
             base.UnloadContent();
         }
 
-        public void LoadWorld()
+        public async Task LoadWorld(bool fromsave = false)
         {
-            TitleMenu.Cleanup();
+            VoxelStructurePlacer.Clear();
+            toGenerate.Clear();
+            toMesh.Clear();
 
+            TitleMenu.Cleanup();
             chunkThreadCancel = new();
 
-            chunkUpdateThread = new Thread(() => ChunkThread(chunkThreadCancel.Token));
+            chunkUpdateThread = new Thread(() => BackgroundWorkers.BackgroundChunks(chunkThreadCancel.Token));
             chunkUpdateThread.Name = "Background Chunk Update Thread";
             chunkUpdateThread.Priority = ThreadPriority.AboveNormal;
             chunkUpdateThread.IsBackground = false;
-
+            
             IsMouseVisible = false;
 
             player = new Player();
-
-            worldRandom = new Random(seed);
 
             player.position = new Vector3(0, 256, 0);
 
@@ -391,11 +434,52 @@ namespace FantasyVoxels
 
             chunkUpdateThread.Start();
 
-            player.position.Y = Chunk.GetTerrainHeight(0, 0) + 14;
+            player.position.Y = Chunk.GetTerrainHeight(0, 0) + 2;
 
             player.Start();
 
-            currentPlayState = PlayState.World;
+            if(!fromsave)
+            {
+                const int spawnGenRadius = 3;
+
+                List<(int x, int y, int z)> generate = new List<(int x, int y, int z)>();
+
+                int cx;
+                int cy;
+                int cz;
+
+                cx = (int)MathF.Floor(cameraPosition.X / Chunk.Size);
+                cy = (int)MathF.Floor(cameraPosition.Y / Chunk.Size);
+                cz = (int)MathF.Floor(cameraPosition.Z / Chunk.Size);
+
+                for (int x = -spawnGenRadius; x <= spawnGenRadius; x++)
+                {
+                    for (int y = -2; y <= 2; y++)
+                    {
+                        for (int z = -spawnGenRadius; z <= spawnGenRadius; z++)
+                        {
+                            var t = (x + cx, y + cy, z + cz);
+                            if (!loadedChunks.ContainsKey(CCPos(t)))
+                            {
+                                generate.Add((x, y, z));
+                            }
+                        }
+                    }
+                }
+
+                await Parallel.ForEachAsync(generate, async (pos, token) =>
+                {
+                    Chunk c = new Chunk();
+
+                    c.chunkPos = pos;
+
+                    c.Generate();
+                    c.Remesh();
+                    c.CheckQueue();
+
+                    loadedChunks.TryAdd(CCPos(pos), c);
+                });
+            }
         }
         public void QuitWorld()
         {
@@ -408,8 +492,8 @@ namespace FantasyVoxels
 
             player.Destroyed();
 
-            TitleMenu.ReInit();
             currentPlayState = PlayState.Menu;
+            TitleMenu.ReInit();
         }
 
         public static long CCPos((int x, int y, int z) pos)
@@ -436,69 +520,6 @@ namespace FantasyVoxels
 
             loadedChunks.TryAdd(CCPos(t), c);
         }
-
-        void ChunkThread(CancellationToken cancel)
-        {
-            List<long> deleteChunks = new List<long>();
-            try
-            {
-                while (!cancel.IsCancellationRequested)
-                {
-                    foreach (var c in loadedChunks.ToArray().AsSpan())
-                    {
-                        Chunk currentChunk = c.Value;
-                        BoundingBox chunkbounds = new BoundingBox(new Vector3(currentChunk.chunkPos.x, currentChunk.chunkPos.y, currentChunk.chunkPos.z) * Chunk.Size,
-                                                                 (new Vector3(currentChunk.chunkPos.x + 1, currentChunk.chunkPos.y + 1, currentChunk.chunkPos.z + 1) * Chunk.Size));
-
-                        float cDist = MathF.Abs(currentChunk.chunkPos.x - playerChunkPos.x) + MathF.Abs(currentChunk.chunkPos.y - playerChunkPos.y) + MathF.Abs(currentChunk.chunkPos.z - playerChunkPos.z);
-                        if (cDist >= RenderDistance + 4)
-                        {
-                            deleteChunks.Add(c.Key);
-                            continue;
-                        }
-                        if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint) continue;
-
-                        if (currentChunk.queueModified)
-                        {
-                            currentChunk.queueModified = false;
-                            currentChunk.CheckQueue(true);
-                        }
-
-                        if (currentChunk.visOutOfDate)
-                        {
-                            currentChunk.visOutOfDate = false;
-                            currentChunk.GenerateVisibility();
-                        }
-
-                        if (currentChunk.lightOutOfDate)
-                        {
-                            if (currentChunk.CompletelyEmpty)
-                                currentChunk.ReLight(false);
-                            else
-                                currentChunk.Remesh();
-                        }
-
-                        if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains(currentChunk.chunkPos) && toMesh.Count < 8)
-                        {
-                            currentChunk.Remesh();
-                        }
-                    }
-
-                    if (deleteChunks.Count == 0) continue;
-
-                    foreach (long id in deleteChunks)
-                    {
-                        loadedChunks.TryRemove(id, out _);
-                    }
-                    deleteChunks.Clear();
-                }
-            }
-            catch(ThreadInterruptedException ex)
-            {
-                Console.WriteLine(ex.ToString());
-                return;
-            }
-        }
         protected override void Update(GameTime gameTime)
         {
             dt = gamePaused ? 0 : (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -513,6 +534,7 @@ namespace FantasyVoxels
                     TitleMenu.Update();
 
                     break;
+                case PlayState.LoadingWorld:
                 case PlayState.World:
 
                     UpdateWorld();
@@ -539,7 +561,15 @@ namespace FantasyVoxels
                 }
             }
 
-            if (!gamePaused)
+            if (BetterKeyboard.HasBeenPressed(Keys.F12)) TakeScreenCap();
+
+            if(!gamePaused && !IsActive)
+            {
+                gamePaused = true;
+                PauseMenu.Show();
+            }
+
+            if (!gamePaused && currentPlayState != PlayState.LoadingWorld)
             {
                 WorldTimeManager.Tick();
 
@@ -549,8 +579,6 @@ namespace FantasyVoxels
             {
                 PauseMenu.Update();
             }
-
-
             frustum = new BoundingFrustum(world * view * projection);
 
             int cx;
@@ -825,6 +853,7 @@ namespace FantasyVoxels
 
             switch (currentPlayState)
             {
+                default:
                 case PlayState.Menu:
 
                     TitleMenu.Render();
@@ -849,15 +878,15 @@ namespace FantasyVoxels
         {
             sunView = Matrix.CreateRotationX(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15)));
 
-            float dayPerc = (MathF.Sin(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15) % 360)) + 1) / 2f;
+            float dayPerc = (float.Clamp(MathF.Sin(MathHelper.ToRadians((WorldTimeManager.WorldTime / 15) % 360)) * 2, 0.1f, 0.9f) + 1) / 2f;
 
             GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             GraphicsDevice.BlendState = BlendState.NonPremultiplied;
             GraphicsDevice.DepthStencilState = DepthStencilState.Default;
 
-            GraphicsDevice.SamplerStates[0] = SamplerState.PointWrap;
-            GraphicsDevice.SamplerStates[1] = SamplerState.PointWrap;
-            GraphicsDevice.SamplerStates[2] = SamplerState.PointWrap;
+            GraphicsDevice.SamplerStates[0] = crunchy;
+            GraphicsDevice.SamplerStates[1] = crunchy;
+            GraphicsDevice.SamplerStates[2] = crunchy;
 
             sky.Parameters["cameraPosition"]?.SetValue(cameraPosition);
             sky.Parameters["cameraForward"]?.SetValue(cameraForward);
@@ -877,7 +906,7 @@ namespace FantasyVoxels
             chunk.Parameters["time"]?.SetValue(totalTime);
             chunk.Parameters["sunDir"]?.SetValue(sunView.Forward);
 
-            chunk.Parameters["sunColor"]?.SetValue(Color.White.ToVector3() * MathF.Max(dayPerc, 0.04f));
+            chunk.Parameters["sunColor"]?.SetValue(Color.White.ToVector3() * dayPerc);
             //Shadows
             /*
             chunk.Parameters["View"].SetValue(sunView);
@@ -1057,7 +1086,33 @@ namespace FantasyVoxels
 
             player.RenderUI();
         }
+        public void TakeScreenCap()
+        {
 
+            int w = GraphicsDevice.PresentationParameters.BackBufferWidth;
+            int h = GraphicsDevice.PresentationParameters.BackBufferHeight;
+
+            //force a frame to be drawn (otherwise back buffer is empty) 
+            Draw(new GameTime());
+
+            //pull the picture from the buffer 
+            int[] backBuffer = new int[w * h];
+            GraphicsDevice.GetBackBufferData(backBuffer);
+
+            //copy into a texture 
+            Texture2D texture = new Texture2D(GraphicsDevice, w, h, false, GraphicsDevice.PresentationParameters.BackBufferFormat);
+            texture.SetData(backBuffer);
+
+            if (!Directory.Exists($"{Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)}/fvoxel/screenshots")) Directory.CreateDirectory($"{Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)}/fvoxel/screenshots");
+
+            //save to disk 
+            Stream stream = File.OpenWrite($"{Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)}/fvoxel/screenshots/{System.DateTime.Now:yyyyMMddHHmmss}.png");
+
+            texture.SaveAsPng(stream, w, h);
+            stream.Dispose();
+
+            texture.Dispose();
+        }
         public int GrabVoxel(Vector3 p)
         {
             int cx = (int)MathF.Floor(p.X / Chunk.Size);
@@ -1091,6 +1146,23 @@ namespace FantasyVoxels
                 return true;
             }
             return true;
+        }
+        public void UpdateBlock(Vector3 p)
+        {
+            int cx = (int)MathF.Floor(p.X / Chunk.Size);
+            int cy = (int)MathF.Floor(p.Y / Chunk.Size);
+            int cz = (int)MathF.Floor(p.Z / Chunk.Size);
+
+            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
+            {
+                int x = (int)(p.X - cx * Chunk.Size);
+                int y = (int)(p.Y - cy * Chunk.Size);
+                int z = (int)(p.Z - cz * Chunk.Size);
+
+                int vox = loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)];
+
+                if (Voxel.voxelTypes[vox].myClass != null) Voxel.voxelTypes[vox].myClass.TryUpdateBlock((x,y,z), loadedChunks[CCPos((cx, cy, cz))]);
+            }
         }
         public void SetVoxel(Vector3 p, int newVoxel)
         {
@@ -1131,19 +1203,19 @@ namespace FantasyVoxels
     }
     public static class CollisionDetector
     {
-        public static bool IsSolidTile(int x, int y, int z)
+        public static bool IsSolidTile(int x, int y, int z, bool raycast = false)
         {
             int v = MGame.Instance.GrabVoxel(new Vector3(x, y, z));
 
             if (v == -1) return true;
 
-            return v != 0 && !Voxel.voxelTypes[v].ignoreCollision;
+            return v != 0 && (raycast? !Voxel.voxelTypes[v].ignoreRaycast : !Voxel.voxelTypes[v].ignoreCollision);
         }
-        public static Vector3 ResolveCollision(BoundingBox aabb, Vector3 position, ref Vector3 velocity)
+        public static Vector3Double ResolveCollision(BoundingBox aabb, Vector3Double position, ref Vector3 velocity)
         {
             // Get the bounds of the AABB
-            Vector3 min = aabb.Min + position;
-            Vector3 max = aabb.Max + position;
+            Vector3Double min = aabb.Min + position;
+            Vector3Double max = aabb.Max + position;
 
             // Calculate the AABB's current tile bounds
             int minX = (int)Math.Floor(min.X);
@@ -1154,8 +1226,8 @@ namespace FantasyVoxels
             int maxZ = (int)Math.Ceiling(max.Z);
 
             // Initialize resolved position and minimum overlap variables
-            Vector3 resolvedPosition = position; // Start with the original position
-            float minOverlap = float.MaxValue;
+            Vector3Double resolvedPosition = position; // Start with the original position
+            double minOverlap = double.MaxValue;
             Vector3 collisionNormal = Vector3.Zero;
 
             float stepy = 0f;
@@ -1175,9 +1247,9 @@ namespace FantasyVoxels
                             bool flipy = y > (min.Y + max.Y) / 2f;
                             bool flipz = z > (min.Z + max.Z) / 2f;
                             // Calculate overlaps for each axis
-                            float overlapX = (flipx) ? max.X - x : min.X - (x + 1);
-                            float overlapY = (flipy) ? max.Y - y : min.Y - (y + 1);
-                            float overlapZ = (flipz) ? max.Z - z : min.Z - (z + 1);
+                            double overlapX = (flipx) ? max.X - x : min.X - (x + 1);
+                            double overlapY = (flipy) ? max.Y - y : min.Y - (y + 1);
+                            double overlapZ = (flipz) ? max.Z - z : min.Z - (z + 1);
 
                             // Compare overlaps and update minimum overlap and normal accordingly
                             if (Math.Abs(overlapX) < Math.Abs(minOverlap))
@@ -1199,7 +1271,7 @@ namespace FantasyVoxels
                             // Resolve the collision based on the smallest overlap
                             if (minOverlap != float.MaxValue)
                             {
-                                resolvedPosition += (minOverlap + float.Epsilon) * collisionNormal;
+                                resolvedPosition += ((float)minOverlap + float.Epsilon) * collisionNormal;
                                 velocity = Maths.ProjectOnPlane(velocity, collisionNormal);
                                 minOverlap = float.MaxValue;
 

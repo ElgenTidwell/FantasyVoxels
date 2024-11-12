@@ -9,7 +9,7 @@
   <SpaceAfter xsi:nil="true" />
   <ShadowScale xsi:nil="true" />
   <DefaultSize xsi:nil="true" />
-  <Scale>0.8</Scale>
+  <Scale>1</Scale>
   <FillColor>
     <B>204</B>
     <G>204</G>
@@ -24,6 +24,6 @@
     <A>255</A>
     <PackedValue>4278190080</PackedValue>
   </OutlineColor>
-  <OutlineWidth>2</OutlineWidth>
+  <OutlineWidth>0</OutlineWidth>
   <ForceAlignCenter>false</ForceAlignCenter>
 </DefaultStyles>

@@ -27,22 +27,29 @@ namespace FantasyVoxels.UI
             mainMenu.AddChild(new Button("Quit to Title")).OnClick += GoToMainMenu;
         }
 
-        private static void GoToMainMenu(GeonBit.UI.Entities.Entity entity)
+        private static async void GoToMainMenu(GeonBit.UI.Entities.Entity entity)
         {
             Hide();
-            Save.SaveToFile(Save.WorldName);
+
+            var label = new Label("Saving World...", Anchor.Center);
+            UserInterface.Active.AddEntity(label);
+
+            MGame.Instance.currentPlayState = MGame.PlayState.SavingWorld;
+
+            await Save.SaveToFile(Save.WorldName);
+
             Instance.QuitWorld();
+            UserInterface.Active.RemoveEntity(label);
         }
         public static void Update()
         {
 
         }
-        public static void Show()
+        public static async void Show()
         {
             Instance.IsMouseVisible = true;
             Instance.gamePaused = true;
             UserInterface.Active.AddEntity(mainMenu);
-            Save.SaveToFile(Save.WorldName);
         }
         public static void Hide()
         {

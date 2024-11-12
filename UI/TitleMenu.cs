@@ -41,6 +41,8 @@ namespace FantasyVoxels.UI
 
         private static Panel mainMenu;
         private static Panel worldBrowser;
+        private static Panel optionsMenu;
+
         private static SelectList worldBrowserWorlds;
         private static Panel worldCreator;
 
@@ -63,7 +65,7 @@ namespace FantasyVoxels.UI
             mainMenu.AddChild(new Header("UNNAMED FANTASY VOXEL GAME", Anchor.TopCenter));
 
             mainMenu.AddChild(new Button("Singleplayer", ButtonSkin.Alternative, Anchor.Center)).OnClick += GoToWorldBrowser;
-            mainMenu.AddChild(new Button("Options", ButtonSkin.Alternative));
+            mainMenu.AddChild(new Button("Options", ButtonSkin.Alternative)).OnClick += GoToOptions;
             mainMenu.AddChild(new Button("Quit Game", ButtonSkin.Alternative)).OnClick += QuitPressed;
 
 
@@ -126,12 +128,18 @@ namespace FantasyVoxels.UI
         private static void GoToOptions(GeonBit.UI.Entities.Entity entity)
         {
             currentMenu = CurrentMenu.Options;
+
+            if (mainMenu.Parent != null) UserInterface.Active.RemoveEntity(mainMenu);
+            if (worldBrowser.Parent != null) UserInterface.Active.RemoveEntity(worldBrowser);
+            if (worldCreator.Parent != null) UserInterface.Active.RemoveEntity(worldCreator);
+
+            UserInterface.Active.AddEntity(optionsMenu);
         }
         private static void QuitPressed(GeonBit.UI.Entities.Entity entity)
         {
             Instance.Exit();
         }
-        private static void TryPlayWorld(GeonBit.UI.Entities.Entity entity)
+        private static async void TryPlayWorld(GeonBit.UI.Entities.Entity entity)
         {
             if (string.IsNullOrEmpty(worldBrowserWorlds.SelectedValue)) return;
 
@@ -142,17 +150,27 @@ namespace FantasyVoxels.UI
             if (string.IsNullOrEmpty(worldBrowserWorlds.SelectedValue)) return;
 
             Save.DeleteSave(worldBrowserWorlds.SelectedValue);
+
             var l = worldBrowserWorlds.Items.ToList(); l.Remove(worldBrowserWorlds.SelectedValue);
+
             worldBrowserWorlds.Items = l.ToArray();
         }
-        private static void CreateNewWorld(GeonBit.UI.Entities.Entity entity)
+        private static async void CreateNewWorld(GeonBit.UI.Entities.Entity entity)
         {
             if (string.IsNullOrEmpty(worldName.TextParagraph.Text)) return;
             WorldTimeManager.SetWorldTime(0f);
             Save.WorldName = worldName.TextParagraph.Text;
             Instance.seed = string.IsNullOrEmpty(worldSeed.TextParagraph.Text) ? Environment.TickCount : worldSeed.TextParagraph.Text.GetHashCode();
+
             Mouse.SetPosition(200, 200);
-            Instance.LoadWorld();
+
+            var label = new Label("Loading World...", Anchor.Center);
+            UserInterface.Active.AddEntity(label);
+
+            await Instance.LoadWorld();
+
+            UserInterface.Active.RemoveEntity(label);
+            Instance.currentPlayState = PlayState.World;
         }
 
 

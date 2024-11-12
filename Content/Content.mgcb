@@ -18,10 +18,20 @@
 /processor:EffectProcessor
 /build:../Working/Shaders/chunk.fx;Shaders/chunk.fx
 
+#begin ../Working/Shaders/chunkbuilder.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/chunkbuilder.fx;Shaders/chunkbuilder.fx
+
 #begin ../Working/Shaders/pscreen.fx
 /importer:EffectImporter
 /processor:EffectProcessor
 /build:../Working/Shaders/pscreen.fx;Shaders/pscreen.fx
+
+#begin ../Working/Shaders/screencomp.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/screencomp.fx;Shaders/screencomp.fx
 
 #begin ../Working/Shaders/skybox.fx
 /importer:EffectImporter
@@ -44,6 +54,18 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/aomap.png;Textures/aomap.png
+
+#begin ../Working/Textures/colors_backupspring.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/colors_backupspring.png;Textures/colors_backupspring.png
 
 #begin ../Working/Textures/colors.png
 /importer:TextureImporter
@@ -3202,6 +3224,9 @@
 /processorParam:TextureFormat=Compressed
 /build:GeonBit.UI/Themes/lowres/fonts/Bold.spritefont
 
+#begin GeonBit.UI/Themes/lowres/fonts/gameFont.ttf
+/copy:GeonBit.UI/Themes/lowres/fonts/gameFont.ttf
+
 #begin GeonBit.UI/Themes/lowres/fonts/Italic.spritefont
 /importer:FontDescriptionImporter
 /processor:FontDescriptionProcessor
@@ -4607,12 +4632,3 @@
 
 #begin GeonBit.UI/Themes/lowres/ThemeData.xml
 /copy:GeonBit.UI/Themes/lowres/ThemeData.xml
-#begin ../Working/Shaders/chunkbuilder.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/build:../Working/Shaders/chunkbuilder.fx;Shaders/chunkbuilder.fx
-
-#begin ../Working/Shaders/screencomp.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/build:../Working/Shaders/screencomp.fx;Shaders/screencomp.fx

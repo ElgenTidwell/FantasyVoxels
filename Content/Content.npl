@@ -27,6 +27,13 @@
 			"action": "build",
 			"importer": "EffectImporter",
 			"processor": "EffectProcessor"
+		},
+		"sounds": {
+			"path": "Sounds/*.ogg",
+			"recursive": "True",
+			"action": "build",
+			"importer": "SoundEffectImporter",
+			"processor": "SoundEffectProcessor"
 		}
 	}
 }

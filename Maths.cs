@@ -92,7 +92,7 @@ namespace FantasyVoxels
 
                 {
                     // Check if the current tile is not empty
-                    if (CollisionDetector.IsSolidTile(x,y,z))
+                    if (CollisionDetector.IsSolidTile(x,y,z,true))
                     {
                         return true;
                     }

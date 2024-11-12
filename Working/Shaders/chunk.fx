@@ -130,7 +130,7 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
         voxShadeEffect = lerp(1.8f, 0.1f, abs(sin(time * 0.6 + radians(((tile.x / ChunkSize)) * 180))) * 0.3f);
         voxAlphaEffect = abs(sin1) * 0.1f + 1;
         
-        finPos.y += (sin1 * sin2)*0.5f;
+        finPos.y += (sin1 * sin2)*0.2f;
     }
     else if (effect == 2)
     {
@@ -224,8 +224,8 @@ PSOut MainPS(VSOutput input)
     
     float2 depth = input.Depth.xy;
     
-    float fog = max(depth.x, 0) / (renderDistance * ChunkSize * 0.5f);
-    float fogColor = saturate(normalize(input.WorldPos - cameraPosition).y);
+    float fog = max(depth.x - ChunkSize * 0.5f, 0) / ((renderDistance-0.5f) * ChunkSize * 0.5f);
+    float fogColor = pow(saturate(normalize(input.WorldPos - cameraPosition).y),0.8f);
     
     float4 dat = input.Color;
     
@@ -270,9 +270,9 @@ PSOut MainPS(VSOutput input)
     
     float ao = tex2D(aomapSampler, input.AOCoord);
     
-    float3 desCol = color.xyz * (dat.r * (realBump + 1) * sunColor) * dat.g * ao;
+    float3 desCol = color.xyz * (dat.g * (realBump + 1) * sunColor + dat.b) * ao;
 
-    output.Color0 = float4(lerp(desCol, lerp(skyBandColor,skyColor,fogColor), pow(saturate(fog), 1.25f)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), saturate(fog)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {

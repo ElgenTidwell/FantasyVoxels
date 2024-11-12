@@ -1,4 +1,5 @@
 ﻿using Microsoft.Xna.Framework;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,21 +8,38 @@ using System.Threading.Tasks;
 
 namespace FantasyVoxels
 {
+    public struct Vector3Double
+    {
+        public double X, Y, Z;
+        public Vector3Double(double X, double Y, double Z)
+        {
+            this.X = X;
+            this.Y = Y;
+            this.Z = Z;
+        }
+
+        public static implicit operator Vector3Double(Vector3 a) => new Vector3Double(a.X,a.Y,a.Z);
+        public static explicit operator Vector3(Vector3Double a) => new Vector3((float)a.X, (float)a.Y, (float)a.Z);
+        public static Vector3Double operator +(Vector3Double a,Vector3Double b) => new Vector3Double(a.X+b.X,a.Y+b.Y,a.Z+b.Z);
+        public static Vector3Double operator *(double b, Vector3Double a) => new Vector3Double(a.X*b,a.Y*b,a.Z*b);
+    }
     public abstract class Entity
     {
-        public Vector3 position, rotation, velocity;
+        public Vector3Double position;
+        public Vector3 rotation, velocity;
         public BoundingBox bounds;
         public float gravity;
         public bool grounded;
         public bool swimming;
+        public byte health,maxHealth;
         protected bool disallowWalkingOffEdge;
         public abstract void Start();
         public virtual void Update()
         {
-            if (grounded) gravity = -0.6f;
+            if (grounded) gravity = !swimming?-0.6f:0;
             else
             {
-                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*14f) : gravity - 20 * MGame.dt;
+                gravity = swimming? Maths.MoveTowards(gravity, -1f,MGame.dt*14f) : gravity - 20 * MGame.dt;
             }
 
             velocity.Y = grounded ? 0 : gravity;
@@ -31,32 +49,34 @@ namespace FantasyVoxels
         public abstract void Render();
         public abstract void Destroyed();
 
+        public abstract object CaptureCustomSaveData();
+        public abstract void RestoreCustomSaveData(JObject data);
 
         public void HandleCollisions()
         {
-            Vector3 min = bounds.Min + position;
-            Vector3 max = bounds.Max + position;
+            Vector3Double min = bounds.Min + position;
+            Vector3Double max = bounds.Max + position;
 
-            int cx = (int)MathF.Floor(min.X / Chunk.Size);
-            int cy = (int)MathF.Floor(min.Y / Chunk.Size);
-            int cz = (int)MathF.Floor(min.Z / Chunk.Size);
-
-            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
-
-            cx = (int)MathF.Floor(max.X / Chunk.Size);
-            cy = (int)MathF.Floor(max.Y / Chunk.Size);
-            cz = (int)MathF.Floor(max.Z / Chunk.Size);
+            int cx = (int)Math.Floor(min.X / Chunk.Size);
+            int cy = (int)Math.Floor(min.Y / Chunk.Size);
+            int cz = (int)Math.Floor(min.Z / Chunk.Size);
 
             if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
 
-            Vector3 oldPos = position;
+            cx = (int)Math.Floor(max.X / Chunk.Size);
+            cy = (int)Math.Floor(max.Y / Chunk.Size);
+            cz = (int)Math.Floor(max.Z / Chunk.Size);
+
+            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
+
+            Vector3Double oldPos = position;
             bool wasGrounded = grounded;
 
             for (int i = 0; i < 8; i++)
             {
                 position += velocity * MGame.dt * (1 / 8f);
 
-                Vector3 push = CollisionDetector.ResolveCollision(bounds, position, ref velocity);
+                Vector3Double push = CollisionDetector.ResolveCollision(bounds, position, ref velocity);
                 position = push;
             }
             grounded = false;
@@ -64,10 +84,10 @@ namespace FantasyVoxels
             swimming = false;
 
             {
-                int minx = (int)MathF.Floor(min.X);
-                int minz = (int)MathF.Floor(min.Z);
-                int maxx = (int)MathF.Ceiling(max.X);
-                int maxz = (int)MathF.Ceiling(max.Z);
+                int minx = (int)Math.Floor(min.X);
+                int minz = (int)Math.Floor(min.Z);
+                int maxx = (int)Math.Ceiling(max.X);
+                int maxz = (int)Math.Ceiling(max.Z);
 
                 for (int x = minx; x <= maxx; x++)
                 {
@@ -82,8 +102,8 @@ namespace FantasyVoxels
 
                         if ((v1 >= 0 && Voxel.voxelTypes[v1].isLiquid) || (v2 >= 0 && Voxel.voxelTypes[v2].isLiquid)) swimming = true;
 
-                        grounded = CollisionDetector.IsSolidTile(checkpos.x, (int)MathF.Floor(min.Y - 0.01f), checkpos.z) || grounded;
-                        ceiling = CollisionDetector.IsSolidTile(checkpos.x, (int)MathF.Floor(max.Y), checkpos.z) || ceiling;
+                        grounded = CollisionDetector.IsSolidTile(checkpos.x, (int)Math.Floor(min.Y - 0.01), checkpos.z) || grounded;
+                        ceiling = CollisionDetector.IsSolidTile(checkpos.x, (int)Math.Floor(max.Y), checkpos.z) || ceiling;
                     }
                 }
             }

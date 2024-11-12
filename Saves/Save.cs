@@ -1,4 +1,6 @@
-﻿using Microsoft.Xna.Framework;
+﻿using GeonBit.UI.Entities;
+using GeonBit.UI;
+using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
@@ -7,18 +9,23 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static FantasyVoxels.MGame;
+using Newtonsoft.Json.Linq;
 
 namespace FantasyVoxels.Saves
 {
     struct EntitySaveData
     {
         public Vector3 position, velocity, rotation;
+        public object customSaveData;
     }
     internal static class Save
     {
         public static string WorldName = "";
         public static string savePath = $"{Environment.GetEnvironmentVariable("profilePath")}/user/saves/";
-        public static void SaveToFile(string _savename)
+        public static string backupPath = $"{Environment.GetEnvironmentVariable("profilePath")}/user/backup_saves/";
+
+        public static async Task SaveToFile(string _savename)
         {
             string savename = $"{savePath}{_savename}";
 
@@ -32,26 +39,30 @@ namespace FantasyVoxels.Saves
 
             foreach (Chunk chunk in chunks)
             {
-                if (!chunk.modified) continue;
+                int distance = int.Max(int.Max(int.Abs(Instance.playerChunkPos.x - chunk.chunkPos.x), int.Abs(Instance.playerChunkPos.y - chunk.chunkPos.y)), int.Abs(Instance.playerChunkPos.z - chunk.chunkPos.z));
+                if ((!chunk.modified && distance > 3) || chunk.CompletelyEmpty) continue;
 
-                File.WriteAllBytes($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}.chunk",chunk.voxels);
+                await File.WriteAllBytesAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}"+(chunk.modified ? "" : "_unmodified") +".chunk",chunk.voxels);
             }
 
             EntitySaveData playerSaveData = new EntitySaveData
             {
-                position = MGame.Instance.player.position,
+                position = (Vector3)MGame.Instance.player.position,
                 velocity = MGame.Instance.player.velocity,
                 rotation = MGame.Instance.player.rotation,
+                customSaveData = MGame.Instance.player.CaptureCustomSaveData()
             };
 
             string playerJson = JsonConvert.SerializeObject(playerSaveData);
-            File.WriteAllText($"{savename}/entity/player.json", playerJson);
+            await File.AppendAllTextAsync($"{savename}/entity/player.json", playerJson);
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine($"seed:{MGame.Instance.seed}");
             sb.AppendLine($"time:{(int)WorldTimeManager.WorldTime}");
 
-            File.WriteAllText($"{savename}/overworld.txt",sb.ToString());
+            await File.WriteAllTextAsync($"{savename}/overworld.txt",sb.ToString());
+
+            await Task.Delay(1500);
         }
         public static string[] GetAllSavedWorlds()
         {
@@ -66,21 +77,34 @@ namespace FantasyVoxels.Saves
 
             return savenames.ToArray();
         }
-        public static void LoadSave(string _savename)
+        public static async void LoadSave(string _savename)
         {
+            Instance.currentPlayState = PlayState.LoadingWorld;
+
             string savename = $"{savePath}{_savename}";
+            string backupname = $"{backupPath}{_savename}";
             if (!Directory.Exists(savename)) return;
+
+            var label = new Label("Loading World...", Anchor.Center);
+            UserInterface.Active.AddEntity(label);
+
+            if (Directory.Exists(backupname)) Directory.Delete(backupname, true);
+            CopyFilesRecursively(savename, backupname);
 
             WorldName = _savename;
 
-            string overworlddata = File.ReadAllText($"{savename}/overworld.txt");
+            string overworlddata = await File.ReadAllTextAsync($"{savename}/overworld.txt");
             var lines = overworlddata.Split('\n');
-            MGame.Instance.seed = int.Parse(Array.Find(lines, e => e.StartsWith("seed:")).Split(':')[1]);
+            MGame.Instance.seed = int.Parse((Array.Find(lines, e => e.StartsWith("seed:")) ?? "seed:0").Split(':')[1]);
             WorldTimeManager.SetWorldTime(int.Parse((Array.Find(lines, e => e.StartsWith("time:")) ?? "time:0").Substring(5)));
+
+            Instance.worldRandom = new Random(Instance.seed);
 
             MGame.Instance.loadedChunks = new ConcurrentDictionary<long, Chunk>();
 
-            foreach(var chunkfile in Directory.GetFiles($"{savename}/chunk"))
+            await MGame.Instance.LoadWorld(true);
+
+            foreach (var chunkfile in Directory.GetFiles($"{savename}/chunk"))
             {
                 string chunkfilename = Path.GetFileNameWithoutExtension(chunkfile);
 
@@ -93,37 +117,61 @@ namespace FantasyVoxels.Saves
 
                 chunk.chunkPos = (chunkx, chunky, chunkz);
 
-                if (!MGame.Instance.loadedChunks.TryAdd(MGame.CCPos(chunk.chunkPos), chunk)) throw new Exception($"Unable to add chunk {chunk.chunkPos.ToString()} to loaded chunks!");
+                //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
+                if (!MGame.Instance.loadedChunks.TryAdd(MGame.CCPos(chunk.chunkPos), chunk))
+                {
+                    chunk = MGame.Instance.loadedChunks[MGame.CCPos(chunk.chunkPos)];
+                }
 
                 chunk.generated = true;
                 chunk.CompletelyEmpty = false;
 
                 chunk.voxels = File.ReadAllBytes(chunkfile);
                 chunk.MaxY = Chunk.Size-1;
-                chunk.modified = true;
+                chunk.modified = !chunkfilename.Contains("unmodified");
 
                 Array.Fill(chunk.meshLayer,true);
 
-                chunk.meshUpdated = [false, false, false, false];
-
-                chunk.CheckQueue();
                 chunk.GenerateVisibility();
                 chunk.Remesh();
-            }
 
-            MGame.Instance.LoadWorld();
+                chunk.meshUpdated = [false, false, false, false];
+            }
 
             EntitySaveData playerData = JsonConvert.DeserializeObject<EntitySaveData>(File.ReadAllText($"{savename}/entity/player.json"));
 
-            MGame.Instance.player.position = playerData.position;
-            MGame.Instance.player.velocity = playerData.velocity;
-            MGame.Instance.player.rotation = playerData.rotation;
+            RestoreEntity(MGame.Instance.player,playerData);
+
+            UserInterface.Active.RemoveEntity(label);
+
+            Instance.currentPlayState = PlayState.World;
+        }
+        static void RestoreEntity(Entity entity, EntitySaveData data)
+        {
+            entity.position = data.position;
+            entity.velocity = data.velocity;
+            entity.rotation = data.rotation;
+            if (data.customSaveData != null) entity.RestoreCustomSaveData((JObject)data.customSaveData);
         }
         public static void DeleteSave(string _savename)
         {
             string savename = $"{savePath}{_savename}";
             if (!Directory.Exists(savename)) return;
             Directory.Delete(savename,true);
+        }
+        private static void CopyFilesRecursively(string sourcePath, string targetPath)
+        {
+            //Now Create all of the directories
+            foreach (string dirPath in Directory.GetDirectories(sourcePath, "*", SearchOption.AllDirectories))
+            {
+                Directory.CreateDirectory(dirPath.Replace(sourcePath, targetPath));
+            }
+
+            //Copy all the files & Replaces any files with the same name
+            foreach (string newPath in Directory.GetFiles(sourcePath, "*.*", SearchOption.AllDirectories))
+            {
+                File.Copy(newPath, newPath.Replace(sourcePath, targetPath), true);
+            }
         }
     }
 }
