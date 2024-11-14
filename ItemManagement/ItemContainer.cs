@@ -21,17 +21,26 @@ namespace FantasyVoxels.ItemManagement
         {
             items[slot] = item;
         }
-        public bool AddItem(Item item, int slot)
+        public bool AddItem(Item item, int slot, out int remainder)
         {
+            remainder = 0;
+
             if (items[slot].itemID == -1)
             {
                 SetItem(item, slot);
                 return true;
             }
+            if (items[slot].stack > ItemManager.GetItemFromID(items[slot].itemID).maxStackSize) return false;
 
             if (items[slot].itemID != item.itemID) return false;
 
             items[slot].stack += item.stack;
+
+            if (items[slot].stack > ItemManager.GetItemFromID(items[slot].itemID).maxStackSize)
+            {
+                remainder = items[slot].stack - ItemManager.GetItemFromID(items[slot].itemID).maxStackSize;
+                items[slot].stack = ItemManager.GetItemFromID(items[slot].itemID).maxStackSize;
+            }
 
             return true;
         }
@@ -41,13 +50,13 @@ namespace FantasyVoxels.ItemManagement
             {
                 return true;
             }
+            if (items[slot].stack >= ItemManager.GetItemFromID(items[slot].itemID).maxStackSize) return false;
 
-            if (items[slot].itemID != item.itemID) return false;
-
-            return true;
+            return (items[slot].itemID == item.itemID);
         }
-        public bool AddItem(Item item)
+        public bool AddItem(Item item, out int remainder)
         {
+            remainder = 0;
             (int slot, bool empty) bestSlot = (-1,true);
             for(int i = 0; i < items.Length; i++)
             {
@@ -63,7 +72,8 @@ namespace FantasyVoxels.ItemManagement
 
             if(bestSlot.slot >= 0)
             {
-                AddItem(item,bestSlot.slot);
+                AddItem(item, bestSlot.slot, out remainder);
+
                 return true;
             }
 

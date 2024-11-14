@@ -11,6 +11,8 @@ using System.Text;
 using System.Threading.Tasks;
 using static FantasyVoxels.MGame;
 using Newtonsoft.Json.Linq;
+using System.Threading;
+using Newtonsoft.Json.Bson;
 
 namespace FantasyVoxels.Saves
 {
@@ -42,10 +44,16 @@ namespace FantasyVoxels.Saves
             foreach (Chunk chunk in chunks)
             {
                 int distance = int.Max(int.Max(int.Abs(Instance.playerChunkPos.x - chunk.chunkPos.x), int.Abs(Instance.playerChunkPos.y - chunk.chunkPos.y)), int.Abs(Instance.playerChunkPos.z - chunk.chunkPos.z));
-                if ((!chunk.modified && distance > 3) || chunk.CompletelyEmpty) continue;
+                if ((!chunk.modified && distance > 2) || chunk.CompletelyEmpty) continue;
 
-                writeTaskList.Add(File.WriteAllBytesAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}"+(chunk.modified ? "" : "_unmodified") +".chunk",chunk.voxels));
+                //writeTaskList.Add(File.WriteAllBytesAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}" + (chunk.modified ? "" : "_unmodified") + ".chunk", chunk.voxels));
+                writeTaskList.Add(File.WriteAllTextAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}" + (chunk.modified ? "" : "_unmodified") + ".json", JsonConvert.SerializeObject(chunk)));
             }
+            var jsonSerializerSettings = new JsonSerializerSettings()
+            {
+                TypeNameHandling = TypeNameHandling.All
+            };
+            writeTaskList.Add(File.WriteAllTextAsync($"{savename}/entity/chunkbound.json", JsonConvert.SerializeObject(EntityManager.loadedEntities, jsonSerializerSettings)));
 
             await Task.WhenAll(writeTaskList);
 
@@ -60,7 +68,7 @@ namespace FantasyVoxels.Saves
             };
 
             string playerJson = JsonConvert.SerializeObject(playerSaveData);
-            await File.AppendAllTextAsync($"{savename}/entity/player.json", playerJson);
+            await File.WriteAllTextAsync($"{savename}/entity/player.json", playerJson);
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine($"seed:{MGame.Instance.seed}");
@@ -110,7 +118,7 @@ namespace FantasyVoxels.Saves
 
             await MGame.Instance.LoadWorld(true);
 
-            foreach (var chunkfile in Directory.GetFiles($"{savename}/chunk"))
+            await Parallel.ForEachAsync(Directory.GetFiles($"{savename}/chunk"), async (string chunkfile, CancellationToken token) =>
             {
                 string chunkfilename = Path.GetFileNameWithoutExtension(chunkfile);
 
@@ -119,29 +127,43 @@ namespace FantasyVoxels.Saves
                 int chunky = int.Parse(coords[1]);
                 int chunkz = int.Parse(coords[2]);
 
-                Chunk chunk = new Chunk();
+                Chunk chunk = JsonConvert.DeserializeObject<Chunk>(await File.ReadAllTextAsync(chunkfile));
 
                 chunk.chunkPos = (chunkx, chunky, chunkz);
 
                 //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
                 if (!MGame.Instance.loadedChunks.TryAdd(MGame.CCPos(chunk.chunkPos), chunk))
                 {
-                    chunk = MGame.Instance.loadedChunks[MGame.CCPos(chunk.chunkPos)];
+                    MGame.Instance.loadedChunks[MGame.CCPos(chunk.chunkPos)] = chunk;
                 }
 
                 chunk.generated = true;
-                chunk.CompletelyEmpty = false;
 
-                chunk.voxels = File.ReadAllBytes(chunkfile);
-                chunk.MaxY = Chunk.Size-1;
-                chunk.modified = !chunkfilename.Contains("unmodified");
+                //chunk.modified = !chunkfilename.Contains("unmodified");
 
-                Array.Fill(chunk.meshLayer,true);
+                Array.Fill(chunk.meshLayer, true);
 
                 chunk.GenerateVisibility();
                 chunk.Remesh();
 
                 chunk.meshUpdated = [false, false, false, false];
+            });
+
+            EntityManager.loadedEntities.Clear();
+            var jsonSerializerSettings = new JsonSerializerSettings()
+            {
+                TypeNameHandling = TypeNameHandling.All
+            };
+            if (File.Exists($"{savename}/entity/chunkbound.json"))
+            {
+                EntityManager.loadedEntities = JsonConvert.DeserializeObject<Dictionary<long,List<Entity>>>(await File.ReadAllTextAsync($"{savename}/entity/chunkbound.json"), jsonSerializerSettings);
+                foreach(var lst in EntityManager.loadedEntities)
+                {
+                    foreach(var entity in lst.Value)
+                    {
+                        entity.Start();
+                    }
+                }
             }
 
             EntitySaveData playerData = JsonConvert.DeserializeObject<EntitySaveData>(File.ReadAllText($"{savename}/entity/player.json"));
@@ -179,6 +201,29 @@ namespace FantasyVoxels.Saves
             foreach (string newPath in Directory.GetFiles(sourcePath, "*.*", SearchOption.AllDirectories))
             {
                 File.Copy(newPath, newPath.Replace(sourcePath, targetPath), true);
+            }
+        }
+        public static string ToBson<T>(T value)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            using (BsonDataWriter datawriter = new BsonDataWriter(ms))
+            {
+                JsonSerializer serializer = new JsonSerializer();
+                serializer.Serialize(datawriter, value);
+                return Convert.ToBase64String(ms.ToArray());
+            }
+
+        }
+
+        public static T FromBson<T>(string base64data)
+        {
+            byte[] data = Convert.FromBase64String(base64data);
+
+            using (MemoryStream ms = new MemoryStream(data))
+            using (BsonDataReader reader = new BsonDataReader(ms))
+            {
+                JsonSerializer serializer = new JsonSerializer();
+                return serializer.Deserialize<T>(reader);
             }
         }
     }

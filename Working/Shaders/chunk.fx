@@ -43,10 +43,10 @@ sampler2D shadowmapSampler : register(s2) = sampler_state
 {
     Texture = <shadowmap>;
 };
-texture aomap;
-sampler2D aomapSampler : register(s2) = sampler_state
+texture lightmap;
+sampler2D lightmapSampler : register(s3) = sampler_state
 {
-    Texture = <aomap>;
+    Texture = <lightmap>;
 };
 
 
@@ -70,7 +70,6 @@ struct VSOutput
     float4 Color : COLOR0;
     float3 Depth : TEXCOORD1;
     float2 Coord : TEXCOORD2;
-    float2 AOCoord : TEXCOORD5;
     float4 ShadowCoord : TEXCOORD4;
 };
 
@@ -268,11 +267,11 @@ PSOut MainPS(VSOutput input)
     
     //shadowContributioncasc1 *= shadowdistance;
     
-    float ao = tex2D(aomapSampler, input.AOCoord);
+    float3 lmp = tex2D(lightmapSampler, float2(pow(dat.b, 0.8f), (time%4) / 4));
     
-    float3 desCol = color.xyz * (dat.g * (realBump + 1) * sunColor + dat.b) * ao;
+    float3 desCol = color.xyz * (lmp + dat.g * (realBump + 1) * sunColor);
 
-    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog),3)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog),0.8)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {

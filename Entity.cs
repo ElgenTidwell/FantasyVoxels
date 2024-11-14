@@ -44,14 +44,30 @@ namespace FantasyVoxels
             new(new Vector3(1, 0, 0), new Vector2(1,0)),
             new(new Vector3(0, 0, 0), new Vector2(0,0)),
         ];
+        public struct DamageInfo
+        {
+            public int damage;
+            public Vector3Double from;
+        }
 
+        public virtual void Die() { }
+
+        public virtual void OnTakeDamage(DamageInfo info) 
+        {
+            health = (byte)int.Clamp(health - info.damage,0,maxHealth);
+
+            if (health <= 0)
+            {
+                Die();
+            }
+        }
         public abstract void Start();
         public virtual void Update()
         {
             if (grounded) gravity = !swimming?-0.6f:0;
             else
             {
-                gravity = swimming? Maths.MoveTowards(gravity, -1f,MGame.dt*14f) : gravity - 20 * MGame.dt;
+                gravity = swimming? Maths.MoveTowards(gravity, -1f,MGame.dt*14f) : gravity - 22 * MGame.dt;
             }
 
             velocity.Y = grounded ? 0 : gravity;
@@ -82,6 +98,7 @@ namespace FantasyVoxels
             if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
 
             Vector3Double oldPos = position;
+            float oldGrav = gravity;
             bool wasGrounded = grounded;
 
             for (int i = 0; i < 8; i++)
@@ -135,11 +152,15 @@ namespace FantasyVoxels
                 position = oldPos;
                 grounded = true;
             }
+            if(grounded && !wasGrounded && oldGrav < -12)
+            {
+                OnTakeDamage(new DamageInfo { damage = (int)float.Ceiling((-oldGrav-12) / 5 + 1) });
+            }
         }
     }
     public static class EntityManager
     {
-        private static Dictionary<long, List<Entity>> loadedEntities = new Dictionary<long, List<Entity>>();
+        public static Dictionary<long, List<Entity>> loadedEntities = new Dictionary<long, List<Entity>>();
         private static Queue<Entity> delete = new Queue<Entity>();
 
         public static void Clear()

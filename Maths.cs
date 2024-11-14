@@ -53,7 +53,7 @@ namespace FantasyVoxels
                     vector.Z - planeNormal.Z * dot / sqrMag);
             }
         }
-        public static bool Raycast(Vector3 start, Vector3 direction, float distance, out Vector3 prevHitTile, out Vector3 hitTile)
+        public static bool Raycast(Vector3 start, Vector3 direction, float distance, out Vector3 prevHitTile, out Vector3 hitTile, out int voxel)
         {
             // Current position in the grid (tilemap coordinates)
             int x = (int)Math.Floor(start.X);
@@ -94,6 +94,7 @@ namespace FantasyVoxels
                     // Check if the current tile is not empty
                     if (CollisionDetector.IsSolidTile(x,y,z,true))
                     {
+                        voxel = MGame.Instance.GrabVoxel(new (x,y,z));
                         return true;
                     }
                 }
@@ -130,6 +131,7 @@ namespace FantasyVoxels
             // If no tile was hit
             hitPosition = Vector3.Zero;
             hitTile = new Vector3(-1, -1, -1);
+            voxel = 0;
             return false;
         }
     }

@@ -41,10 +41,15 @@ namespace FantasyVoxels
 
         public SpriteBatch spriteBatch => _spriteBatch;
         private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
-        public Texture2D colors,normals,noise,uiTextures,sunTexture,moonTexture,aoMap;
+        public Texture2D colors,normals,noise,uiTextures,uiBackback,sunTexture,moonTexture,aoMap,white,breaking,lightmap;
         private Effect chunk;
+        private Effect entity;
+        private Effect breakingVoxel;
         private Effect sky;
         private Effect postProcessing;
+
+        public Effect GetEntityShader() => entity;
+        public Effect GetBreakingShader() => breakingVoxel;
 
         public float daylightPercentage;
 
@@ -320,6 +325,8 @@ namespace FantasyVoxels
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
             chunk = Content.Load<Effect>("Shaders/chunk");
+            entity = Content.Load<Effect>("Shaders/entity");
+            breakingVoxel = Content.Load<Effect>("Shaders/breakingVoxel");
             sky = Content.Load<Effect>("Shaders/skybox");
             postProcessing = Content.Load<Effect>("Shaders/pscreen");
 
@@ -350,13 +357,17 @@ namespace FantasyVoxels
             aoMap = Content.Load<Texture2D>("Textures/aomap");
             noise = Content.Load<Texture2D>("Textures/noise");
             uiTextures = Content.Load<Texture2D>("Textures/UITextures");
+            uiBackback = Content.Load<Texture2D>("Textures/backpack");
+            white = Content.Load<Texture2D>("Textures/white");
+            breaking = Content.Load<Texture2D>("Textures/breaking");
             sunTexture = Content.Load<Texture2D>("Textures/sun");
             moonTexture = Content.Load<Texture2D>("Textures/moon");
+            lightmap = Content.Load<Texture2D>("Textures/lightmap");
 
             chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             chunk.Parameters["colors"]?.SetValue(colors);
             chunk.Parameters["normal"]?.SetValue(normals);
-            chunk.Parameters["aomap"]?.SetValue(aoMap);
+            chunk.Parameters["lightmap"]?.SetValue(lightmap);
 
             postProcessing.Parameters["NoiseTexture"]?.SetValue(noise);
 
@@ -550,7 +561,7 @@ namespace FantasyVoxels
 
         void UpdateWorld()
         {
-            if (BetterKeyboard.HasBeenPressed(Keys.Escape))
+            if (BetterKeyboard.HasBeenPressed(Keys.Escape) && !player.ExitOtherMenus())
             {
                 gamePaused = !gamePaused;
                 if(gamePaused)
@@ -841,7 +852,6 @@ namespace FantasyVoxels
 
             transparent:
 
-            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
             //Transparent
             foreach (var c in toRender.ToArray().AsSpan())
             {
@@ -908,6 +918,7 @@ namespace FantasyVoxels
             GraphicsDevice.SamplerStates[0] = crunchy;
             GraphicsDevice.SamplerStates[1] = crunchy;
             GraphicsDevice.SamplerStates[2] = crunchy;
+            GraphicsDevice.SamplerStates[3] = SamplerState.LinearClamp;
 
             sky.Parameters["cameraPosition"]?.SetValue(cameraPosition);
             sky.Parameters["cameraForward"]?.SetValue(cameraForward);
@@ -1027,6 +1038,16 @@ namespace FantasyVoxels
 
             chunk.Parameters["View"].SetValue(view);
             chunk.Parameters["Projection"].SetValue(projection);
+
+            entity.Parameters["View"].SetValue(view);
+            entity.Parameters["Projection"].SetValue(projection);
+            entity.Parameters["skyColor"]?.SetValue(skyColor);
+            entity.Parameters["skyBandColor"]?.SetValue(skyBandColor);
+            entity.Parameters["renderDistance"]?.SetValue(RenderDistance);
+            entity.Parameters["cameraPosition"]?.SetValue(cameraPosition);
+            entity.Parameters["time"]?.SetValue(totalTime);
+            entity.Parameters["sunDir"]?.SetValue(sunView.Forward);
+
             //chunk.Parameters["LightViewProj"]?.SetValue(lightWorld * sunView*sunProjection);
             //chunk.Parameters["shadowmap"]?.SetValue(shadowMap);
 
@@ -1034,7 +1055,7 @@ namespace FantasyVoxels
 
             player.Render();
 
-            RenderChunks(true);
+            GraphicsDevice.RasterizerState = RasterizerState.CullNone;
 
             foreach (var c in toRender.ToArray().AsSpan())
             {
@@ -1042,6 +1063,19 @@ namespace FantasyVoxels
 
                 EntityManager.RenderChunk(pos);
             }
+
+            GraphicsDevice.DepthStencilState = DepthStencilState.Default;
+            GraphicsDevice.BlendState = BlendState.NonPremultiplied;
+
+            RenderChunks(true);
+
+            GraphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
+            GraphicsDevice.DepthStencilState = DepthStencilState.Default;
+            GraphicsDevice.BlendState = BlendState.NonPremultiplied;
+
+            GraphicsDevice.Clear(ClearOptions.DepthBuffer, Color.Transparent, 1, 0);
+
+            player.RenderViewmodel();
 
             //GraphicsDevice.DepthStencilState = DepthStencilState.None;
             //foreach (var c in toRender.ToArray().AsSpan())
@@ -1192,7 +1226,37 @@ namespace FantasyVoxels
                 if (Voxel.voxelTypes[vox].myClass != null) Voxel.voxelTypes[vox].myClass.TryUpdateBlock((x,y,z), loadedChunks[CCPos((cx, cy, cz))]);
             }
         }
-        public void SetVoxel(Vector3 p, int newVoxel, bool disableDrops = false)
+        public void DigVoxel(Vector3 p, int toolLevel, bool disableDrops = false)
+        {
+            int cx = (int)MathF.Floor(p.X / Chunk.Size);
+            int cy = (int)MathF.Floor(p.Y / Chunk.Size);
+            int cz = (int)MathF.Floor(p.Z / Chunk.Size);
+
+            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
+            {
+                int x = (int)(p.X - cx * Chunk.Size);
+                int y = (int)(p.Y - cy * Chunk.Size);
+                int z = (int)(p.Z - cz * Chunk.Size);
+
+                if (!disableDrops)
+                {
+                    if (Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID >= 0 &&
+                        Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].requiredLevel <= toolLevel)
+                    {
+                        var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID);
+                        droppedItem.position = p + Vector3.One * 0.6f;
+                        droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
+                        droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
+                        droppedItem.gravity = 2f;
+
+                        EntityManager.SpawnEntity(droppedItem);
+                    }
+                }
+
+                loadedChunks[CCPos((cx, cy, cz))].Modify(x, y, z, 0);
+            }
+        }
+        public void SetVoxel(Vector3 p, int newVoxel, bool disableDrops = false, Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY)
         {
             int cx = (int)MathF.Floor(p.X / Chunk.Size);
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
@@ -1218,7 +1282,7 @@ namespace FantasyVoxels
                     }
                 }
 
-                loadedChunks[CCPos((cx, cy, cz))].Modify(x, y, z, newVoxel);
+                loadedChunks[CCPos((cx, cy, cz))].Modify(x, y, z, newVoxel, placement);
             }
         }
         public void SetVoxel_Q(Vector3 p, int newVoxel, bool instantRegen = false)

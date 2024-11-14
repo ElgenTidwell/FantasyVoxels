@@ -16,53 +16,14 @@ namespace FantasyVoxels.Entities
 
         bool playAnim;
         float animTime;
-        float scale = 0.4f;
+        float scale = 0.25f;
         Vector3 animStartPos;
 
-        private VertexPositionTexture[] vertices;
+        private VertexPositionNormalTexture[] vertices;
         
         public DroppedItem(int id)
         {
             this.itemID = id;
-
-            //change UVS
-            if(ItemManager.GetItemFromID(id).type == ItemType.Block)
-            {
-                fromBlockColors = true;
-                vertices = new VertexPositionTexture[(ItemManager.GetItemFromID(id).alwaysRenderAsSprite?6:6*6)];
-                renderAsSprite = ItemManager.GetItemFromID(id).alwaysRenderAsSprite;
-                for (int i = 0; i < (ItemManager.GetItemFromID(id).alwaysRenderAsSprite ? 1 : 6); i++)
-                {
-                    int tex = 0;
-                    switch (i)
-                    {
-                        case 0: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].rightTexture; break;
-                        case 1: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].leftTexture; break;
-                        case 2: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].topTexture; break;
-                        case 3: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].bottomTexture; break;
-                        case 4: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].frontTexture; break;
-                        case 5: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].backTexture; break;
-                    }
-                    vertices[i * 6 + 0] = new VertexPositionTexture(Chunk.vertsPerCheck[i * 4 + 0], (Chunk.uvs[i * 4 + 0]*16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                    vertices[i * 6 + 1] = new VertexPositionTexture(Chunk.vertsPerCheck[i * 4 + 1], (Chunk.uvs[i * 4 + 1]*16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                    vertices[i * 6 + 2] = new VertexPositionTexture(Chunk.vertsPerCheck[i * 4 + 2], (Chunk.uvs[i * 4 + 2]*16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                    vertices[i * 6 + 3] = new VertexPositionTexture(Chunk.vertsPerCheck[i * 4 + 0], (Chunk.uvs[i * 4 + 0]*16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                    vertices[i * 6 + 4] = new VertexPositionTexture(Chunk.vertsPerCheck[i * 4 + 2], (Chunk.uvs[i * 4 + 2]*16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                    vertices[i * 6 + 5] = new VertexPositionTexture(Chunk.vertsPerCheck[i * 4 + 3], (Chunk.uvs[i * 4 + 3]*16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                }
-            }
-            else
-            {
-                renderAsSprite = true;
-                vertices[0] = new VertexPositionTexture(Chunk.vertsPerCheck[0], Chunk.uvs[0]);
-                vertices[1] = new VertexPositionTexture(Chunk.vertsPerCheck[1], Chunk.uvs[1]);
-                vertices[2] = new VertexPositionTexture(Chunk.vertsPerCheck[2], Chunk.uvs[2]);
-                vertices[3] = new VertexPositionTexture(Chunk.vertsPerCheck[0], Chunk.uvs[0]);
-                vertices[4] = new VertexPositionTexture(Chunk.vertsPerCheck[2], Chunk.uvs[2]);
-                vertices[5] = new VertexPositionTexture(Chunk.vertsPerCheck[3], Chunk.uvs[3]);
-            }
-
-            bounds = new BoundingBox(Vector3.One * -0.125f, Vector3.One * 0.125f);
         }
 
         public override void Destroyed()
@@ -74,17 +35,10 @@ namespace FantasyVoxels.Entities
             MGame.Instance.GrabVoxelData((Vector3)position, out var voxelData);
 
             float ourLight = (voxelData.skyLight / 255f)*MGame.Instance.daylightPercentage + voxelData.blockLight / 255f;
+            MGame.Instance.GetEntityShader().Parameters["tint"].SetValue(ourLight);
+            if (fromBlockColors) MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(MGame.Instance.colors);
 
-            MGame.Instance.basicEffect.VertexColorEnabled = false;
-            MGame.Instance.basicEffect.FogEnabled = false;
-            MGame.Instance.basicEffect.LightingEnabled = false;
-            MGame.Instance.basicEffect.TextureEnabled = true;
-            MGame.Instance.basicEffect.Alpha = 1;
-            MGame.Instance.basicEffect.DiffuseColor = Vector3.One * ourLight;
-
-            if (fromBlockColors) MGame.Instance.basicEffect.Texture = MGame.Instance.colors;
-
-            Matrix rotation = Matrix.Identity;
+            Matrix rotation = Matrix.CreateRotationX(this.rotation.Y) * Matrix.CreateRotationY(this.rotation.Z) * Matrix.CreateRotationZ(this.rotation.X);
 
             if(renderAsSprite)
             {
@@ -92,19 +46,18 @@ namespace FantasyVoxels.Entities
                 camForward.Y = 0;
                 camForward.Normalize();
 
-                rotation = Matrix.CreateTranslation(Vector3.UnitX * -0.5f) * Matrix.CreateRotationY(MathHelper.ToRadians(90f)) * Matrix.CreateWorld(Vector3.Zero,camForward,Vector3.Up);
+                rotation = Matrix.CreateTranslation(Vector3.UnitX * -0.5f) * Matrix.CreateRotationY(MathHelper.ToRadians(90f)) * Matrix.CreateWorld(Vector3.Zero,-camForward,Vector3.Up);
             }
 
-            MGame.Instance.basicEffect.World = Matrix.CreateTranslation(Vector3.One*-0.5f)*
-                                               rotation *
-                                               Matrix.CreateScale(scale) * 
-                                               MGame.Instance.world * 
-                                               Matrix.CreateWorld((Vector3)position,Vector3.Forward,Vector3.Up);
+            Matrix world = Matrix.CreateTranslation(Vector3.One*-0.5f)*
+                           rotation *
+                           Matrix.CreateScale(scale) *
+                           MGame.Instance.world * 
+                           Matrix.CreateWorld((Vector3)position,Vector3.Forward,Vector3.Up);
 
-            MGame.Instance.basicEffect.View = MGame.Instance.view;
-            MGame.Instance.basicEffect.Projection = MGame.Instance.projection;
+            MGame.Instance.GetEntityShader().Parameters["World"].SetValue(world);
 
-            foreach(var pass in MGame.Instance.basicEffect.CurrentTechnique.Passes)
+            foreach (var pass in MGame.Instance.GetEntityShader().CurrentTechnique.Passes)
             {
                 pass.Apply();
                 MGame.Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, vertices, 0, vertices.Length / 3);
@@ -114,30 +67,31 @@ namespace FantasyVoxels.Entities
         {
             if (grounded) velocity = Maths.MoveTowards(velocity, Vector3.Zero, MGame.dt * 25);
 
-            if(playAnim)
+            float playerdist = Vector3.Distance((Vector3)MGame.Instance.player.position - Vector3.UnitY * 1f, (Vector3)position);
+
+            rotation -= velocity*0.004f;
+
+            if (playAnim)
             {
                 animTime += MGame.dt*6f;
 
-                float t = float.Pow(animTime, 1.4f);
-
-                scale = (1 - animTime) * 0.4f;
-
-                position = Vector3.Lerp(animStartPos, (Vector3)MGame.Instance.player.position, t);
+                scale = (1 - animTime) * 0.25f;
 
                 if(animTime >= 1)
                 {
                     EntityManager.DeleteEntity(this);
                 }
 
+                velocity += Vector3.Normalize((Vector3)MGame.Instance.player.position - (Vector3)position) * (2- playerdist);
+
+                base.Update();
                 return;
             }
             
             if(wait >= 0) wait -= MGame.dt;
 
-            float playerdist = Vector3.Distance((Vector3)MGame.Instance.player.position - Vector3.UnitY * 1f, (Vector3)position);
-            if(playerdist < 1.4f && wait < 0)
+            if(playerdist < 1.8f && wait < 0 && MGame.Instance.player.PickupItem(itemID, 1))
             {
-                MGame.Instance.player.PickupItem(itemID, 1);
                 playAnim = true;
                 animStartPos = (Vector3)position;
                 return;
@@ -147,6 +101,46 @@ namespace FantasyVoxels.Entities
         }
         public override void Start()
         {
+            //change UVS
+            if (ItemManager.GetItemFromID(itemID).type == ItemType.Block)
+            {
+                fromBlockColors = true;
+                vertices = new VertexPositionNormalTexture[(ItemManager.GetItemFromID(itemID).alwaysRenderAsSprite ? 6 : 6 * 6)];
+                renderAsSprite = ItemManager.GetItemFromID(itemID).alwaysRenderAsSprite;
+                for (int i = 0; i < (ItemManager.GetItemFromID(itemID).alwaysRenderAsSprite ? 1 : 6); i++)
+                {
+                    int tex = 0;
+                    switch (i)
+                    {
+                        case 0: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].rightTexture; break;
+                        case 1: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].leftTexture; break;
+                        case 2: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].topTexture; break;
+                        case 3: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].bottomTexture; break;
+                        case 4: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].frontTexture; break;
+                        case 5: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].backTexture; break;
+                    }
+                    vertices[i * 6 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                    vertices[i * 6 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                    vertices[i * 6 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                    vertices[i * 6 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                    vertices[i * 6 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                    vertices[i * 6 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                }
+            }
+            else
+            {
+                renderAsSprite = true;
+                vertices[0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[0], Vector3.UnitX, Chunk.uvs[0]);
+                vertices[1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[1], Vector3.UnitX, Chunk.uvs[1]);
+                vertices[2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[2], Vector3.UnitX, Chunk.uvs[2]);
+                vertices[3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[0], Vector3.UnitX, Chunk.uvs[0]);
+                vertices[4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[2], Vector3.UnitX, Chunk.uvs[2]);
+                vertices[5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[3], Vector3.UnitX, Chunk.uvs[3]);
+            }
+
+            bounds = new BoundingBox(Vector3.One * -0.125f, Vector3.One * 0.125f);
+
+            rotation.Y = (float)Random.Shared.NextDouble()*360f;
         }
         public override void RestoreCustomSaveData(JObject data)
         {

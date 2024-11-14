@@ -18,7 +18,9 @@ namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 4.15f, run = 6.8f, sneak = 2f, swim = 0.5f;
+        static float walk = 4.0f, run = 6.8f, sneak = 2f, swim = 0.5f;
+        static BoundingBox standingBounds = new BoundingBox(new Vector3(-0.2f, -1.6f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
+        static BoundingBox crouchedBounds = new BoundingBox(new Vector3(-0.2f, -1.5f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
 
         MouseState oldState;
 
@@ -29,9 +31,9 @@ namespace FantasyVoxels.Entities
         float autoDigTime = 0f;
 
         bool running,crouched;
+        bool accessingInventory;
 
-
-        public VertexPosition[] voxelBoxVert =
+        public static VertexPosition[] voxelBoxVert =
         [
             new VertexPosition(new Vector3(0, 0, 0)),
             new VertexPosition(new Vector3(1, 0, 0)),
@@ -72,19 +74,59 @@ namespace FantasyVoxels.Entities
             new VertexPosition(new Vector3(1, 1, 1)),
             new VertexPosition(new Vector3(0, 1, 1)),
         ];
+        public VertexPositionNormalTexture[] breakBoxVert;
         public VertexBuffer vertBuffer;
         BasicEffect effect;
 
         Vector3 hitTile,prevHitTile;
+        (int vox, int x, int y, int z) hitVoxel, oldHitVoxel;
         bool voxelHit;
         float xsin, ysin;
         float bobTime;
         float bob;
 
-        int activeHotbarSlot;
+        float painResponse = 0;
+
+        int activeHotbarSlot,oldHotbarSlot;
         int oldScroll;
+        ItemContainer cursor = new ItemContainer(1);
         ItemContainer hotbar = new ItemContainer(9);
         ItemContainer inventory = new ItemContainer(20);
+        Item prevHeldItem;
+
+        Vector3 wishDir;
+        Vector3 oldRotation;
+
+        VertexPositionNormalTexture[] heldBlockModel;
+        bool handFromBlockColors;
+        bool drawHand;
+        bool regenerateHand;
+
+        float vmswayX;
+        float vmswayY;
+        float vmoffsetY;
+
+        float diggingTimer;
+
+        HandAnimation currentHandAnimation;
+        float handAnimationTimer;
+
+        enum HandAnimation
+        {
+            None = 0,
+            Swing = 1,
+        }
+
+        static float[] animationSpeeds = [
+            0f,
+            5f,
+        ];
+
+        public Player()
+        {
+            maxHealth = 18;
+            health = maxHealth;
+        }
 
         public override void Start()
         {
@@ -101,8 +143,16 @@ namespace FantasyVoxels.Entities
 
             oldState = Mouse.GetState();
 
-            maxHealth = 20;
-            health = maxHealth;
+            breakBoxVert = new VertexPositionNormalTexture[6*6];
+            for (int i = 0; i < 6; i++)
+            {
+                breakBoxVert[i * 6 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), Chunk.uvs[i * 4 + 0]);
+                breakBoxVert[i * 6 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), Chunk.uvs[i * 4 + 1]);
+                breakBoxVert[i * 6 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), Chunk.uvs[i * 4 + 2]);
+                breakBoxVert[i * 6 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), Chunk.uvs[i * 4 + 0]);
+                breakBoxVert[i * 6 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), Chunk.uvs[i * 4 + 2]);
+                breakBoxVert[i * 6 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), Chunk.uvs[i * 4 + 3]);
+            }
 
             //hotbar.SetItem(new Item("planks",255),0);
             //hotbar.SetItem(new Item("planks",255),1);
@@ -114,25 +164,33 @@ namespace FantasyVoxels.Entities
             //hotbar.SetItem(new Item("grass",255),7);
             //hotbar.SetItem(new Item("lamp",255),8);
         }
-
-        public override void Update()
+        public override void OnTakeDamage(DamageInfo info)
         {
-            if (MathF.Abs(velocity.X + velocity.Z) < 4f) running = false;
-            //running = (Keyboard.GetState().IsKeyDown(Keys.LeftControl) || running) && !crouched;
+            painResponse = info.damage*float.Sign((float)Random.Shared.NextDouble()-0.5f);
 
+            base.OnTakeDamage(info);
+        }
+        private void HandleInput()
+        {
+            //running = (Keyboard.GetState().IsKeyDown(Keys.LeftControl) || running) && !crouched;
             crouched = Keyboard.GetState().IsKeyDown(Keys.LeftShift);
 
-            disallowWalkingOffEdge = crouched;
-
-            float speed = new Vector2(velocity.X, velocity.Z).Length();
-            float bobMulti = grounded?speed / run:0;
-
-            bobTime += MGame.dt * ((curwalkspeed / walk-1)*0.3f+1);
-
-            xsin = MathF.Sin(bobTime * 8.0f) * bob;
-            ysin = MathF.Sin(bobTime * 8.0f * 2) * bob;
-
-            bob = Maths.MoveTowards(bob, bobMulti*1.2f, MGame.dt * 20 * float.Abs(bob-bobMulti*1.2f));
+            if (!crouched)
+            {
+                if (bounds == crouchedBounds)
+                {
+                    bounds = standingBounds;
+                    position.Y += float.Abs(standingBounds.Min.Y) - float.Abs(crouchedBounds.Min.Y);
+                }
+            }
+            else
+            {
+                if (bounds == standingBounds)
+                {
+                    bounds = crouchedBounds;
+                    position.Y -= float.Abs(standingBounds.Min.Y) - float.Abs(crouchedBounds.Min.Y);
+                }
+            }
 
             var state = Mouse.GetState();
             rotation.Y += MathHelper.ToRadians(oldState.X - state.X) * 0.1f;
@@ -140,93 +198,121 @@ namespace FantasyVoxels.Entities
 
             rotation.X = MathHelper.Clamp(rotation.X, MathHelper.ToRadians(-90f), MathHelper.ToRadians(90f));
 
-            Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
-            oldState = Mouse.GetState();
-
-            float cameraY = (float)(position.Y + MathF.Abs(xsin) * 0.18f);
-
             var rotmat = Matrix.CreateRotationY(rotation.Y);
-            var rotmat_cam = Matrix.CreateRotationX(rotation.X)*Matrix.CreateRotationY(rotation.Y);
+            var rotmat_cam = Matrix.CreateRotationX(rotation.X) * Matrix.CreateRotationY(rotation.Y);
 
             forward = rotmat.Forward;
             right = rotmat.Right;
 
-            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > walk ? 5 : 0),MGame.dt*30);
-            MGame.Instance.cameraPosition = new Vector3((float)position.X, cameraY, (float)position.Z);
-            MGame.Instance.view =
-                Matrix.CreateRotationY(-rotation.Y) *
-                Matrix.CreateRotationX(-rotation.X + MathF.Abs(xsin) * 0.004f + velocity.Y*0.0006f) *
-                Matrix.CreateRotationZ(-rotation.Z + (xsin) * 0.002f);
-            MGame.Instance.world = Matrix.CreateWorld(-(new Vector3((float)position.X, cameraY, (float)position.Z)), Vector3.Forward, Vector3.Up);
-
-            Vector3 wishDir = Vector3.Zero;
             if (Keyboard.GetState().IsKeyDown(Keys.W)) wishDir += forward * MGame.dt;
             if (Keyboard.GetState().IsKeyDown(Keys.S)) wishDir -= forward * MGame.dt;
             if (Keyboard.GetState().IsKeyDown(Keys.D)) wishDir += right * MGame.dt;
             if (Keyboard.GetState().IsKeyDown(Keys.A)) wishDir -= right * MGame.dt;
 
+            if(wishDir.Length() > 0) wishDir.Normalize();
+
             if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming))
             {
-                gravity = swimming ? 4 : 6.75f;
+                gravity = swimming ? 4 : 7f;
                 grounded = false;
             }
-            if(BetterKeyboard.HasBeenPressed(Keys.Q))
+            if (BetterKeyboard.HasBeenPressed(Keys.Q))
             {
-                var item = hotbar.TakeItem(activeHotbarSlot,1);
+                var item = hotbar.TakeItem(activeHotbarSlot, 1);
 
-                if(item.HasValue)
+                if (item.HasValue)
                 {
                     var droppedItem = new DroppedItem(item.Value.itemID);
                     droppedItem.position = (Vector3)position + MGame.Instance.cameraForward * 0.6f;
-                    droppedItem.velocity = velocity + MGame.Instance.cameraForward*8;
+                    droppedItem.velocity = velocity + MGame.Instance.cameraForward * 8;
                     droppedItem.gravity = droppedItem.velocity.Y;
 
                     EntityManager.SpawnEntity(droppedItem);
                 }
             }
-            if(crouched && swimming)
+            if (crouched && swimming)
             {
                 gravity = -3f;
             }
+            if (BetterKeyboard.HasBeenPressed(Keys.P))
+            {
+                OnTakeDamage(new DamageInfo { damage = 1 });
+            }
 
-            curwalkspeed = (crouched ? sneak : running ? run : walk) * (swimming?swim:1);
-
-            rotmat = Matrix.CreateRotationX(rotation.X)*Matrix.CreateRotationY(rotation.Y);
+            rotmat = Matrix.CreateRotationX(rotation.X) * Matrix.CreateRotationY(rotation.Y);
 
             forward = rotmat.Forward;
             MGame.Instance.cameraForward = forward;
             right = rotmat.Right;
 
-            voxelHit = Maths.Raycast((Vector3)position,forward,5,out prevHitTile, out hitTile);
+            oldHitVoxel = hitVoxel;
+            voxelHit = Maths.Raycast((Vector3)position, forward, 5, out prevHitTile, out hitTile, out int hitVoxelType);
+            hitVoxel = (hitVoxelType, (int)hitTile.X, (int)hitTile.Y, (int)hitTile.Z);
 
             autoDigTime -= MGame.dt;
-            if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
+            if (Mouse.GetState().LeftButton == ButtonState.Released) diggingTimer = 0;
+            if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit)
             {
-                autoDigTime = 0.25f;
-
-                int vID = MGame.Instance.GrabVoxel(hitTile);
-
-                if(vID > 0)
+                if (autoDigTime <= 0)
                 {
-                    MGame.Instance.SetVoxel(hitTile, 0);
+                    autoDigTime = 0.25f;
+
+                    SetAnimation(HandAnimation.Swing);
                 }
+
+                //if its not the same voxel, reset the timer
+                if (hitVoxel != oldHitVoxel)
+                {
+                    diggingTimer = 0;
+                }
+
+                diggingTimer += MGame.dt;
+
+                if(diggingTimer >= Voxel.voxelTypes[hitVoxel.vox].baseDigTime)
+                {
+                    diggingTimer = 0;
+
+                    int vID = MGame.Instance.GrabVoxel(hitTile);
+
+                    if (vID > 0)
+                    {
+                        //TODO: tool levels
+                        MGame.Instance.DigVoxel(hitTile, 0);
+                    }
+                }
+            } 
+            else if(BetterMouse.WasLeftPressed())
+            {
+                SetAnimation(HandAnimation.Swing);
             }
             if (Mouse.GetState().RightButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
             {
                 int id = hotbar.PeekItem(activeHotbarSlot).itemID;
 
-                if(id != -1)
+                if (id != -1)
                 {
                     switch (ItemManager.GetItemFromID(id).type)
                     {
                         case ItemType.Block:
 
                             BoundingBox placeBox = new BoundingBox(prevHitTile - (Vector3)position + Vector3.One * 0.1f, prevHitTile + Vector3.One * 0.9f - (Vector3)position);
-                            if (placeBox.Contains(bounds) == ContainmentType.Disjoint)
+                            
+                            Vector3 place = hitTile - prevHitTile;
+                            Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY;
+                            if (place.X > 0) placement = Voxel.PlacementSettings.RIGHT;
+                            if (place.X < 0) placement = Voxel.PlacementSettings.LEFT;
+                            if (place.Y > 0) placement = Voxel.PlacementSettings.TOP;
+                            if (place.Y < 0) placement = Voxel.PlacementSettings.BOTTOM;
+                            if (place.Z > 0) placement = Voxel.PlacementSettings.FRONT;
+                            if (place.Z < 0) placement = Voxel.PlacementSettings.BACK;
+
+                            if ((placeBox.Contains(bounds) == ContainmentType.Disjoint || Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].ignoreCollision) && Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].AllowsPlacement(placement))
                             {
                                 autoDigTime = 0.25f;
-                                MGame.Instance.SetVoxel(prevHitTile, ItemManager.GetItemFromID(id).placement);
-                                hotbar.TakeItem(activeHotbarSlot,1);
+
+                                MGame.Instance.SetVoxel(prevHitTile, ItemManager.GetItemFromID(id).placement, placement: placement);
+                                hotbar.TakeItem(activeHotbarSlot, 1);
+                                SetAnimation(HandAnimation.Swing);
                             }
 
                             break;
@@ -245,42 +331,161 @@ namespace FantasyVoxels.Entities
 
             oldScroll = Mouse.GetState().ScrollWheelValue;
 
+            Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
+            oldState = Mouse.GetState();
+        }
+        public override void Update()
+        {
+            if (MathF.Abs(velocity.X + velocity.Z) < 4f) running = false;
+            disallowWalkingOffEdge = crouched;
+
+            float speed = new Vector2(velocity.X, velocity.Z).Length();
+            float bobMulti = grounded?speed / run:0;
+
+            bobTime += MGame.dt * ((speed / walk-1)*0.3f+1);
+
+            xsin = MathF.Sin(bobTime * 7.5f) * bob;
+            ysin = MathF.Sin(bobTime * 7.5f + MathHelper.ToRadians(90)) * bob;
+
+            bob = Maths.MoveTowards(bob, bobMulti*1.2f, MGame.dt * 18 * float.Abs(bob-bobMulti*1.2f));
+
+            curwalkspeed = (crouched ? sneak : running ? run : walk) * (swimming ? swim : 1);
+
+            HandleInventory();
+
+            wishDir = Vector3.Zero;
+            if(!accessingInventory) HandleInput();
+            vmswayX = Maths.MoveTowards(vmswayX,0,MGame.dt*15*float.Abs(vmswayX));
+            vmswayY = Maths.MoveTowards(vmswayY, 0,MGame.dt*15*float.Abs(vmswayY));
+            vmswayX += (oldRotation.Y - rotation.Y)*0.2f;
+            vmswayY += (oldRotation.X - rotation.X)*0.2f;
+
+            float cameraY = (float)(position.Y + MathF.Abs(xsin) * 0.16f);
+            painResponse = Maths.MoveTowards(painResponse,0,MGame.dt*5*(float.Abs(painResponse)+0.1f));
+
+            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > walk ? 5 : 0),MGame.dt*30);
+            MGame.Instance.cameraPosition = new Vector3((float)position.X, cameraY, (float)position.Z);
+            MGame.Instance.view =
+                Matrix.CreateRotationY(-rotation.Y) *
+                Matrix.CreateRotationX(-rotation.X + MathF.Abs(xsin) * 0.006f + velocity.Y*0.0006f) *
+                Matrix.CreateRotationZ(-rotation.Z - (ysin) * 0.003f + MathHelper.ToRadians(painResponse*5));
+            MGame.Instance.world = Matrix.CreateWorld(-(new Vector3((float)position.X, cameraY, (float)position.Z)), Vector3.Forward, Vector3.Up);
+
+            vmoffsetY = Maths.MoveTowards(vmoffsetY, 0, MGame.dt * float.Abs(vmoffsetY) * 10);
+
+            //Hand drawing
+            if (prevHeldItem.itemID != hotbar.PeekItem(activeHotbarSlot).itemID || prevHeldItem.stack != hotbar.PeekItem(activeHotbarSlot).stack || oldHotbarSlot != activeHotbarSlot)
+            {
+                regenerateHand = true;
+            }
+
+            if(currentHandAnimation != HandAnimation.None)
+            {
+                handAnimationTimer += MGame.dt * animationSpeeds[(int)currentHandAnimation];
+
+                if(handAnimationTimer >= 1)
+                {
+                    handAnimationTimer = 0;
+                    currentHandAnimation = HandAnimation.None;
+                    vmoffsetY = -0.5f;
+                }
+            }
+
+            if (regenerateHand && currentHandAnimation == HandAnimation.None)
+            {
+                regenerateHand = false;
+                //Regenerate hand model
+                int id = hotbar.PeekItem(activeHotbarSlot).itemID;
+
+                vmoffsetY = -0.5f;
+
+                drawHand = false;
+
+                if (id >= 0)
+                {
+                    if (ItemManager.GetItemFromID(id).type == ItemType.Block)
+                    {
+                        drawHand = true;
+                        handFromBlockColors = true;
+                        bool spr = ItemManager.GetItemFromID(id).alwaysRenderAsSprite;
+                        heldBlockModel = new VertexPositionNormalTexture[(spr ? 6 : 6 * 6)];
+                        for (int p = 0; p < (spr ? 1 : 6); p++)
+                        {
+                            int i = spr ? 1 : p;
+
+                            int tex = 0;
+                            switch (i)
+                            {
+                                case 0: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].rightTexture; break;
+                                case 1: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].leftTexture; break;
+                                case 2: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].topTexture; break;
+                                case 3: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].bottomTexture; break;
+                                case 4: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].frontTexture; break;
+                                case 5: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].backTexture; break;
+                            }
+                            heldBlockModel[(spr ? 0 : i * 6) + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                            heldBlockModel[(spr ? 0 : i * 6) + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                            heldBlockModel[(spr ? 0 : i * 6) + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                            heldBlockModel[(spr ? 0 : i * 6) + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                            heldBlockModel[(spr ? 0 : i * 6) + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                            heldBlockModel[(spr ? 0 : i * 6) + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                        }
+                    }
+                }
+            }
+            prevHeldItem = hotbar.PeekItem(activeHotbarSlot);
+            oldHotbarSlot = activeHotbarSlot;
+            oldRotation = rotation;
+
             applyVelocity(wishDir);
             base.Update();
         }
-        public void PickupItem(int id, byte stack = 1)
+        private void SetAnimation(HandAnimation handAnimation)
         {
-            hotbar.AddItem(new Item { itemID = id, stack = stack });
+            currentHandAnimation = handAnimation;
+            handAnimationTimer = 0;
+        }
+        private void HandleInventory()
+        {
+            if (BetterKeyboard.HasBeenPressed(Keys.E))
+            {
+                if (!ExitOtherMenus()) { accessingInventory = true; MGame.Instance.IsMouseVisible = true; }
+            }
+
+            if (!accessingInventory) return;
+        }
+        public bool PickupItem(int id, byte stack = 1)
+        {
+            if(!hotbar.AddItem(new Item { itemID = id, stack = stack },out int leftover))
+            {
+                return inventory.AddItem(new Item { itemID = id, stack = stack }, out leftover);
+            }
+            else
+            {
+                return true;
+            }
         }
         void applyVelocity(Vector3 wishDir)
         {
             float speed = new Vector2(velocity.X, velocity.Z).Length();
             if (speed != 0)
             {
-                float drop = speed * (swimming? 2f : grounded?12f:0.5f) * MGame.dt;
+                float drop = speed * (swimming? 2f : grounded?10f:0.5f) * MGame.dt;
                 velocity *= MathF.Max(speed - drop, 0) / speed;
             }
 
-            float multiplier = 1;
-            float len = new Vector2(wishDir.X, wishDir.Z).Length();
-            if (len > 1)
-            {
-                multiplier = (1) / len;
-            }
-            wishDir *= multiplier;
-
             float curSpeed = Vector3.Dot(wishDir, velocity);
-            float addSpeed = MathHelper.Clamp((grounded||swimming? curwalkspeed*10 : 15) - curSpeed, 0, float.MaxValue);
+            float addSpeed = MathHelper.Clamp(curwalkspeed - curSpeed, 0, grounded||swimming?0.6f:0.1f);
 
             Vector3 initWish = addSpeed * wishDir;
             velocity += initWish;
 
 
-            multiplier = 1;
-            len = new Vector2(velocity.X, velocity.Z).Length();
-            if (len > curwalkspeed*1f)
+            float multiplier = 1;
+            float len = new Vector2(velocity.X, velocity.Z).Length();
+            if (len > curwalkspeed*1.5f)
             {
-                multiplier = (curwalkspeed * 1f) / len;
+                multiplier = (curwalkspeed * 1.5f) / len;
             }
             velocity.X *= multiplier;
             velocity.Z *= multiplier;
@@ -304,6 +509,67 @@ namespace FantasyVoxels.Entities
                     pass.Apply();
                     MGame.Instance.GraphicsDevice.DrawPrimitives(PrimitiveType.LineList, 0, voxelBoxVert.Length / 2);
                 }
+
+                if(diggingTimer > 0)
+                {
+                    var breaking = MGame.Instance.GetBreakingShader();
+                    breaking.Parameters["World"].SetValue(effect.World);
+                    breaking.Parameters["View"].SetValue(effect.View);
+                    breaking.Parameters["Projection"].SetValue(effect.Projection);
+
+                    breaking.Parameters["mainTexture"].SetValue(MGame.Instance.breaking);
+
+                    breaking.Parameters["frame"].SetValue((int)float.Floor((diggingTimer / Voxel.voxelTypes[hitVoxel.vox].baseDigTime) *8));
+
+                    foreach (var pass in breaking.CurrentTechnique.Passes)
+                    {
+                        pass.Apply();
+                        MGame.Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, breakBoxVert, 0, breakBoxVert.Length / 3);
+                    }
+                }
+            }
+        }
+        public void RenderViewmodel()
+        {
+            if (!drawHand || heldBlockModel.Length < 3) return;
+
+            MGame.Instance.GrabVoxelData((Vector3)position, out var voxelData);
+
+            float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage + voxelData.blockLight / 255f;
+            MGame.Instance.GetEntityShader().Parameters["tint"].SetValue(ourLight);
+
+            if (handFromBlockColors) MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(MGame.Instance.colors);
+
+            Matrix animMatrix = Matrix.Identity;
+
+            switch(currentHandAnimation)
+            {
+                case HandAnimation.Swing:
+
+                    animMatrix = Matrix.CreateTranslation(0, 0, -float.Pow(handAnimationTimer,2f)*2-0.1f)*
+                                 Matrix.CreateRotationX(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * -125 + 15))*
+                                 Matrix.CreateRotationY(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * 15));
+
+                    break;
+            }
+
+            Matrix world = Matrix.CreateTranslation(Vector3.One*0.5f)*
+                           Matrix.CreateScale(0.6f)*
+                           Matrix.CreateRotationY(MathHelper.ToRadians(15))*
+                           Matrix.CreateRotationX(MathHelper.ToRadians(0))*
+                           animMatrix *
+                           Matrix.CreateWorld(new Vector3(0.2f+ ysin * 0.15f*bob, -1.4f-(((float.Pow(float.Abs(xsin),0.8f) * 1.5f)) * bob) * 0.15f + vmoffsetY, -1.6f), Vector3.Forward, Vector3.Up)*
+                           Matrix.CreateRotationX(MathHelper.ToRadians(velocity.Y * -0.2f)+ vmswayY) *
+                           Matrix.CreateRotationY(vmswayX) *
+                           Matrix.CreateRotationZ(painResponse*0.05f);
+
+            MGame.Instance.GetEntityShader().Parameters["World"].SetValue(world);
+            MGame.Instance.GetEntityShader().Parameters["View"].SetValue(Matrix.Identity);
+
+            foreach (var pass in MGame.Instance.GetEntityShader().CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                MGame.Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, heldBlockModel, 0, heldBlockModel.Length / 3);
             }
         }
 
@@ -315,52 +581,199 @@ namespace FantasyVoxels.Entities
 
             MGame.Instance.spriteBatch.End();
 
-
             MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp, sortMode: SpriteSortMode.FrontToBack);
 
-            float hotbarScale = float.Floor(4 * UserInterface.Active.GlobalScale);
-            int leftmost = (int)(-4.5f * hotbarScale * 21 + UserInterface.Active.ScreenWidth/2f);
+            float uiScale = float.Floor(4 * UserInterface.Active.GlobalScale);
+            int leftmost = (int)(-4.5f * uiScale * 21 + UserInterface.Active.ScreenWidth/2f);
 
+            //hotbar and health
             for(int i = 0; i < 9; i++)
             {
-                float horizPos = leftmost + i * hotbarScale * 21;
+                float horizPos = leftmost + i * uiScale * 21;
                 
                 if(i == activeHotbarSlot)
                 {
-                    MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos - 1*hotbarScale, UserInterface.Active.ScreenHeight - 24 * hotbarScale), new Rectangle(22, 0, 30, 30), Color.White, 0, Vector2.Zero, hotbarScale, SpriteEffects.None, 1f);
+                    MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos - 1*uiScale, UserInterface.Active.ScreenHeight - 24 * uiScale), new Rectangle(22, 0, 30, 30), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 1f);
                 }
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, UserInterface.Active.ScreenHeight - 23 * hotbarScale), new Rectangle(0, 0, 22, 22), Color.White, 0, Vector2.Zero, hotbarScale, SpriteEffects.None, 0f);
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, UserInterface.Active.ScreenHeight - 23 * uiScale), new Rectangle(0, 0, 22, 22), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
                 int id = hotbar.PeekItem(i).itemID;
                 if (id != -1)
                 {
-                    var item = ItemManager.GetItemFromID(id);
-                    if (item.type == ItemType.Block)
-                    {
-                        int tex = Voxel.voxelTypes[item.placement].frontTexture;
-
-                        MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
-                                                        new Vector2(horizPos + 3 * hotbarScale, UserInterface.Active.ScreenHeight - 20 * hotbarScale),
-                                                        new Rectangle((tex % 16)*16, (tex / 16)*16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                        Vector2.One * hotbarScale,
-                                                        SpriteEffects.None,
-                                                        0.5f);
-                    }
-
-                    Vector2 shift = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(hotbar.PeekItem(i).stack.ToString())*hotbarScale;
-
-                    MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], hotbar.PeekItem(i).stack.ToString(), new Vector2(horizPos + 21 * hotbarScale, UserInterface.Active.ScreenHeight - 0 * hotbarScale)-shift,Color.Black,0f,Vector2.Zero,Vector2.One*(hotbarScale),SpriteEffects.None,0.6f);
-                    MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], hotbar.PeekItem(i).stack.ToString(), new Vector2(horizPos + 20 * hotbarScale, UserInterface.Active.ScreenHeight - 1 * hotbarScale)-shift,Color.White,0f,Vector2.Zero,Vector2.One*(hotbarScale),SpriteEffects.None,0.8f);
+                    DrawItem(new Vector2(horizPos,UserInterface.Active.ScreenHeight),uiScale,id,hotbar.PeekItem(i).stack);
                 }
             }
-            float healthFloat = health / 5f;
+            float healthFloat = health / 4f;
             for (int h = 0; h < maxHealth/4; h++)
             {
-                float horizPos = leftmost + h * hotbarScale * 10;
+                float horizPos = leftmost + h * uiScale * 10;
 
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, UserInterface.Active.ScreenHeight - 34 * hotbarScale), new Rectangle(59, 0, 11, 10), Color.White, 0, Vector2.Zero, hotbarScale, SpriteEffects.None, 0f);
+                int index = health - (h * 4+4);
+
+                index = -int.Clamp(index,-4,0);
+
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, UserInterface.Active.ScreenHeight - 34 * uiScale), new Rectangle(59+ index*11, 0, 11, 10), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
+            }
+            MGame.Instance.spriteBatch.End();
+
+            if (accessingInventory)
+            {
+                MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp, sortMode: SpriteSortMode.FrontToBack);
+
+                //black background
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.white, MGame.Instance.GraphicsDevice.Viewport.Bounds, null, new Color(Color.Black, 200), 0f, Vector2.Zero, SpriteEffects.None, 0.05f);
+
+                int scale = (int)(uiScale * 1.25f);
+                int backpackX = (int)(-103 * scale + UserInterface.Active.ScreenWidth / 2f);
+                int backpackY = (int)(-25 * scale + UserInterface.Active.ScreenWidth / 2f);
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiBackback, new Vector2(backpackX, backpackY - 142*scale), new Rectangle(0, 0, 206, 142), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
+                
+                //hotbar
+                for (int i = 0; i < 9; i++)
+                {
+                    var slotbounds = new Rectangle(backpackX + 10 * scale + i * scale * 21, backpackY - 6 * scale - scale * 21, scale * 18, scale * 18);
+                    bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+
+                    int id = hotbar.PeekItem(i).itemID;
+                    if (id != -1)
+                    {
+                        DrawItem(new Vector2(backpackX+8 * scale + i * scale * 21, backpackY-6 * scale), scale, id, hotbar.PeekItem(i).stack);
+                    }
+
+                    if (isSelected)
+                    {
+                        TryTransferContainerToCursor(ref hotbar,i);
+
+                        MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                    }
+                }
+
+                //inventory
+                for (int i = 0; i < 20; i++)
+                {
+                    var slotbounds = new Rectangle(backpackX + 10 * scale + (i % 5) * scale * 21, backpackY - 111 * scale + (i / 5) * scale * 21 - scale * 21, scale * 18, scale * 18);
+                    bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+
+                    int id = inventory.PeekItem(i).itemID;
+                    if (id != -1)
+                    {
+                        DrawItem(new Vector2(backpackX + 8 * scale + (i%5) * scale * 21, backpackY - 111 * scale + (i/5)*scale*21), scale, id, inventory.PeekItem(i).stack);
+                    }
+
+                    if (isSelected)
+                    {
+                        TryTransferContainerToCursor(ref inventory, i);
+
+                        MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                    }
+                }
+                //clicked outside the window
+                if (BetterMouse.WasLeftPressed() && !new Rectangle(backpackX, backpackY - 142 * scale, 206*scale, 142*scale).Contains(Mouse.GetState().Position))
+                {
+                    SpitContents(ref cursor);
+                }
+
+                if (cursor.PeekItem(0).itemID >= 0)
+                {
+                    DrawItem(Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale) * scale + new Vector2(-12,12) * scale, scale, cursor.PeekItem(0).itemID, cursor.PeekItem(0).stack,0.9f);
+                }
+
+                MGame.Instance.spriteBatch.End();
+            }
+        }
+        void TryTransferContainerToCursor(ref ItemContainer container, int i)
+        {
+            if (BetterMouse.WasLeftPressed())
+            {
+                if (cursor.PeekItem(0).itemID >= 0 && container.TestAddItem(cursor.PeekItem(0), i))
+                {
+                    container.AddItem(cursor.PeekItem(0), i, out int leftover);
+
+                    if (leftover == 0) cursor.SetItem(new Item { itemID = -1, stack = 0 }, 0);
+                    else cursor.SetItem(new Item { itemID = cursor.PeekItem(0).itemID, stack = (byte)leftover }, 0);
+                }
+                else if (container.PeekItem(i).itemID >= 0)
+                {
+                    Item copy = new Item { itemID = -1, stack = 0 };
+                    if (cursor.PeekItem(0).itemID >= 0)
+                    {
+                        copy = cursor.PeekItem(0);
+                    }
+
+                    cursor.SetItem(container.TakeItemStack(i), 0);
+
+                    container.SetItem(copy, i);
+                }
+            }
+            else
+            if (BetterMouse.WasRightPressed())
+            {
+                if (cursor.PeekItem(0).itemID >= 0 && container.TestAddItem(new Item { itemID = cursor.PeekItem(0).itemID, stack = 1 }, i))
+                {
+                    container.AddItem(cursor.TakeItem(0, 1).Value, i, out int leftover);
+                }
+                else if (container.PeekItem(i).itemID >= 0)
+                {
+                    cursor.SetItem(container.TakeItem(i, (byte)float.Ceiling(container.PeekItem(i).stack / 2f)).Value, 0);
+                }
+            }
+        }
+
+        private void DrawItem(Vector2 pos, float uiScale, int id, int stack, float depth = 0.5f)
+        {
+            var item = ItemManager.GetItemFromID(id);
+            if (item.type == ItemType.Block)
+            {
+                int tex = Voxel.voxelTypes[item.placement].frontTexture;
+
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
+                                                new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                Vector2.One * uiScale,
+                                                SpriteEffects.None,
+                                                depth);
             }
 
-            MGame.Instance.spriteBatch.End();
+            Vector2 shift = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(stack.ToString()) * uiScale;
+
+            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 21 * uiScale, pos.Y - 0 * uiScale) - shift, Color.Black, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.01f);
+            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 20 * uiScale, pos.Y - 1 * uiScale) - shift, Color.White, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.02f);
+        }
+        void SpitContents(ref ItemContainer container)
+        {
+            if (container.PeekItem(0).stack > 0)
+            {
+                var item = container.TakeItemStack(0);
+
+                if (item.itemID >= 0)
+                {
+                    for (int i = 0; i < item.stack; i++)
+                    {
+                        var droppedItem = new DroppedItem(item.itemID);
+                        droppedItem.position = (Vector3)position + MGame.Instance.cameraForward * 0.6f;
+                        droppedItem.velocity = velocity + MGame.Instance.cameraForward * (9+(float)Random.Shared.NextDouble());
+                        droppedItem.gravity = droppedItem.velocity.Y;
+
+                        EntityManager.SpawnEntity(droppedItem);
+                    }
+                }
+            }
+        }
+        public bool ExitOtherMenus()
+        {
+            if(accessingInventory)
+            {
+                accessingInventory = false;
+
+                MGame.Instance.IsMouseVisible = false;
+                Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
+
+                SpitContents(ref cursor);
+
+                return true;
+            }
+
+            //not in any menus
+            return false;
         }
 
         public override void Destroyed()

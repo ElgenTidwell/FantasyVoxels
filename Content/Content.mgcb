@@ -4632,3 +4632,72 @@
 
 #begin GeonBit.UI/Themes/lowres/ThemeData.xml
 /copy:GeonBit.UI/Themes/lowres/ThemeData.xml
+#begin ../Working/Shaders/entity.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/entity.fx;Shaders/entity.fx
+
+#begin ../Working/Textures/backpack.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/backpack.png;Textures/backpack.png
+
+#begin ../Working/Textures/black.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/black.png;Textures/black.png
+
+#begin ../Working/Textures/white.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/white.png;Textures/white.png
+
+#begin ../Working/Textures/breaking.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/breaking.png;Textures/breaking.png
+
+#begin ../Working/Shaders/breakingVoxel.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/breakingVoxel.fx;Shaders/breakingVoxel.fx
+
+#begin ../Working/Textures/lightmap.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/lightmap.png;Textures/lightmap.png

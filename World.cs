@@ -6,6 +6,7 @@ using Icaria.Engine.Procedural;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Media;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -17,6 +18,11 @@ namespace FantasyVoxels
 {
     public struct Voxel
     {
+        const float LEAVESDIG = 0.25f;
+        const float DIRTDIG = 0.8f;
+        const float LOGDIG = 3.25f;
+        const float STONEDIG = 6.5f;
+
         public static Voxel[] voxelTypes =
         [
             new Voxel(),
@@ -26,12 +32,16 @@ namespace FantasyVoxels
             .SetTextureData(TextureSetSettings.TOP, 0).SetTextureData(TextureSetSettings.BOTTOM,1).SetTextureData(TextureSetSettings.ALLHORIZONTAL,10)
             .SetClass(new GrassBlock())
             .SetSurfaceType(SurfaceType.Grass)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(DIRTDIG)
             .SetItem("dirt"),
             
             //Dirt
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 1)
             .SetSurfaceType(SurfaceType.Dirt)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(DIRTDIG)
             .SetItem("dirt"),
             
             //Water
@@ -43,12 +53,16 @@ namespace FantasyVoxels
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 3)
             .SetSurfaceType(SurfaceType.Dirt)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(DIRTDIG)
             .SetItem("sand"),
             
             //Log
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 4).SetTextureData(TextureSetSettings.TOP|TextureSetSettings.BOTTOM, 5)
             .SetSurfaceType(SurfaceType.Wood)
+            .SetMaterialType(MaterialType.Wood)
+            .SetBaseDigTime(LOGDIG)
             .SetItem("wood"),
             
             //Log
@@ -64,24 +78,34 @@ namespace FantasyVoxels
             //Leaves
             new Voxel(shaderEffect: 2,lightPassthrough:190,renderNeighbors:true)
             .SetTextureData(TextureSetSettings.ALLSIDES, 7)
+            .SetMaterialType(MaterialType.Wood)
+            .SetBaseDigTime(LEAVESDIG)
             .SetSurfaceType(SurfaceType.Grass),
             
             //stone
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 8)
             .SetSurfaceType(SurfaceType.Stone)
+            .SetMaterialType(MaterialType.Stone)
+            .SetBaseDigTime(STONEDIG)
+            .RequireLevel(1)
             .SetItem("stone"),
             
             //Plank
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 9)
             .SetSurfaceType(SurfaceType.Wood)
+            .SetMaterialType(MaterialType.Wood)
+            .SetBaseDigTime(LOGDIG)
             .SetItem("planks"),
             
             //Cobble
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 11)
             .SetSurfaceType(SurfaceType.Stone)
+            .SetMaterialType(MaterialType.Stone)
+            .SetBaseDigTime(STONEDIG)
+            .RequireLevel(1)
             .SetItem("cobblestone"),
 
             //Daisy
@@ -89,22 +113,41 @@ namespace FantasyVoxels
             .SetTextureData(TextureSetSettings.ALLSIDES, 12)
             .SetClass(new BasicFlowerBlock())
             .SetSurfaceType(SurfaceType.Grass)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(0.0f)
+            .DisallowPlacement(PlacementSettings.HORIZONTAL | PlacementSettings.TOP)
             .SetItem("daisy"),
 
             //Lamp
             new Voxel(blocklight:255)
             .SetTextureData(TextureSetSettings.ALLSIDES, 13)
             .SetSurfaceType(SurfaceType.Stone)
-            .SetItem("lamp")
+            .SetMaterialType(MaterialType.Stone)
+            .SetBaseDigTime(STONEDIG)
+            .SetItem("lamp"),
+
+            //Torch
+            new Voxel(blocklight: 225, lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
+            .SetTextureData(TextureSetSettings.ALLSIDES, 14)
+            .SetSurfaceType(SurfaceType.Wood)
+            .SetMaterialType(MaterialType.Wood)
+            .SetClass(new TorchBlock())
+            .SetBaseDigTime(0.01f)
+            .DisallowPlacement(PlacementSettings.TOP)
+            .SetItem("torch")
         ];
 
         public Block myClass;
         public bool ignoreCollision,isTransparent,renderNeighbors,isLiquid,ignoreRaycast;
         public int shaderEffect, lightPassthrough;
+        public int requiredLevel;
         public byte blocklight;
+        public float baseDigTime;
 
         public short topTexture,bottomTexture,leftTexture,rightTexture,frontTexture,backTexture;
         public SurfaceType surfaceType;
+        public MaterialType materialType;
+        public PlacementSettings allowedPlacements;
         public int droppedItemID;
 
         public Voxel()
@@ -118,6 +161,7 @@ namespace FantasyVoxels
             this.lightPassthrough = 255;
             this.blocklight = 0;
             this.droppedItemID = -1;
+            this.allowedPlacements = PlacementSettings.ALL;
         }
         public Voxel(bool ignoreCollision = false, int shaderEffect = 0, bool isTransparent = false, bool isLiquid = false, int lightPassthrough = 255, bool renderNeighbors = false, bool ignoreRaycast = false, byte blocklight = 0)
         {
@@ -130,6 +174,7 @@ namespace FantasyVoxels
             this.lightPassthrough = lightPassthrough;
             this.blocklight = blocklight;
             this.droppedItemID = -1;
+            this.allowedPlacements = PlacementSettings.ALL;
         }
         public enum TextureSetSettings
         {
@@ -143,11 +188,30 @@ namespace FantasyVoxels
             ALLVERTICAL   = 0b110000,
             ALLSIDES      = 0b111111
         }
+        public enum PlacementSettings
+        {
+            RIGHT  = 0b000001,
+            LEFT   = 0b000010,
+            FRONT  = 0b000100,
+            BACK   = 0b001000,
+            TOP    = 0b010000,
+            BOTTOM = 0b100000,
+            ALL = RIGHT|LEFT|FRONT|BACK|TOP|BOTTOM,
+            HORIZONTAL = RIGHT | LEFT | FRONT | BACK,
+            VERTICAL = TOP|BOTTOM,
+            ANY = 0
+        }
         public enum SurfaceType
         {
             None,
             Grass,
             Dirt,
+            Wood,
+            Stone
+        }
+        public enum MaterialType
+        {
+            Soil,
             Wood,
             Stone
         }
@@ -168,6 +232,30 @@ namespace FantasyVoxels
 
             return this;
         }
+        public Voxel SetMaterialType(MaterialType settings)
+        {
+            this.materialType = settings;
+
+            return this;
+        }
+        public Voxel SetBaseDigTime(float settings)
+        {
+            this.baseDigTime = settings;
+
+            return this;
+        }
+        public Voxel RequireLevel(int settings)
+        {
+            this.requiredLevel = settings;
+
+            return this;
+        }
+        public Voxel DisallowPlacement(PlacementSettings settings)
+        {
+            this.allowedPlacements &= ~settings; 
+
+            return this;
+        }
         public Voxel SetClass(Block block)
         {
             myClass = block;
@@ -181,11 +269,14 @@ namespace FantasyVoxels
 
             return this;
         }
+
+        public bool AllowsPlacement(PlacementSettings placement) => placement == Voxel.PlacementSettings.ANY || allowedPlacements == Voxel.PlacementSettings.ANY || allowedPlacements.HasFlag(placement);
     }
     public struct VoxelData
     {
         public int skyLight,blockLight;
         public int shade;
+        public Voxel.PlacementSettings placement;
     }
     public class Chunk
     {
@@ -193,12 +284,15 @@ namespace FantasyVoxels
         public (int x, int y, int z) chunkPos;
         public byte[] voxels = new byte[Size*Size*Size];
         public VoxelData[] voxeldata = new VoxelData[Size*Size*Size];
+        [JsonIgnore]
         public static bool EnableSmoothLighting = true;
 
+        [JsonIgnore] 
         public volatile bool queueModified,queueInWorks;
 
         public bool CompletelyEmpty;
 
+        [JsonIgnore]
         public static VertexPosition[] chunkVerts = 
         [
             new VertexPosition(new Vector3 (0, 0, 0)),
@@ -210,6 +304,7 @@ namespace FantasyVoxels
             new VertexPosition(new Vector3 (1, 0, 1)),
             new VertexPosition(new Vector3 (0, 0, 1)),
         ];
+        [JsonIgnore]
         public static short[] triangles = 
         [
             1, 2, 5, //face right
@@ -225,6 +320,7 @@ namespace FantasyVoxels
             0, 6, 7, //face bottom
 	        0, 1, 6
         ];
+        [JsonIgnore]
         public static Vector3[] vertsPerCheck =
         {
             new (1,0,1),
@@ -257,6 +353,7 @@ namespace FantasyVoxels
             new (1,1,0),
             new (0,1,0),
         };
+        [JsonIgnore]
         public static (int x, int y, int z)[] positionChecks =
         {
             (1,0,0),
@@ -266,6 +363,7 @@ namespace FantasyVoxels
             (0,0,1),
             (0,0,-1),
         };
+        [JsonIgnore]
         static float[] sideShading =
         [
             0.9f,
@@ -275,6 +373,7 @@ namespace FantasyVoxels
             0.6f,
             0.6f,
         ];
+        [JsonIgnore]
         public static Vector2[] uvs =
         {
             new (0,1),
@@ -307,18 +406,27 @@ namespace FantasyVoxels
             new (0,0),
             new (1,0),
         };
+        [JsonIgnore]
         public static VertexBuffer chunkBuffer;
+        [JsonIgnore]
         public VertexBuffer[] chunkVertexBuffers;
+        [JsonIgnore]
         public ushort[,] vSidesStart = new ushort[5,6];
 
-        public int[,] skylightAbove = null; 
+        [JsonIgnore]
+        public int[,] skylightAbove = null;
 
+        [JsonIgnore]
         public bool[,] sidesVisible = new bool[6,6];
+        [JsonIgnore]
         public bool[] facesVisibleAtAll = new bool[6];
         public volatile bool generated = false, modified = false,lightOutOfDate = false, visOutOfDate;
+        [JsonIgnore]
         public bool[] meshUpdated = new bool[4];
+        [JsonIgnore]
         public bool[] meshLayer = new bool[Size];
         public int MaxY;
+        [JsonIgnore]
         Random tRandom;
 
         private int[,] tHeight = new int[Size, Size];
@@ -693,9 +801,9 @@ namespace FantasyVoxels
 
                     if (rx == x && ry == y && rz == z) continue;
                     if (voxels[x + Size * (y + Size * z)] != 0) continue;
-                    if (voxeldata[rx + Size * (ry + Size * rz)].blockLight - voxeldata[x + Size * (y + Size * z)].blockLight < 25) continue;
+                    if (voxeldata[rx + Size * (ry + Size * rz)].blockLight - voxeldata[x + Size * (y + Size * z)].blockLight < 30) continue;
 
-                    voxeldata[x + Size * (y + Size * z)].blockLight += (byte)((voxeldata[rx + Size * (ry + Size * rz)].blockLight - voxeldata[x + Size * (y + Size * z)].blockLight) * 0.65f);
+                    voxeldata[x + Size * (y + Size * z)].blockLight += (byte)((voxeldata[rx + Size * (ry + Size * rz)].blockLight - voxeldata[x + Size * (y + Size * z)].blockLight) * 0.6f);
 
                     int ourLight = voxeldata[x + Size * (y + Size * z)].blockLight;
 
@@ -1126,7 +1234,7 @@ namespace FantasyVoxels
             return true;
         }
 
-        public void Modify(int x, int y, int z, int newVoxel)
+        public void Modify(int x, int y, int z, int newVoxel, Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY)
         {
             if (x < 0 || y < 0 || z < 0 || x >= Size || y >= Size || z >= Size) return;
 
@@ -1137,6 +1245,7 @@ namespace FantasyVoxels
             modified = true;
 
             voxels[x + Size * (y + Size * z)] = (byte)newVoxel;
+            voxeldata[x + Size * (y + Size * z)].placement = placement;
 
             for (int p = 0; p < 6; p++)
             {
