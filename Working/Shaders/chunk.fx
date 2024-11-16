@@ -1,11 +1,8 @@
 ﻿#if OPENGL
 #define SV_POSITION POSITION
+#endif
 #define VS_SHADERMODEL vs_3_0
 #define PS_SHADERMODEL ps_3_0
-#else
-#define VS_SHADERMODEL vs_4_0_level_9_1
-#define PS_SHADERMODEL ps_4_0_level_9_1
-#endif
 
 float4x4 World;
 float4x4 View;
@@ -142,7 +139,8 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
         finPos.z += sin2 * 0.1f;
     }
     
-   
+    
+    /*
     
     float4 lightingPosition = mul(float4(output.WorldPos+normal.xyz*0.8f,1), LightViewProj);
     
@@ -154,6 +152,8 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     float ourdepth = (lightingPosition.z / lightingPosition.w);
     
     output.ShadowCoord = float4(ShadowTexCoord, (lightingPosition.z / lightingPosition.w), dot(float3(0, 1, 0), normal.xyz));
+    
+    */
     
     output.Color = float4(voxShadeEffect, color.g, color.b, voxAlphaEffect);
     
@@ -223,12 +223,12 @@ PSOut MainPS(VSOutput input)
     
     float2 depth = input.Depth.xy;
     
-    float fog = max(depth.x - ChunkSize * 0.5f, 0) / ((renderDistance-0.5f) * ChunkSize * 0.5f);
+    float fog = max(depth.x - ChunkSize * 0.5f, 0) / (renderDistance * ChunkSize * 0.5f);
     float fogColor = pow(saturate(normalize(input.WorldPos - cameraPosition).y),1.25f);
     
     float4 dat = input.Color;
     
-    float4 color = tex2D(colorsSampler, input.Coord);
+    float4 color = tex2Dlod(colorsSampler, float4(input.Coord,0,0));
     clip(color.a - 0.02f);
     
     //float3 tangent;
@@ -269,9 +269,9 @@ PSOut MainPS(VSOutput input)
     
     float3 lmp = tex2D(lightmapSampler, float2(pow(dat.b, 0.8f), (time%4) / 4));
     
-    float3 desCol = color.xyz * (lmp + dat.g * (realBump + 1) * sunColor);
+    float3 desCol = color.xyz * (lmp + saturate(dat.g-0.025f) * (realBump + 1) * sunColor);
 
-    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog),0.8)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog),1.2f)), color.a * dat.a);
     
     if (color.a > 0.9f)
     {

@@ -69,22 +69,22 @@ namespace FantasyVoxels.Blocks
             }
 
             GetScale(Chunk.vertsPerCheck[checkFace * 4 + 0]);
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 0] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 0] / (16)));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 0] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 0] / ((MGame.AtlasSize / 16))));
 
             GetScale(Chunk.vertsPerCheck[checkFace * 4 + 1]);
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 1] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 1] / (16)));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 1] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 1] / ((MGame.AtlasSize / 16))));
 
             GetScale(Chunk.vertsPerCheck[checkFace * 4 + 2]);
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 2] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 2] / (16)));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 2] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 2] / ((MGame.AtlasSize / 16))));
 
             GetScale(Chunk.vertsPerCheck[checkFace * 4 + 0]);
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 0] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 0] / (16)));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 0] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 0] / ((MGame.AtlasSize / 16))));
 
             GetScale(Chunk.vertsPerCheck[checkFace * 4 + 2]);
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 2] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 2] / (16)));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 2] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 2] / ((MGame.AtlasSize / 16))));
 
             GetScale(Chunk.vertsPerCheck[checkFace * 4 + 3]);
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 3] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 3] / (16)));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[checkFace * 4 + 3] * scale + new Vector3(x, y, z), normal, baseUVOffset + Chunk.uvs[checkFace * 4 + 3] / ((MGame.AtlasSize / 16))));
 
             return verts;
         }
@@ -172,7 +172,7 @@ namespace FantasyVoxels.Blocks
         }
         public override void Init()
         {
-            timer = new Timer(TimeSpan.FromMilliseconds(500));
+            timer = new Timer(TimeSpan.FromMilliseconds(200));
             timer.Elapsed += TickBlocks;
             timer.Start();
         }

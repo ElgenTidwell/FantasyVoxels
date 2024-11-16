@@ -12,6 +12,8 @@ texture ScreenTexture;
 texture NormalTexture;
 texture NoiseTexture;
 texture AOTexture;
+texture waterOverlay;
+texture waterDUDV;
 sampler TextureSampler : register(s0) = sampler_state
 {
     Texture = <ScreenTexture>;
@@ -52,9 +54,33 @@ sampler AOSampler : register(s3) = sampler_state
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
+sampler waterOverlaySampler : register(s4) = sampler_state
+{
+    Texture = <waterOverlay>;
+    MagFilter = POINT;
+    MinFilter = POINT;
+    Mipfilter = POINT;
+
+    AddressU = WRAP;
+    AddressV = WRAP;
+};
+sampler waterDUDVSampler : register(s5) = sampler_state
+{
+    Texture = <waterDUDV>;
+    MagFilter = POINT;
+    MinFilter = POINT;
+    Mipfilter = POINT;
+
+    AddressU = WRAP;
+    AddressV = WRAP;
+};
+
 
 
 float2 screenSize;
+float3 cameraRotation;
+
+bool underwater;
 
 float2 AOSampleOffsets[8];
 
@@ -103,7 +129,22 @@ float CalcAO(float2 tex,float4 reference)
 
 float4 PShader(PixelInput p) : COLOR0
 {
+    float2 watertexcoords = (p.TexCoord.xy - float2(cameraRotation.y, cameraRotation.x)) * (screenSize / 1024);
+    
+    float2 dudv = tex2D(waterDUDVSampler, watertexcoords);
+    float4 overlay = tex2D(waterOverlaySampler, watertexcoords);
+    
+    if (underwater)
+    {
+        p.TexCoord.xy += ((dudv * 2 - float2(1, 1)) * 4) / screenSize;
+    }
+    
     float4 diffuse = tex2D(TextureSampler, p.TexCoord.xy);
+    
+    if (underwater)
+    {
+        diffuse.xyz *= (overlay.xyz * 0.8f + 0.2f);
+    }
     
     float4 AO = tex2D(AOSampler,p.TexCoord.xy);
     

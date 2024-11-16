@@ -13,6 +13,8 @@ using FantasyVoxels.ItemManagement;
 using GeonBit.UI;
 using GeonBit.UI.Entities;
 using Newtonsoft.Json.Linq;
+using System.Collections;
+using FantasyVoxels.UI;
 
 namespace FantasyVoxels.Entities
 {
@@ -31,6 +33,7 @@ namespace FantasyVoxels.Entities
         float autoDigTime = 0f;
 
         bool running,crouched;
+        bool deathUIshown = false;
         bool accessingInventory;
 
         public static VertexPosition[] voxelBoxVert =
@@ -92,6 +95,7 @@ namespace FantasyVoxels.Entities
         ItemContainer cursor = new ItemContainer(1);
         ItemContainer hotbar = new ItemContainer(9);
         ItemContainer inventory = new ItemContainer(20);
+        Item heldItem => hotbar.PeekItem(activeHotbarSlot);
         Item prevHeldItem;
 
         Vector3 wishDir;
@@ -99,6 +103,7 @@ namespace FantasyVoxels.Entities
 
         VertexPositionNormalTexture[] heldBlockModel;
         bool handFromBlockColors;
+        bool handIsSprite;
         bool drawHand;
         bool regenerateHand;
 
@@ -107,6 +112,7 @@ namespace FantasyVoxels.Entities
         float vmoffsetY;
 
         float diggingTimer;
+        float waterDamageTimer;
 
         HandAnimation currentHandAnimation;
         float handAnimationTimer;
@@ -124,7 +130,7 @@ namespace FantasyVoxels.Entities
 
         public Player()
         {
-            maxHealth = 18;
+            maxHealth = 16;
             health = maxHealth;
         }
 
@@ -166,7 +172,7 @@ namespace FantasyVoxels.Entities
         }
         public override void OnTakeDamage(DamageInfo info)
         {
-            painResponse = info.damage*float.Sign((float)Random.Shared.NextDouble()-0.5f);
+            painResponse = (info.damage-1)*0.5f+1;
 
             base.OnTakeDamage(info);
         }
@@ -213,7 +219,7 @@ namespace FantasyVoxels.Entities
 
             if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming))
             {
-                gravity = swimming ? 4 : 7f;
+                gravity = swimming ? MathF.Min(gravity+28*MGame.dt, 4.5f) : 7f;
                 grounded = false;
             }
             if (BetterKeyboard.HasBeenPressed(Keys.Q))
@@ -234,10 +240,6 @@ namespace FantasyVoxels.Entities
             {
                 gravity = -3f;
             }
-            if (BetterKeyboard.HasBeenPressed(Keys.P))
-            {
-                OnTakeDamage(new DamageInfo { damage = 1 });
-            }
 
             rotmat = Matrix.CreateRotationX(rotation.X) * Matrix.CreateRotationY(rotation.Y);
 
@@ -255,7 +257,7 @@ namespace FantasyVoxels.Entities
             {
                 if (autoDigTime <= 0)
                 {
-                    autoDigTime = 0.25f;
+                    autoDigTime = 0.2f;
 
                     SetAnimation(HandAnimation.Swing);
                 }
@@ -306,7 +308,9 @@ namespace FantasyVoxels.Entities
                             if (place.Z > 0) placement = Voxel.PlacementSettings.FRONT;
                             if (place.Z < 0) placement = Voxel.PlacementSettings.BACK;
 
-                            if ((placeBox.Contains(bounds) == ContainmentType.Disjoint || Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].ignoreCollision) && Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].AllowsPlacement(placement))
+                            if ((placeBox.Contains(bounds) == ContainmentType.Disjoint || Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].ignoreCollision)
+                                 && Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].AllowsPlacement(placement)
+                                 && !(Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].myClass != null && !Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].myClass.CanPlace(placement,hitVoxelType)))
                             {
                                 autoDigTime = 0.25f;
 
@@ -334,41 +338,100 @@ namespace FantasyVoxels.Entities
             Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
             oldState = Mouse.GetState();
         }
+        public override void Die()
+        {
+            deathUIshown = true;
+
+            var forward = MGame.Instance.cameraForward;
+            MGame.Instance.cameraForward = Vector3.Up;
+            SpitContents(ref inventory, true);
+            SpitContents(ref hotbar,true);
+            MGame.Instance.cameraForward = forward;
+
+            var respawnButton = new Button("Respawn",ButtonSkin.Alternative,Anchor.Center, new Vector2(800, 70));
+            var quitButton = new Button("Quit to Menu", ButtonSkin.Alternative, Anchor.AutoCenter, new Vector2(800, 70));
+
+            MGame.Instance.IsMouseVisible = true;
+
+            UserInterface.Active.AddEntity(respawnButton);
+            UserInterface.Active.AddEntity(quitButton);
+
+            respawnButton.OnClick += (GeonBit.UI.Entities.Entity entity) =>
+            {
+                UserInterface.Active.RemoveEntity(respawnButton);
+                UserInterface.Active.RemoveEntity(quitButton);
+
+                this.health = 16;
+                this.maxHealth = 16;
+                this.position = MGame.Instance.worldSpawnpoint;
+
+                MGame.Instance.IsMouseVisible = false;
+            };
+            quitButton.OnClick += (GeonBit.UI.Entities.Entity entity) =>
+            {
+                UserInterface.Active.RemoveEntity(respawnButton);
+                UserInterface.Active.RemoveEntity(quitButton);
+
+                PauseMenu.QuitWorld();
+            };
+        }
         public override void Update()
         {
-            if (MathF.Abs(velocity.X + velocity.Z) < 4f) running = false;
-            disallowWalkingOffEdge = crouched;
+            if (health <= 0 && !deathUIshown) Die();
 
-            float speed = new Vector2(velocity.X, velocity.Z).Length();
-            float bobMulti = grounded?speed / run:0;
+            if (health > 0)
+            {
+                if (MathF.Abs(velocity.X + velocity.Z) < 4f) running = false;
+                disallowWalkingOffEdge = crouched;
 
-            bobTime += MGame.dt * ((speed / walk-1)*0.3f+1);
+                float speed = new Vector2(velocity.X, velocity.Z).Length();
+                float bobMulti = grounded ? speed / run : 0;
 
-            xsin = MathF.Sin(bobTime * 7.5f) * bob;
-            ysin = MathF.Sin(bobTime * 7.5f + MathHelper.ToRadians(90)) * bob;
+                bobTime += MGame.dt * ((speed / walk - 1) * 0.3f + 1);
 
-            bob = Maths.MoveTowards(bob, bobMulti*1.2f, MGame.dt * 18 * float.Abs(bob-bobMulti*1.2f));
+                xsin = MathF.Sin(bobTime * 7.5f) * bob;
+                ysin = MathF.Sin(bobTime * 7.5f + MathHelper.ToRadians(90)) * bob;
 
-            curwalkspeed = (crouched ? sneak : running ? run : walk) * (swimming ? swim : 1);
+                bob = Maths.MoveTowards(bob, bobMulti * 1.2f, MGame.dt * 12 * float.Abs(bob - bobMulti * 1.2f));
 
-            HandleInventory();
+                curwalkspeed = (crouched ? sneak : running ? run : walk) * (swimming ? swim : 1);
 
-            wishDir = Vector3.Zero;
-            if(!accessingInventory) HandleInput();
-            vmswayX = Maths.MoveTowards(vmswayX,0,MGame.dt*15*float.Abs(vmswayX));
-            vmswayY = Maths.MoveTowards(vmswayY, 0,MGame.dt*15*float.Abs(vmswayY));
-            vmswayX += (oldRotation.Y - rotation.Y)*0.2f;
-            vmswayY += (oldRotation.X - rotation.X)*0.2f;
+                HandleInventory();
+
+                wishDir = Vector3.Zero;
+                if (!accessingInventory) HandleInput();
+                painResponse = Maths.MoveTowards(painResponse, 0, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
+
+
+                //Water damage
+                if(swimming)
+                {
+                    waterDamageTimer -= MGame.dt;
+                    if(waterDamageTimer < 0)
+                    {
+                        waterDamageTimer = 1;
+                        OnTakeDamage(new DamageInfo { damage = 1 });
+                    }
+                }
+            }
+            else
+            {
+                painResponse = Maths.MoveTowards(painResponse, 4, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
+            }
+
+            vmswayX = Maths.MoveTowards(vmswayX, 0, MGame.dt * 15 * float.Abs(vmswayX));
+            vmswayY = Maths.MoveTowards(vmswayY, 0, MGame.dt * 15 * float.Abs(vmswayY));
+            vmswayX += (oldRotation.Y - rotation.Y) * 0.2f;
+            vmswayY += (oldRotation.X - rotation.X) * 0.2f;
 
             float cameraY = (float)(position.Y + MathF.Abs(xsin) * 0.16f);
-            painResponse = Maths.MoveTowards(painResponse,0,MGame.dt*5*(float.Abs(painResponse)+0.1f));
 
-            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > walk ? 5 : 0),MGame.dt*30);
+            MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > walk ? 5 : 0), MGame.dt * 30);
             MGame.Instance.cameraPosition = new Vector3((float)position.X, cameraY, (float)position.Z);
             MGame.Instance.view =
                 Matrix.CreateRotationY(-rotation.Y) *
-                Matrix.CreateRotationX(-rotation.X + MathF.Abs(xsin) * 0.006f + velocity.Y*0.0006f) *
-                Matrix.CreateRotationZ(-rotation.Z - (ysin) * 0.003f + MathHelper.ToRadians(painResponse*5));
+                Matrix.CreateRotationX(-rotation.X + MathF.Abs(xsin) * 0.006f + velocity.Y * 0.0006f) *
+                Matrix.CreateRotationZ(-rotation.Z - (ysin) * 0.003f + MathHelper.ToRadians(painResponse * 5));
             MGame.Instance.world = Matrix.CreateWorld(-(new Vector3((float)position.X, cameraY, (float)position.Z)), Vector3.Forward, Vector3.Up);
 
             vmoffsetY = Maths.MoveTowards(vmoffsetY, 0, MGame.dt * float.Abs(vmoffsetY) * 10);
@@ -379,11 +442,11 @@ namespace FantasyVoxels.Entities
                 regenerateHand = true;
             }
 
-            if(currentHandAnimation != HandAnimation.None)
+            if (currentHandAnimation != HandAnimation.None)
             {
                 handAnimationTimer += MGame.dt * animationSpeeds[(int)currentHandAnimation];
 
-                if(handAnimationTimer >= 1)
+                if (handAnimationTimer >= 1)
                 {
                     handAnimationTimer = 0;
                     currentHandAnimation = HandAnimation.None;
@@ -403,32 +466,40 @@ namespace FantasyVoxels.Entities
 
                 if (id >= 0)
                 {
-                    if (ItemManager.GetItemFromID(id).type == ItemType.Block)
                     {
                         drawHand = true;
-                        handFromBlockColors = true;
-                        bool spr = ItemManager.GetItemFromID(id).alwaysRenderAsSprite;
+                        bool spr = ItemManager.GetItemFromID(id).type == ItemType.Block?ItemManager.GetItemFromID(id).alwaysRenderAsSprite:true;
+                        handIsSprite = spr;
+                        handFromBlockColors = ItemManager.GetItemFromID(id).type == ItemType.Block;
                         heldBlockModel = new VertexPositionNormalTexture[(spr ? 6 : 6 * 6)];
                         for (int p = 0; p < (spr ? 1 : 6); p++)
                         {
                             int i = spr ? 1 : p;
 
                             int tex = 0;
-                            switch (i)
+                            if (ItemManager.GetItemFromID(id).type == ItemType.Block)
                             {
-                                case 0: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].rightTexture; break;
-                                case 1: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].leftTexture; break;
-                                case 2: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].topTexture; break;
-                                case 3: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].bottomTexture; break;
-                                case 4: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].frontTexture; break;
-                                case 5: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].backTexture; break;
+                                switch (i)
+                                {
+                                    case 0: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].rightTexture; break;
+                                    case 1: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].leftTexture; break;
+                                    case 2: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].topTexture; break;
+                                    case 3: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].bottomTexture; break;
+                                    case 4: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].frontTexture; break;
+                                    case 5: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].backTexture; break;
+                                }
                             }
-                            heldBlockModel[(spr ? 0 : i * 6) + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                            heldBlockModel[(spr ? 0 : i * 6) + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                            heldBlockModel[(spr ? 0 : i * 6) + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                            heldBlockModel[(spr ? 0 : i * 6) + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                            heldBlockModel[(spr ? 0 : i * 6) + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
-                            heldBlockModel[(spr ? 0 : i * 6) + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3] + (spr ? new Vector3(0.75f, 0.3f, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / 256f);
+                            else
+                            {
+                                tex = ItemManager.GetItemFromID(id).texture;
+                            }
+
+                            heldBlockModel[(spr ? 0 : i * 6) + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (ItemManager.GetItemFromID(id).type == ItemType.Block?MGame.AtlasSize:MGame.ItemAtlasSize));
+                            heldBlockModel[(spr ? 0 : i * 6) + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (ItemManager.GetItemFromID(id).type == ItemType.Block?MGame.AtlasSize:MGame.ItemAtlasSize));
+                            heldBlockModel[(spr ? 0 : i * 6) + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (ItemManager.GetItemFromID(id).type == ItemType.Block?MGame.AtlasSize:MGame.ItemAtlasSize));
+                            heldBlockModel[(spr ? 0 : i * 6) + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (ItemManager.GetItemFromID(id).type == ItemType.Block?MGame.AtlasSize:MGame.ItemAtlasSize));
+                            heldBlockModel[(spr ? 0 : i * 6) + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (ItemManager.GetItemFromID(id).type == ItemType.Block?MGame.AtlasSize:MGame.ItemAtlasSize));
+                            heldBlockModel[(spr ? 0 : i * 6) + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (ItemManager.GetItemFromID(id).type == ItemType.Block?MGame.AtlasSize:MGame.ItemAtlasSize));
                         }
                     }
                 }
@@ -456,6 +527,8 @@ namespace FantasyVoxels.Entities
         }
         public bool PickupItem(int id, byte stack = 1)
         {
+            if (health <= 0) return false;
+
             if(!hotbar.AddItem(new Item { itemID = id, stack = stack },out int leftover))
             {
                 return inventory.AddItem(new Item { itemID = id, stack = stack }, out leftover);
@@ -470,16 +543,15 @@ namespace FantasyVoxels.Entities
             float speed = new Vector2(velocity.X, velocity.Z).Length();
             if (speed != 0)
             {
-                float drop = speed * (swimming? 2f : grounded?10f:0.5f) * MGame.dt;
+                float drop = speed * (swimming ? 2f : grounded ? 12 : 1) * MGame.dt;
                 velocity *= MathF.Max(speed - drop, 0) / speed;
             }
 
-            float curSpeed = Vector3.Dot(wishDir, velocity);
-            float addSpeed = MathHelper.Clamp(curwalkspeed - curSpeed, 0, grounded||swimming?0.6f:0.1f);
+            float curSpeed = new Vector2(velocity.X, velocity.Z).Length();
+            float addSpeed = MathHelper.Clamp(curwalkspeed - curSpeed, 0, (grounded || swimming ? 200 : 60)*MGame.dt);
 
             Vector3 initWish = addSpeed * wishDir;
             velocity += initWish;
-
 
             float multiplier = 1;
             float len = new Vector2(velocity.X, velocity.Z).Length();
@@ -538,30 +610,38 @@ namespace FantasyVoxels.Entities
             float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage + voxelData.blockLight / 255f;
             MGame.Instance.GetEntityShader().Parameters["tint"].SetValue(ourLight);
 
-            if (handFromBlockColors) MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(MGame.Instance.colors);
+            MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(handFromBlockColors? MGame.Instance.colors : MGame.Instance.items);
 
             Matrix animMatrix = Matrix.Identity;
 
-            switch(currentHandAnimation)
+            if (handIsSprite)
+            {
+                animMatrix =
+                           Matrix.CreateRotationY(MathHelper.ToRadians(-25)) *
+                           Matrix.CreateRotationX(MathHelper.ToRadians(-25)) *
+                           Matrix.CreateTranslation(0, -0.2f, 0.1f);
+            }
+
+            switch (currentHandAnimation)
             {
                 case HandAnimation.Swing:
 
-                    animMatrix = Matrix.CreateTranslation(0, 0, -float.Pow(handAnimationTimer,2f)*2-0.1f)*
+                    animMatrix *= Matrix.CreateTranslation(0, 0, -float.Pow(handAnimationTimer,2f)*2-0.1f)*
                                  Matrix.CreateRotationX(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * -125 + 15))*
-                                 Matrix.CreateRotationY(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * 15));
+                                 Matrix.CreateRotationY(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * 25));
 
                     break;
             }
 
             Matrix world = Matrix.CreateTranslation(Vector3.One*0.5f)*
-                           Matrix.CreateScale(0.6f)*
-                           Matrix.CreateRotationY(MathHelper.ToRadians(15))*
+                           Matrix.CreateScale(handIsSprite? 0.8f: 0.6f) *
+                           Matrix.CreateRotationY(MathHelper.ToRadians(20))*
                            Matrix.CreateRotationX(MathHelper.ToRadians(0))*
                            animMatrix *
                            Matrix.CreateWorld(new Vector3(0.2f+ ysin * 0.15f*bob, -1.4f-(((float.Pow(float.Abs(xsin),0.8f) * 1.5f)) * bob) * 0.15f + vmoffsetY, -1.6f), Vector3.Forward, Vector3.Up)*
                            Matrix.CreateRotationX(MathHelper.ToRadians(velocity.Y * -0.2f)+ vmswayY) *
                            Matrix.CreateRotationY(vmswayX) *
-                           Matrix.CreateRotationZ(painResponse*0.05f);
+                           Matrix.CreateRotationZ(painResponse*0.01f);
 
             MGame.Instance.GetEntityShader().Parameters["World"].SetValue(world);
             MGame.Instance.GetEntityShader().Parameters["View"].SetValue(Matrix.Identity);
@@ -611,7 +691,9 @@ namespace FantasyVoxels.Entities
 
                 index = -int.Clamp(index,-4,0);
 
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, UserInterface.Active.ScreenHeight - 34 * uiScale), new Rectangle(59+ index*11, 0, 11, 10), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
+                int bounce = health == 0?0 : (int)(float.Max((float.Sin(MGame.totalTime * 16 + h * 1)), 0) * (maxHealth / health) * 0.5f);
+
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, UserInterface.Active.ScreenHeight - 34 * uiScale - bounce*uiScale), new Rectangle(59+ index*11, 0, 11, 10), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
             }
             MGame.Instance.spriteBatch.End();
 
@@ -622,9 +704,9 @@ namespace FantasyVoxels.Entities
                 //black background
                 MGame.Instance.spriteBatch.Draw(MGame.Instance.white, MGame.Instance.GraphicsDevice.Viewport.Bounds, null, new Color(Color.Black, 200), 0f, Vector2.Zero, SpriteEffects.None, 0.05f);
 
-                int scale = (int)(uiScale * 1.25f);
+                int scale = (int)(uiScale * 1);
                 int backpackX = (int)(-103 * scale + UserInterface.Active.ScreenWidth / 2f);
-                int backpackY = (int)(-25 * scale + UserInterface.Active.ScreenWidth / 2f);
+                int backpackY = (int)(60 * scale + UserInterface.Active.ScreenHeight / 2f);
                 MGame.Instance.spriteBatch.Draw(MGame.Instance.uiBackback, new Vector2(backpackX, backpackY - 142*scale), new Rectangle(0, 0, 206, 142), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
                 
                 //hotbar
@@ -642,6 +724,16 @@ namespace FantasyVoxels.Entities
                     if (isSelected)
                     {
                         TryTransferContainerToCursor(ref hotbar,i);
+
+                        if (id != -1)
+                        {
+                            Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(ItemManager.GetItemFromID(id).displayName) + Vector2.One*2) * scale;
+
+                            Vector2 pos = (Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale)) * scale;
+
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, new Rectangle((int)pos.X, (int)pos.Y, (int)size.X + scale*5, (int)size.Y), null,Color.Black, 0f, Vector2.Zero, SpriteEffects.None, 0.99f);
+                            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], ItemManager.GetItemFromID(id).displayName, pos + Vector2.UnitX*scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
+                        }
 
                         MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
                     }
@@ -662,6 +754,16 @@ namespace FantasyVoxels.Entities
                     if (isSelected)
                     {
                         TryTransferContainerToCursor(ref inventory, i);
+
+                        if (id != -1)
+                        {
+                            Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(ItemManager.GetItemFromID(id).displayName) + Vector2.One * 2) * scale;
+
+                            Vector2 pos = (Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale)) * scale;
+
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, new Rectangle((int)pos.X, (int)pos.Y, (int)size.X + scale * 5, (int)size.Y), null, Color.Black, 0f, Vector2.Zero, SpriteEffects.None, 0.99f);
+                            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], ItemManager.GetItemFromID(id).displayName, pos + Vector2.UnitX * scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
+                        }
 
                         MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
                     }
@@ -732,28 +834,42 @@ namespace FantasyVoxels.Entities
                                                 SpriteEffects.None,
                                                 depth);
             }
+            else
+            {
+                int tex = item.texture;
+
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
+                                                new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                Vector2.One * uiScale,
+                                                SpriteEffects.None,
+                                                depth);
+            }
 
             Vector2 shift = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(stack.ToString()) * uiScale;
 
             MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 21 * uiScale, pos.Y - 0 * uiScale) - shift, Color.Black, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.01f);
             MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 20 * uiScale, pos.Y - 1 * uiScale) - shift, Color.White, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.02f);
         }
-        void SpitContents(ref ItemContainer container)
+        void SpitContents(ref ItemContainer container, bool random = false)
         {
-            if (container.PeekItem(0).stack > 0)
+            for(int j = 0; j < container.GetAllItems().Length; j++)
             {
-                var item = container.TakeItemStack(0);
-
-                if (item.itemID >= 0)
+                if (container.PeekItem(j).stack > 0)
                 {
-                    for (int i = 0; i < item.stack; i++)
-                    {
-                        var droppedItem = new DroppedItem(item.itemID);
-                        droppedItem.position = (Vector3)position + MGame.Instance.cameraForward * 0.6f;
-                        droppedItem.velocity = velocity + MGame.Instance.cameraForward * (9+(float)Random.Shared.NextDouble());
-                        droppedItem.gravity = droppedItem.velocity.Y;
+                    var item = container.TakeItemStack(j);
 
-                        EntityManager.SpawnEntity(droppedItem);
+                    if (item.itemID >= 0)
+                    {
+                        for (int i = 0; i < item.stack; i++)
+                        {
+                            var droppedItem = new DroppedItem(item.itemID);
+                            droppedItem.position = (Vector3)position + MGame.Instance.cameraForward * 0.6f;
+                            droppedItem.velocity = random ? new Vector3(Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle(), Random.Shared.NextSingle() * 2 - 1) * (3 + (float)Random.Shared.NextDouble()) : velocity + MGame.Instance.cameraForward * (9 + (float)Random.Shared.NextDouble());
+                            droppedItem.gravity = droppedItem.velocity.Y;
+
+                            EntityManager.SpawnEntity(droppedItem);
+                        }
                     }
                 }
             }
@@ -771,6 +887,9 @@ namespace FantasyVoxels.Entities
 
                 return true;
             }
+
+            //on death screen
+            if (health <= 0) return true;
 
             //not in any menus
             return false;

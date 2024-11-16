@@ -17,12 +17,17 @@ namespace FantasyVoxels.UI
         static Panel mainMenu;
         static PauseMenu()
         {
-            mainMenu = new Panel(new Vector2(800,800),PanelSkin.None);
+            mainMenu = new Panel(new Vector2(800, 800), PanelSkin.None);
 
-            mainMenu.AddChild(new Button("Resume Game",anchor:Anchor.Center,offset:Vector2.UnitY*-128)).OnClick += (GeonBit.UI.Entities.Entity entity) =>
+            mainMenu.AddChild(new Button("Resume Game", anchor: Anchor.Center, offset: Vector2.UnitY * -128)).OnClick += (GeonBit.UI.Entities.Entity entity) =>
             {
                 Mouse.SetPosition(Instance.GraphicsDevice.Viewport.Width / 2, Instance.GraphicsDevice.Viewport.Height / 2);
                 Hide();
+            };
+            mainMenu.AddChild(new Button("Options")).OnClick += (GeonBit.UI.Entities.Entity entity) =>
+            {
+                UserInterface.Active.RemoveEntity(mainMenu);
+                TitleMenu.ShowOptions(mainMenu);
             };
             mainMenu.AddChild(new Button("Quit to Title")).OnClick += GoToMainMenu;
         }
@@ -30,7 +35,10 @@ namespace FantasyVoxels.UI
         private static async void GoToMainMenu(GeonBit.UI.Entities.Entity entity)
         {
             Hide();
-
+            await QuitWorld();
+        }
+        public static async Task QuitWorld()
+        {
             var label = new Label("Saving World...", Anchor.Center);
             UserInterface.Active.AddEntity(label);
 
@@ -54,7 +62,8 @@ namespace FantasyVoxels.UI
         public static void Hide()
         {
             Instance.IsMouseVisible = false;
-            UserInterface.Active.RemoveEntity(mainMenu);
+            if(mainMenu.Parent != null) UserInterface.Active.RemoveEntity(mainMenu);
+            if(TitleMenu.optionsMenu.Parent != null) UserInterface.Active.RemoveEntity(TitleMenu.optionsMenu);
             Instance.gamePaused = false;
         }
     }

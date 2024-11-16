@@ -13,6 +13,7 @@ float2 screenAspect;
 float2 screenSize;
 
 int texIndex;
+int atlasSize;
 
 sampler TextureSampler : register(s0);
 
@@ -40,7 +41,7 @@ PixelInput SpriteVertexShader(VertexInput v)
 }
 float4 SpritePixelShader(PixelInput p) : SV_TARGET
 {
-    const float tIndexSize = (16 / 256.f);
+    const float tIndexSize = (16.f / atlasSize);
     float2 coord = p.TexCoord.xy;
     coord %= tIndexSize;
     coord += float2(tIndexSize * (texIndex % 16), tIndexSize*floor(texIndex/16));

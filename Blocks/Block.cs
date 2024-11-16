@@ -1,4 +1,5 @@
-﻿using Microsoft.Xna.Framework;
+﻿using FantasyVoxels.ItemManagement;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,7 @@ namespace FantasyVoxels.Blocks
         protected int myVoxelID;
         public bool supportsCustomMeshing;
         public bool smoothLightingEnable;
+        public bool customDrops;
         public Block SetTextureData(TextureSetSettings settings, short texture)
         {
             if (settings.HasFlag(TextureSetSettings.RIGHT)) voxelTypes[myVoxelID].rightTexture = texture;
@@ -45,6 +47,14 @@ namespace FantasyVoxels.Blocks
         public virtual bool ShouldMeshFace(int checkFace, int otherVoxel)
         {
             return false;
+        }
+        public virtual bool CanPlace(PlacementSettings placement, int otherVoxel)
+        {
+            return true;
+        }
+        public virtual Item[] GetCustomDrops()
+        {
+            return null;
         }
         public abstract void Init();
         public void TryUpdateBlock((int x, int y, int z) posInChunk, Chunk chunk, bool force = false)

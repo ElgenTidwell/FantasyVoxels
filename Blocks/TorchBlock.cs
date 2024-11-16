@@ -26,7 +26,10 @@ namespace FantasyVoxels.Blocks
         public override void Init()
         {
         }
-
+        public override bool CanPlace(Voxel.PlacementSettings placement, int otherVoxel)
+        {
+            return !Voxel.voxelTypes[otherVoxel].ignoreCollision;
+        }
         public override bool ShouldMeshFace(int checkFace, int otherVoxel)
         {
             //just one face is all we need.
@@ -45,69 +48,69 @@ namespace FantasyVoxels.Blocks
             var verts = new List<VertexPositionNormalTexture>
             {
                 //stem
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
                 
                 //stem2
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitX, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
 
                 
                 //stem
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
                 
                 //stem2
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
-                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (16))),
-                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (16))),
-                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], -Vector3.UnitZ, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]) / (MGame.AtlasSize / 16))),
 
                 //top
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]*pix*2+(new Vector2(7,6))*pix) / (16))),
-                new VertexPositionNormalTexture(vertices[1], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]*pix*2+(new Vector2(7,6))*pix) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]*pix*2+(new Vector2(7,6))*pix) / (16))),
-                new VertexPositionNormalTexture(vertices[0], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]*pix*2+(new Vector2(7,6))*pix) / (16))),
-                new VertexPositionNormalTexture(vertices[2], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]*pix*2+(new Vector2(7,6))*pix) / (16))),
-                new VertexPositionNormalTexture(vertices[3], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]*pix*2+(new Vector2(7,6))*pix) / (16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]*pix*2+(new Vector2(7,6))*pix) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[1], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 1]*pix*2+(new Vector2(7,6))*pix) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]*pix*2+(new Vector2(7,6))*pix) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[0], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 0]*pix*2+(new Vector2(7,6))*pix) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[2], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 2]*pix*2+(new Vector2(7,6))*pix) / (MGame.AtlasSize / 16))),
+                new VertexPositionNormalTexture(vertices[3], Vector3.UnitY, baseUVOffset + ((Chunk.uvs[checkFace * 4 + 3]*pix*2+(new Vector2(7,6))*pix) / (MGame.AtlasSize / 16))),
             };
 
             const int size = 12;
@@ -117,7 +120,7 @@ namespace FantasyVoxels.Blocks
             float nZ = 0.0f;
 
             Matrix rotation = Matrix.CreateTranslation(-0.5f,-0.5f,-0.5f);
-            const float wallrot = 0.44f;
+            const float wallrot = 0.5f;
 
             switch (placement)
             {
@@ -190,6 +193,60 @@ namespace FantasyVoxels.Blocks
 
         protected override bool BlockUpdate((int x, int y, int z) posInChunk, Chunk chunk)
         {
+            Voxel.PlacementSettings placement = Voxel.PlacementSettings.BOTTOM;
+            placement = chunk.voxeldata[posInChunk.x + Chunk.Size * (posInChunk.y + Chunk.Size * posInChunk.z)].placement;
+            switch (placement)
+            {
+                case Voxel.PlacementSettings.BOTTOM:
+
+                    if (MGame.Instance.GrabVoxel(new Vector3(posInChunk.x, posInChunk.y - 1, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size) == 0)
+                    {
+                        MGame.Instance.SetVoxel(new Vector3(posInChunk.x, posInChunk.y, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size, 0);
+                        return true;
+                    }
+
+                    break;
+
+                case Voxel.PlacementSettings.RIGHT:
+
+                    if (MGame.Instance.GrabVoxel(new Vector3(posInChunk.x + 1, posInChunk.y, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size) == 0)
+                    {
+                        MGame.Instance.SetVoxel(new Vector3(posInChunk.x, posInChunk.y, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size, 0);
+                        return true;
+                    }
+
+                    break;
+
+                case Voxel.PlacementSettings.LEFT:
+
+                    if (MGame.Instance.GrabVoxel(new Vector3(posInChunk.x - 1, posInChunk.y, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size) == 0)
+                    {
+                        MGame.Instance.SetVoxel(new Vector3(posInChunk.x, posInChunk.y, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size, 0);
+                        return true;
+                    }
+
+                    break;
+
+                case Voxel.PlacementSettings.FRONT:
+
+                    if (MGame.Instance.GrabVoxel(new Vector3(posInChunk.x, posInChunk.y, posInChunk.z+1) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size) == 0)
+                    {
+                        MGame.Instance.SetVoxel(new Vector3(posInChunk.x, posInChunk.y, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size, 0);
+                        return true;
+                    }
+
+                    break;
+
+                case Voxel.PlacementSettings.BACK:
+
+                    if (MGame.Instance.GrabVoxel(new Vector3(posInChunk.x, posInChunk.y, posInChunk.z - 1) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size) == 0)
+                    {
+                        MGame.Instance.SetVoxel(new Vector3(posInChunk.x, posInChunk.y, posInChunk.z) + new Vector3(chunk.chunkPos.x, chunk.chunkPos.y, chunk.chunkPos.z) * Chunk.Size, 0);
+                        return true;
+                    }
+
+                    break;
+            }
             return false;
         }
     }

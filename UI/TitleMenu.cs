@@ -41,7 +41,7 @@ namespace FantasyVoxels.UI
 
         private static Panel mainMenu;
         private static Panel worldBrowser;
-        private static Panel optionsMenu;
+        public static Panel optionsMenu;
 
         private static SelectList worldBrowserWorlds;
         private static Panel worldCreator;
@@ -57,6 +57,8 @@ namespace FantasyVoxels.UI
         };
 
         static CurrentMenu currentMenu;
+
+        static GeonBit.UI.Entities.Entity prevMenuBeforeOptions;
 
         static TitleMenu()
         {
@@ -94,6 +96,44 @@ namespace FantasyVoxels.UI
 
             worldCreator.AddChild(new Button("Cancel", anchor: Anchor.BottomLeft, skin: ButtonSkin.Alternative, size: new Vector2(300, 70))).OnClick += GoToWorldBrowser;
             worldCreator.AddChild(new Button("Create New World", anchor: Anchor.BottomRight, skin: ButtonSkin.Alternative, size: new Vector2(300, 70))).OnClick += CreateNewWorld;
+
+
+            //Options
+            optionsMenu = new Panel(new Vector2(1024, 800), PanelSkin.None, Anchor.Center);
+
+            optionsMenu.AddChild(new Button("Back", ButtonSkin.Alternative, Anchor.BottomLeft)).OnClick = (GeonBit.UI.Entities.Entity entity) => { HideOptions(); };
+
+            var rdistbutton = new Button($"View Distance: {Options.renderDistance}", ButtonSkin.Alternative, Anchor.TopLeft, new Vector2(480,70));
+            optionsMenu.AddChild(rdistbutton).OnClick = (GeonBit.UI.Entities.Entity entity) =>
+            {
+                int index = Array.IndexOf(Enum.GetValues(Options.renderDistance.GetType()), Options.renderDistance);
+                index++;
+                if (index >= Enum.GetValues(Options.renderDistance.GetType()).Length) index = 0;
+
+                Options.RenderDistance newdistance = (Options.RenderDistance)(Enum.GetValues(Options.renderDistance.GetType())).GetValue(index);
+                Options.SetRenderDistance(newdistance);
+
+                rdistbutton.ButtonParagraph.Text = $"View Distance: {Options.renderDistance}";
+            };
+            var smlightbutton = new Button($"Smooth Lighting {(Options.smoothLightingEnable ? "ON" : "OFF")}", ButtonSkin.Alternative, Anchor.AutoInline, new Vector2(480, 70));
+            optionsMenu.AddChild(smlightbutton).OnClick = (GeonBit.UI.Entities.Entity entity) =>
+            {
+                Options.SetSmoothLighting(!Options.smoothLightingEnable);
+                TriggerRelight();
+                smlightbutton.ButtonParagraph.Text = $"Smooth Lighting {(Options.smoothLightingEnable ? "ON" : "OFF")}";
+            };
+        }
+
+        private static void TriggerRelight()
+        {
+            if (Instance.loadedChunks != null && !Instance.loadedChunks.IsEmpty)
+            {
+                Parallel.ForEach(Instance.loadedChunks, (chunk) =>
+                {
+                    Instance.loadedChunks[chunk.Key].lightOutOfDate = true;
+                    Instance.loadedChunks[chunk.Key].chunkVertexBuffers[0] = null;
+                });
+            }
         }
 
         private static void GoToWorldCreation(GeonBit.UI.Entities.Entity entity)
@@ -133,7 +173,7 @@ namespace FantasyVoxels.UI
             if (worldBrowser.Parent != null) UserInterface.Active.RemoveEntity(worldBrowser);
             if (worldCreator.Parent != null) UserInterface.Active.RemoveEntity(worldCreator);
 
-            UserInterface.Active.AddEntity(optionsMenu);
+            ShowOptions(mainMenu);
         }
         private static void QuitPressed(GeonBit.UI.Entities.Entity entity)
         {
@@ -173,6 +213,17 @@ namespace FantasyVoxels.UI
             Instance.currentPlayState = PlayState.World;
         }
 
+        public static void ShowOptions(GeonBit.UI.Entities.Entity external)
+        {
+            prevMenuBeforeOptions = external;
+            UserInterface.Active.AddEntity(optionsMenu);
+        }
+        public static void HideOptions()
+        {
+            Options.SaveOptions();
+            if (optionsMenu.Parent != null) UserInterface.Active.RemoveEntity(optionsMenu);
+            UserInterface.Active.AddEntity(prevMenuBeforeOptions);
+        }
 
         public static void LoadContent()
         {
@@ -205,6 +256,7 @@ namespace FantasyVoxels.UI
             tiledBackground.Parameters["screenSize"].SetValue(Instance.GraphicsDevice.Viewport.Bounds.Size.ToVector2());
             tiledBackground.Parameters["screenAspect"].SetValue(new Vector2(1, Instance.GraphicsDevice.Viewport.AspectRatio + 1));
             tiledBackground.Parameters["texIndex"]?.SetValue(currentMenu == CurrentMenu.WorldCreation || currentMenu == CurrentMenu.WorldBrowser ? 8 : 11);
+            tiledBackground.Parameters["atlasSize"]?.SetValue(MGame.AtlasSize);
 
             Instance.spriteBatch.Begin(samplerState: SamplerState.PointWrap, effect: tiledBackground);
             Instance.spriteBatch.Draw(Instance.colors, Instance.GraphicsDevice.Viewport.Bounds, new Color(Color.White * 0.1f, 1f));

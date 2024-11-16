@@ -37,7 +37,7 @@ namespace FantasyVoxels
 
         public static void Tick()
         {
-            wTime += MGame.dt*5f;
+            wTime += MGame.dt*4f;
 
             wTime = wTime % (TURNOVER*2);
         }

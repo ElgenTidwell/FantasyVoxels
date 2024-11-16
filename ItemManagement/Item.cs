@@ -10,6 +10,7 @@ namespace FantasyVoxels.ItemManagement
     {
         Block,
         Tool,
+        Misc,
     }
     public struct ToolPieceProperties
     {
@@ -29,14 +30,20 @@ namespace FantasyVoxels.ItemManagement
         public byte maxStackSize;
         public string name;
         public string displayName;
-        public string texture;
+        public int texture;
         public bool alwaysRenderAsSprite;
         public object properties;
+    }
+    public struct ToolProperties
+    {
+        public Item toolHandle;
+        public Item toolHead;
     }
     public struct Item
     {
         public int itemID;
         public byte stack;
+        public object properties;
         public Item(string name, byte stack)
         {
             itemID = ItemManager.GetItemID(name);
@@ -47,6 +54,7 @@ namespace FantasyVoxels.ItemManagement
     {
         private static List<ItemData> loadedItems = new List<ItemData>();
         private static Dictionary<string, int> itemNameToIndices = new Dictionary<string, int>();
+        private static Dictionary<string, int> itemNameToItemTextureIndex = new Dictionary<string, int>();
 
         static ItemManager()
         {
@@ -61,6 +69,10 @@ namespace FantasyVoxels.ItemManagement
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 12, name = "daisy", displayName = "Daisy", alwaysRenderAsSprite = true });
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 13, name = "lamp", displayName = "Lamp" });
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 14, name = "torch", displayName = "Torch", alwaysRenderAsSprite = true });
+
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "stick", displayName = "Stick", texture = 0 });
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "glowleaf", displayName = "Glow Leaf", texture = 1 });
+
         }
         public static int RegisterItem(ItemData data)
         {
@@ -69,6 +81,7 @@ namespace FantasyVoxels.ItemManagement
             itemNameToIndices.Add(data.name,id);
             return id;
         }
+
 
         public static ItemData GetItem(string name) => GetItemFromID(itemNameToIndices[name]);
         public static int GetItemID(string name) => (itemNameToIndices[name]);

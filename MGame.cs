@@ -7,6 +7,8 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -27,6 +29,9 @@ namespace FantasyVoxels
         public static float dt = 0;
         public static float totalTime = 0;
 
+        public const int AtlasSize = 512;
+        public const int ItemAtlasSize = 512;
+
         public int seed = Environment.TickCount;
         public Random worldRandom;
 
@@ -38,15 +43,18 @@ namespace FantasyVoxels
         public Matrix world, view, projection, sunProjection, sunView;
         public Vector3 cameraPosition;
         public Vector3 cameraForward;
+        public Vector3Double worldSpawnpoint;
 
         public SpriteBatch spriteBatch => _spriteBatch;
         private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
-        public Texture2D colors,normals,noise,uiTextures,uiBackback,sunTexture,moonTexture,aoMap,white,breaking,lightmap;
+        public Texture2D colors,items,normals,noise,uiTextures,uiBackback,sunTexture,moonTexture,aoMap,white,breaking,lightmap,waterOverlay,waterDUDV;
         private Effect chunk;
         private Effect entity;
         private Effect breakingVoxel;
         private Effect sky;
         private Effect postProcessing;
+
+        private bool cameraUnderwater;
 
         public Effect GetEntityShader() => entity;
         public Effect GetBreakingShader() => breakingVoxel;
@@ -60,7 +68,7 @@ namespace FantasyVoxels
 
         List<(int x, int y, int z)> toRender = new List<(int x, int y, int z)>();
 
-        public int RenderDistance = 16;
+        public int RenderDistance => (int)Options.renderDistance;
         public bool enableAO = false;
         float _fov = 70f;
         public float FOV
@@ -273,7 +281,7 @@ namespace FantasyVoxels
             _graphics.SynchronizeWithVerticalRetrace = false;
             _graphics.PreferMultiSampling = false;
 
-            _graphics.GraphicsProfile = GraphicsProfile.HiDef;
+            _graphics.GraphicsProfile = GraphicsProfile.Reach;
 
             _graphics.ApplyChanges();
 
@@ -347,12 +355,13 @@ namespace FantasyVoxels
                 new Vector2((float)Random.Shared.NextDouble(),(float)Random.Shared.NextDouble()),
                 new Vector2((float)Random.Shared.NextDouble(),(float)Random.Shared.NextDouble()),
             });
-            screenTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.Color, DepthFormat.Depth24Stencil8);
-            normalTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable,DepthFormat.Depth24Stencil8);
+            screenTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.Color, DepthFormat.Depth24);
+            normalTexture = new RenderTarget2D(GraphicsDevice,Width,Height,false,SurfaceFormat.HdrBlendable,DepthFormat.Depth24);
             SSAOTarget = new RenderTarget2D(GraphicsDevice,Width/2,Height/2,false,SurfaceFormat.HdrBlendable,DepthFormat.None);
             shadowMap = new RenderTarget2D(GraphicsDevice, 2048, 2048, false, SurfaceFormat.Single, DepthFormat.Depth24);
 
             colors = Content.Load<Texture2D>("Textures/colors");
+            items = Content.Load<Texture2D>("Textures/items");
             normals = Content.Load<Texture2D>("Textures/normals");
             aoMap = Content.Load<Texture2D>("Textures/aomap");
             noise = Content.Load<Texture2D>("Textures/noise");
@@ -363,6 +372,8 @@ namespace FantasyVoxels
             sunTexture = Content.Load<Texture2D>("Textures/sun");
             moonTexture = Content.Load<Texture2D>("Textures/moon");
             lightmap = Content.Load<Texture2D>("Textures/lightmap");
+            waterOverlay = Content.Load<Texture2D>("Textures/waterOverlay");
+            waterDUDV = Content.Load<Texture2D>("Textures/water_dudv");
 
             chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             chunk.Parameters["colors"]?.SetValue(colors);
@@ -449,11 +460,18 @@ namespace FantasyVoxels
 
             player.position.Y = Chunk.GetTerrainHeight(0, 0) + 2;
 
+            worldSpawnpoint = player.position;
+
             player.Start();
 
             if(!fromsave)
             {
-                const int spawnGenRadius = 3;
+                var label = new Label("Building terrain", Anchor.AutoCenter);
+                var prog = new ProgressBar(0, 100, new Vector2(800,70), Anchor.AutoCenter);
+                UserInterface.Active.AddEntity(label);
+                UserInterface.Active.AddEntity(prog);
+
+                const int spawnGenRadius = 4;
 
                 List<(int x, int y, int z)> generate = new List<(int x, int y, int z)>();
 
@@ -467,7 +485,7 @@ namespace FantasyVoxels
 
                 for (int x = -spawnGenRadius; x <= spawnGenRadius; x++)
                 {
-                    for (int y = -2; y <= 2; y++)
+                    for (int y = -1; y <= 4; y++)
                     {
                         for (int z = -spawnGenRadius; z <= spawnGenRadius; z++)
                         {
@@ -480,6 +498,9 @@ namespace FantasyVoxels
                     }
                 }
 
+                int genamount = generate.Count;
+                int genprog = 0;
+
                 await Parallel.ForEachAsync(generate, async (pos, token) =>
                 {
                     Chunk c = new Chunk();
@@ -487,11 +508,15 @@ namespace FantasyVoxels
                     c.chunkPos = pos;
 
                     c.Generate();
-                    c.Remesh();
-                    c.CheckQueue();
+                    c.CheckQueue(false);
 
                     loadedChunks.TryAdd(CCPos(pos), c);
+
+                    genprog++;
+                    prog.Value = (int)(((float)genprog / genamount) * 100);
                 });
+                UserInterface.Active.RemoveEntity(label);
+                UserInterface.Active.RemoveEntity(prog);
             }
         }
         public void QuitWorld()
@@ -524,6 +549,17 @@ namespace FantasyVoxels
         void ProcessGeneration()
         {
             if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) return;
+
+            //if(Save.chunkJsonPaths.ContainsKey(CCPos(t)))
+            //{
+            //    Chunk chunk = JsonConvert.DeserializeObject<Chunk>(File.ReadAllText(Save.chunkJsonPaths[CCPos(t)]));
+            //    chunk.generated = true;
+            //    chunk.chunkPos = t;
+            //    chunk.GenerateVisibility();
+            //    Array.Fill(chunk.meshLayer, true);
+            //    loadedChunks.TryAdd(CCPos(t), chunk);
+            //    return;
+            //}
 
             Chunk c = new Chunk();
 
@@ -594,6 +630,9 @@ namespace FantasyVoxels
             }
             frustum = new BoundingFrustum(world * view * projection);
 
+            int camvoxel = GrabVoxel(cameraPosition+Vector3.UnitY*0.02f);
+            if (camvoxel >= 0)cameraUnderwater = Voxel.voxelTypes[camvoxel].isLiquid;
+
             int cx;
             int cy;
             int cz;
@@ -662,8 +701,7 @@ namespace FantasyVoxels
                         continue;
                     }
 
-                    // Add to render queue if the chunk is not completely empty
-                    if (!currentChunk.CompletelyEmpty)
+                    if(!currentChunk.CompletelyEmpty)
                         toRender.Add((x, y, z));
 
                     // BFS to neighbors through visible faces
@@ -933,7 +971,7 @@ namespace FantasyVoxels
             chunk.Parameters["skyColor"].SetValue(skyColor);
             chunk.Parameters["skyBandColor"].SetValue(skyBandColor);
 
-            chunk.Parameters["renderDistance"]?.SetValue(RenderDistance);
+            chunk.Parameters["renderDistance"]?.SetValue((cameraUnderwater ? 2.5f : RenderDistance));
             chunk.Parameters["cameraPosition"]?.SetValue(cameraPosition);
             chunk.Parameters["time"]?.SetValue(totalTime);
             chunk.Parameters["sunDir"]?.SetValue(sunView.Forward);
@@ -1099,6 +1137,14 @@ namespace FantasyVoxels
 
             postProcessing.Parameters["NormalTexture"]?.SetValue(normalTexture);
             postProcessing.Parameters["ScreenTexture"]?.SetValue(screenTexture);
+            postProcessing.Parameters["waterOverlay"]?.SetValue(waterOverlay);
+            postProcessing.Parameters["waterDUDV"]?.SetValue(waterDUDV);
+            postProcessing.Parameters["underwater"]?.SetValue(cameraUnderwater);
+            postProcessing.Parameters["screenSize"]?.SetValue(new Vector2(screenTexture.Width, screenTexture.Height));
+            postProcessing.Parameters["cameraRotation"]?.SetValue(player.rotation);
+
+            GraphicsDevice.SamplerStates[4] = SamplerState.PointWrap;
+            GraphicsDevice.SamplerStates[5] = SamplerState.PointWrap;
 
             Matrix _view = Matrix.Identity;
 
@@ -1130,7 +1176,6 @@ namespace FantasyVoxels
             _projection = Matrix.CreateOrthographicOffCenter(0, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height, 0, 0, 1);
 
             postProcessing.Parameters["view_projection"].SetValue(_view * _projection);
-            postProcessing.Parameters["screenSize"]?.SetValue(new Vector2(screenTexture.Width, screenTexture.Height));
             postProcessing.CurrentTechnique = postProcessing.Techniques["SpriteBatch"];
 
             _spriteBatch.Begin(effect: postProcessing);
@@ -1240,16 +1285,44 @@ namespace FantasyVoxels
 
                 if (!disableDrops)
                 {
-                    if (Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID >= 0 &&
-                        Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].requiredLevel <= toolLevel)
+                    var t = Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
+                    if (t.droppedItemID >= 0 && t.requiredLevel <= toolLevel)
                     {
-                        var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID);
-                        droppedItem.position = p + Vector3.One * 0.6f;
-                        droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
-                        droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
-                        droppedItem.gravity = 2f;
+                        if (t.myClass == null || !t.myClass.customDrops)
+                        {
+                            var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID)
+                            {
+                                position = p + Vector3.One * 0.6f
+                            };
+                            droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
+                            droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
+                            droppedItem.gravity = 2f;
 
-                        EntityManager.SpawnEntity(droppedItem);
+                            EntityManager.SpawnEntity(droppedItem);
+                        }
+                        else
+                        {
+                            var drops = t.myClass.GetCustomDrops();
+
+                            if (drops is not null)
+                            {
+                                foreach (var d in drops)
+                                {
+                                    for (int i = 0; i < d.stack; i++)
+                                    {
+                                        var droppedItem = new DroppedItem(d.itemID)
+                                        {
+                                            position = p + Vector3.One * 0.6f
+                                        };
+                                        droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
+                                        droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
+                                        droppedItem.gravity = 2f;
+
+                                        EntityManager.SpawnEntity(droppedItem);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1270,15 +1343,44 @@ namespace FantasyVoxels
 
                 if (newVoxel == 0 && !disableDrops)
                 {
-                    if (Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID >= 0)
+                    var t = Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
+                    if (t.droppedItemID >= 0)
                     {
-                        var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID);
-                        droppedItem.position = p + Vector3.One * 0.6f;
-                        droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
-                        droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
-                        droppedItem.gravity = 2f;
+                        if (t.myClass == null || !t.myClass.customDrops)
+                        {
+                            var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID)
+                            {
+                                position = p + Vector3.One * 0.6f
+                            };
+                            droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
+                            droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
+                            droppedItem.gravity = 2f;
 
-                        EntityManager.SpawnEntity(droppedItem);
+                            EntityManager.SpawnEntity(droppedItem);
+                        }
+                        else
+                        {
+                            var drops = t.myClass.GetCustomDrops();
+
+                            if(drops is not null)
+                            {
+                                foreach(var d in drops)
+                                {
+                                    for(int i = 0; i < d.stack; i++)
+                                    {
+                                        var droppedItem = new DroppedItem(d.itemID)
+                                        {
+                                            position = p + Vector3.One * 0.6f
+                                        };
+                                        droppedItem.position += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f, (float)Random.Shared.NextDouble() * 2 - 1f) * 0.3f;
+                                        droppedItem.velocity += new Vector3((float)Random.Shared.NextDouble() * 2 - 1f, 2, (float)Random.Shared.NextDouble() * 2 - 1f);
+                                        droppedItem.gravity = 2f;
+
+                                        EntityManager.SpawnEntity(droppedItem);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1313,7 +1415,7 @@ namespace FantasyVoxels
         {
             int v = MGame.Instance.GrabVoxel(new Vector3(x, y, z));
 
-            if (v == -1) return true;
+            if (v == -1) return false;
 
             return v != 0 && (raycast? !Voxel.voxelTypes[v].ignoreRaycast : !Voxel.voxelTypes[v].ignoreCollision);
         }

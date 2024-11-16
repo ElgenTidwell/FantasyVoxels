@@ -100,19 +100,19 @@ namespace FantasyVoxels
 
         public override void Place(int worldX, int worldY, int worldZ)
         {
-            int treeHeight = 4 + (int)((IcariaNoise.GradientNoise(worldX * 0.8f, worldZ * 0.8f)+1) * 4)*3;
+            int treeHeight = 4 + (int)((IcariaNoise.GradientNoise(worldX * 0.8f, worldZ * 0.8f)+1) * 4);
 
-            for (int y = worldY + 3; y <= worldY + treeHeight+1; y++)
+            for (int y = worldY + treeHeight - 2; y <= worldY + treeHeight+1; y++)
             {
-                if ((y - worldY) % 3 == 0) continue;
-
-                int rad = (int)(((1 - (((float)y - worldY - 3) / (treeHeight-3)) + 2) * 1.5f) - int.Min((y - worldY) % 3, 2));
+                int rad = (y > worldY + treeHeight?1:2);
 
                 for (int x = -rad; x <= rad; x++)
                 {
                     for (int z = -rad; z <= rad; z++)
                     {
-                        if (float.Abs(x) + float.Abs(z) > rad) continue;
+                        int offset = (int)((IcariaNoise.GradientNoise3D(worldX * 0.7f, worldY * 0.7f, worldZ * 0.7f))*2f);
+
+                        if (int.Abs(x) - offset == rad && int.Abs(z) - offset == rad && y <= worldY + treeHeight) continue;
 
                         SetVoxel(x + worldX, y, z + worldZ, LEAVES);
                     }

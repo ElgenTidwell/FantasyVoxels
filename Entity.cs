@@ -67,7 +67,7 @@ namespace FantasyVoxels
             if (grounded) gravity = !swimming?-0.6f:0;
             else
             {
-                gravity = swimming? Maths.MoveTowards(gravity, -1f,MGame.dt*14f) : gravity - 22 * MGame.dt;
+                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*18) : gravity - 22 * MGame.dt;
             }
 
             velocity.Y = grounded ? 0 : gravity;
@@ -90,20 +90,55 @@ namespace FantasyVoxels
             int cz = (int)Math.Floor(min.Z / Chunk.Size);
 
             if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
+            if (!MGame.Instance.loadedChunks[MGame.CCPos((cx, cy, cz))].generated) return;
 
             cx = (int)Math.Floor(max.X / Chunk.Size);
             cy = (int)Math.Floor(max.Y / Chunk.Size);
             cz = (int)Math.Floor(max.Z / Chunk.Size);
 
             if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
+            if (!MGame.Instance.loadedChunks[MGame.CCPos((cx, cy, cz))].generated) return;
 
-            Vector3Double oldPos = position;
             float oldGrav = gravity;
             bool wasGrounded = grounded;
 
-            for (int i = 0; i < 8; i++)
+            const int steps = 16;
+            const float stsize = 1 / (float)steps;
+
+            for (int i = 0; i < steps; i++)
             {
-                position += velocity * MGame.dt * (1 / 8f);
+                var oldpos = position;
+
+                position += velocity * MGame.dt * stsize;
+
+                // Now handle edge detection and position reversion outside of the loop
+                if (disallowWalkingOffEdge && grounded)
+                {
+                    bool hasAdjacentGroundX =
+                        CollisionDetector.IsSolidTile((int)Math.Floor(min.X + 0.01f * float.Sign(velocity.X)), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(min.Z)) ||
+                        CollisionDetector.IsSolidTile((int)Math.Floor(min.X + 0.01f * float.Sign(velocity.X)), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(max.Z)) ||
+                        CollisionDetector.IsSolidTile((int)Math.Floor(max.X + 0.01f * float.Sign(velocity.X)), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(min.Z)) ||
+                        CollisionDetector.IsSolidTile((int)Math.Floor(max.X + 0.01f * float.Sign(velocity.X)), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(max.Z));
+                    bool hasAdjacentGroundZ =
+                        CollisionDetector.IsSolidTile((int)Math.Floor(min.X), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(min.Z + 0.01f * float.Sign(velocity.Z))) ||
+                        CollisionDetector.IsSolidTile((int)Math.Floor(max.X), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(min.Z + 0.01f * float.Sign(velocity.Z))) ||
+                        CollisionDetector.IsSolidTile((int)Math.Floor(min.X), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(max.Z + 0.01f * float.Sign(velocity.Z))) ||
+                        CollisionDetector.IsSolidTile((int)Math.Floor(max.X), (int)Math.Floor(min.Y-0.01f), (int)Math.Floor(max.Z + 0.01f * float.Sign(velocity.Z)));
+
+                    // Revert position and velocity in the direction of movement
+                    if (!hasAdjacentGroundX)
+                    {
+                        position.X -= MGame.dt * (velocity.X) * stsize;
+                        velocity.X = 0;
+                        grounded = true;
+                    }
+                    if (!hasAdjacentGroundZ)
+                    {
+                        position.Z -= MGame.dt * (velocity.Z) * stsize;
+                        velocity.Z = 0;
+                        grounded = true;
+                    }
+                }
 
                 Vector3Double push = CollisionDetector.ResolveCollision(bounds, position, ref velocity);
                 position = push;
@@ -147,14 +182,9 @@ namespace FantasyVoxels
                 velocity.Y = gravity;
             }
 
-            if (wasGrounded && !grounded && disallowWalkingOffEdge)
+            if (grounded && !wasGrounded && oldGrav < -12)
             {
-                position = oldPos;
-                grounded = true;
-            }
-            if(grounded && !wasGrounded && oldGrav < -12)
-            {
-                OnTakeDamage(new DamageInfo { damage = (int)float.Ceiling((-oldGrav-12) / 5 + 1) });
+                OnTakeDamage(new DamageInfo { damage = (int)float.Ceiling((-oldGrav-12) / 1.5f) });
             }
         }
     }
@@ -231,6 +261,8 @@ namespace FantasyVoxels
             if (loadedEntities.TryGetValue(pos, out var list) && list.Contains(entity))
             {
                 list.Remove(entity);
+
+                if(list.Count == 0) loadedEntities.Remove(pos);
             }
         }
     }

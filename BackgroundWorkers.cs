@@ -42,12 +42,12 @@ namespace FantasyVoxels
                             deleteChunks.Add(c.Key);
                             continue;
                         }
+                        if (cDist >= MGame.Instance.RenderDistance) continue;
 
                         if (currentChunk.queueModified)
                         {
                             currentChunk.queueModified = false;
-                            currentChunk.CheckQueue(false);
-                            continue;
+                            currentChunk.CheckQueue(true);
                         }
 
                         if (MGame.Instance.frustum.Contains(chunkbounds) == ContainmentType.Disjoint) continue;
@@ -56,7 +56,6 @@ namespace FantasyVoxels
                         {
                             currentChunk.visOutOfDate = false;
                             currentChunk.GenerateVisibility();
-                            continue;
                         }
 
                         if (currentChunk.lightOutOfDate)
@@ -68,10 +67,9 @@ namespace FantasyVoxels
                             continue;
                         }
 
-                        if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !currentChunk.CompletelyEmpty)
+                        if (!currentChunk.meshUpdated[currentChunk.GetLOD()])
                         {
                             currentChunk.Remesh();
-                            continue;
                         }
                     }
 

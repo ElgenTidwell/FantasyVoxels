@@ -13,6 +13,7 @@ using static FantasyVoxels.MGame;
 using Newtonsoft.Json.Linq;
 using System.Threading;
 using Newtonsoft.Json.Bson;
+using MessagePack;
 
 namespace FantasyVoxels.Saves
 {
@@ -39,23 +40,41 @@ namespace FantasyVoxels.Saves
             Directory.CreateDirectory(savename);
             Directory.CreateDirectory($"{savename}/chunk");
             Directory.CreateDirectory($"{savename}/entity");
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine($"seed:{MGame.Instance.seed}");
+            sb.AppendLine($"time:{(int)WorldTimeManager.WorldTime}");
+
+            await File.WriteAllTextAsync($"{savename}/overworld.txt", sb.ToString());
+
             IList<Task> writeTaskList = new List<Task>();
+            List<KeyValuePair<long,Chunk>> chunksToSave =
+            [
+                .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk=>
+                (int.Max(int.Max(int.Abs(Instance.playerChunkPos.x - chunk.Value.chunkPos.x), int.Abs(Instance.playerChunkPos.y - chunk.Value.chunkPos.y)), int.Abs(Instance.playerChunkPos.z - chunk.Value.chunkPos.z)) < 8
+                || chunk.Value.modified) && !chunk.Value.CompletelyEmpty && chunk.Value.generated),
+            ];
 
-            foreach (Chunk chunk in chunks)
-            {
-                int distance = int.Max(int.Max(int.Abs(Instance.playerChunkPos.x - chunk.chunkPos.x), int.Abs(Instance.playerChunkPos.y - chunk.chunkPos.y)), int.Abs(Instance.playerChunkPos.z - chunk.chunkPos.z));
-                if ((!chunk.modified && distance > 2) || chunk.CompletelyEmpty) continue;
+            //Parallel.ForEach(chunks, (chunk)=>
+            //{
+            //    int distance = int.Max(int.Max(int.Abs(Instance.playerChunkPos.x - chunk.chunkPos.x), int.Abs(Instance.playerChunkPos.y - chunk.chunkPos.y)), int.Abs(Instance.playerChunkPos.z - chunk.chunkPos.z));
+            //    if ((!chunk.modified && distance > 6) || chunk.CompletelyEmpty || !chunk.generated) return;
 
-                //writeTaskList.Add(File.WriteAllBytesAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}" + (chunk.modified ? "" : "_unmodified") + ".chunk", chunk.voxels));
-                writeTaskList.Add(File.WriteAllTextAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}" + (chunk.modified ? "" : "_unmodified") + ".json", JsonConvert.SerializeObject(chunk)));
-            }
+            //    //writeTaskList.Add(File.WriteAllBytesAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}" + (chunk.modified ? "" : "_unmodified") + ".chunk", chunk.voxels));
+            //    writeTaskList.Add(File.WriteAllTextAsync($"{savename}/chunk/{chunk.chunkPos.x}_{chunk.chunkPos.y}_{chunk.chunkPos.z}" + (chunk.modified ? "" : "_unmodified") + ".json", JsonConvert.SerializeObject(chunk)));
+            //});
+            //writeTaskList.Add(File.WriteAllTextAsync($"{savename}/chunk/chunks.json", JsonConvert.SerializeObject(chunksToSave)));
+
+            var data = MessagePackSerializer.Typeless.Serialize(chunksToSave);
+            await File.WriteAllBytesAsync($"{savename}/chunk/chunks.cnk",data);
+
             var jsonSerializerSettings = new JsonSerializerSettings()
             {
-                TypeNameHandling = TypeNameHandling.All
+                TypeNameHandling = TypeNameHandling.All,
+                MaxDepth = null,
             };
-            writeTaskList.Add(File.WriteAllTextAsync($"{savename}/entity/chunkbound.json", JsonConvert.SerializeObject(EntityManager.loadedEntities, jsonSerializerSettings)));
 
-            await Task.WhenAll(writeTaskList);
+            await File.WriteAllTextAsync($"{savename}/entity/chunkbound.json", JsonConvert.SerializeObject(EntityManager.loadedEntities, jsonSerializerSettings));
 
             EntitySaveData playerSaveData = new EntitySaveData
             {
@@ -69,12 +88,6 @@ namespace FantasyVoxels.Saves
 
             string playerJson = JsonConvert.SerializeObject(playerSaveData);
             await File.WriteAllTextAsync($"{savename}/entity/player.json", playerJson);
-
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine($"seed:{MGame.Instance.seed}");
-            sb.AppendLine($"time:{(int)WorldTimeManager.WorldTime}");
-
-            await File.WriteAllTextAsync($"{savename}/overworld.txt",sb.ToString());
 
             await Task.Delay(4000);
         }
@@ -100,10 +113,13 @@ namespace FantasyVoxels.Saves
             if (!Directory.Exists(savename)) return;
 
             var label = new Label("Loading World...", Anchor.Center);
+            var prog = new ProgressBar(0, 100, new Vector2(800, 70), Anchor.AutoCenter);
             UserInterface.Active.AddEntity(label);
+            UserInterface.Active.AddEntity(prog);
+            prog.Value = 0;
 
-            if (Directory.Exists(backupname)) Directory.Delete(backupname, true);
-            CopyFilesRecursively(savename, backupname);
+            //if (Directory.Exists(backupname)) Directory.Delete(backupname, true);
+            //CopyFilesRecursively(savename, backupname);
 
             WorldName = _savename;
 
@@ -118,41 +134,76 @@ namespace FantasyVoxels.Saves
 
             await MGame.Instance.LoadWorld(true);
 
-            await Parallel.ForEachAsync(Directory.GetFiles($"{savename}/chunk"), async (string chunkfile, CancellationToken token) =>
+            var files = Directory.GetFiles($"{savename}/chunk");
+
+            int max = files.Length;
+            int cur = 0;
+
+            if (!File.Exists($"{savename}/chunk/chunks.cnk"))
             {
-                string chunkfilename = Path.GetFileNameWithoutExtension(chunkfile);
-
-                string[] coords = chunkfilename.Split('_');
-                int chunkx = int.Parse(coords[0]);
-                int chunky = int.Parse(coords[1]);
-                int chunkz = int.Parse(coords[2]);
-
-                Chunk chunk = JsonConvert.DeserializeObject<Chunk>(await File.ReadAllTextAsync(chunkfile));
-
-                chunk.chunkPos = (chunkx, chunky, chunkz);
-
-                //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
-                if (!MGame.Instance.loadedChunks.TryAdd(MGame.CCPos(chunk.chunkPos), chunk))
+                await Parallel.ForEachAsync(files, async (string chunkfile, CancellationToken token) =>
                 {
-                    MGame.Instance.loadedChunks[MGame.CCPos(chunk.chunkPos)] = chunk;
+                    string chunkfilename = Path.GetFileNameWithoutExtension(chunkfile);
+
+                    string[] coords = chunkfilename.Split('_');
+                    int chunkx = int.Parse(coords[0]);
+                    int chunky = int.Parse(coords[1]);
+                    int chunkz = int.Parse(coords[2]);
+
+                    Chunk chunk = JsonConvert.DeserializeObject<Chunk>(await File.ReadAllTextAsync(chunkfile, token));
+
+                    chunk.chunkPos = (chunkx, chunky, chunkz);
+
+                    //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
+                    if (!MGame.Instance.loadedChunks.TryAdd(MGame.CCPos(chunk.chunkPos), chunk))
+                    {
+                        MGame.Instance.loadedChunks[MGame.CCPos(chunk.chunkPos)] = chunk;
+                    }
+
+                    chunk.generated = true;
+
+                    //chunk.modified = !chunkfilename.Contains("unmodified");
+
+                    Array.Fill(chunk.meshLayer, true);
+
+                    chunk.GenerateVisibility();
+
+                    chunk.meshUpdated = [false, false, false, false];
+
+                    chunk.Remesh(useOldLight: true);
+
+                    cur++;
+                    prog.Value = (int)((cur / (float)max) * 100);
+                });
+            }
+            else
+            {
+                List<KeyValuePair<long, Chunk>> chunks = MessagePackSerializer.Typeless.Deserialize(await File.ReadAllBytesAsync($"{savename}/chunk/chunks.cnk")) as List<KeyValuePair<long, Chunk>>;
+                max = chunks.Count;
+                foreach(var chunk in chunks)
+                {
+                    chunk.Value.generated = true;
+                    Array.Fill(chunk.Value.meshLayer, true);
+                    chunk.Value.GenerateVisibility();
+                    chunk.Value.meshUpdated = [false, false, false, false];
+                    chunk.Value.Remesh(useOldLight:true,disableIteration:true);
+
+                    //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
+                    if (!MGame.Instance.loadedChunks.TryAdd(chunk.Key, chunk.Value))
+                    {
+                        MGame.Instance.loadedChunks[chunk.Key] = chunk.Value;
+                    }
+                    cur++;
+                    prog.Value = (int)((cur / (float)max) * 100);
                 }
-
-                chunk.generated = true;
-
-                //chunk.modified = !chunkfilename.Contains("unmodified");
-
-                Array.Fill(chunk.meshLayer, true);
-
-                chunk.GenerateVisibility();
-                chunk.Remesh();
-
-                chunk.meshUpdated = [false, false, false, false];
-            });
+            }
+            
 
             EntityManager.loadedEntities.Clear();
             var jsonSerializerSettings = new JsonSerializerSettings()
             {
-                TypeNameHandling = TypeNameHandling.All
+                TypeNameHandling = TypeNameHandling.All,
+                MaxDepth = null,
             };
             if (File.Exists($"{savename}/entity/chunkbound.json"))
             {
@@ -171,6 +222,7 @@ namespace FantasyVoxels.Saves
             RestoreEntity(MGame.Instance.player,playerData);
 
             UserInterface.Active.RemoveEntity(label);
+            UserInterface.Active.RemoveEntity(prog);
 
             Instance.currentPlayState = PlayState.World;
         }

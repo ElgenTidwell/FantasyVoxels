@@ -1,11 +1,8 @@
 ﻿#if OPENGL
 #define SV_POSITION POSITION
+#endif
 #define VS_SHADERMODEL vs_3_0
 #define PS_SHADERMODEL ps_3_0
-#else
-#define VS_SHADERMODEL vs_4_0_level_9_1
-#define PS_SHADERMODEL ps_4_0_level_9_1
-#endif
 
 texture mainTexture;
 sampler mainSampler : register(s0) = sampler_state
@@ -35,10 +32,10 @@ VSOutput MainVS(float4 position : POSITION, float4 normal : NORMAL0, float2 texc
 {
     VSOutput output = (VSOutput) 0;
     
-    output.Normal = normal;
+    output.Normal = normalize(normal);
     output.Position = mul(mul(mul(position, World), View), Projection); // Apply standard transformations
     output.Coord = float3(texcoord, 0);
-    float d = (dot(normal, float3(0.3, 0.7, 0)) + 1)/2;
+    float d = (dot(output.Normal.xyz, float3(0.2, 0.8, 0))+1)/2;
     output.Color = float4(d,0,0,1);
     
     return output;

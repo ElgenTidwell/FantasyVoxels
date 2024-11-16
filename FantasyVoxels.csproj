@@ -21,6 +21,7 @@
         <EmbeddedResource Include="Icon.bmp" />
       </ItemGroup>
     <ItemGroup>
+	    <PackageReference Include="MessagePack" Version="2.5.192" />
 	    <PackageReference Include="MonoGame.Content.Builder.Task.Compute" Version="3.8.3" />
 	    <PackageReference Include="MonoGame.Framework.Compute.DesktopGL" Version="3.8.3" />
 	    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
