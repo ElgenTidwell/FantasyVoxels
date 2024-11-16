@@ -4737,3 +4737,8 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/items.png;Textures/items.png
+
+#begin ../Working/Shaders/particles.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/particles.fx;Shaders/particles.fx

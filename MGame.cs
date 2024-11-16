@@ -19,6 +19,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using static Icaria.Engine.Procedural.IcariaNoise;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace FantasyVoxels
 {
@@ -50,6 +51,7 @@ namespace FantasyVoxels
         public Texture2D colors,items,normals,noise,uiTextures,uiBackback,sunTexture,moonTexture,aoMap,white,breaking,lightmap,waterOverlay,waterDUDV;
         private Effect chunk;
         private Effect entity;
+        private Effect particles;
         private Effect breakingVoxel;
         private Effect sky;
         private Effect postProcessing;
@@ -57,6 +59,7 @@ namespace FantasyVoxels
         private bool cameraUnderwater;
 
         public Effect GetEntityShader() => entity;
+        public Effect GetParticleShader() => particles;
         public Effect GetBreakingShader() => breakingVoxel;
 
         public float daylightPercentage;
@@ -334,6 +337,7 @@ namespace FantasyVoxels
 
             chunk = Content.Load<Effect>("Shaders/chunk");
             entity = Content.Load<Effect>("Shaders/entity");
+            particles = Content.Load<Effect>("Shaders/particles");
             breakingVoxel = Content.Load<Effect>("Shaders/breakingVoxel");
             sky = Content.Load<Effect>("Shaders/skybox");
             postProcessing = Content.Load<Effect>("Shaders/pscreen");
@@ -410,7 +414,7 @@ namespace FantasyVoxels
                 MaxMipLevel = 0,
                 MaxAnisotropy = 0
             };
-            generationPool = new TaskPool(4);
+            generationPool = new TaskPool(1);
 
 
             //for(int i = 1; i < blockSounds.GetLength(0); i++)
@@ -844,6 +848,7 @@ namespace FantasyVoxels
                     }
                 }
             }
+            ParticleSystemManager.UpdateSystems();
 
             while (instantRemesh.Count > 0)
             {
@@ -868,10 +873,8 @@ namespace FantasyVoxels
                 if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
                     continue;
 
-                int LOD = loadedChunks[pos].GetLOD();
+                int LOD = 0;
 
-                if ((loadedChunks[pos].chunkVertexBuffers[LOD] == null || loadedChunks[pos].chunkVertexBuffers[LOD].VertexCount == 0) && LOD > 0)
-                    LOD--;
                 if (loadedChunks[pos].chunkVertexBuffers[LOD] == null || loadedChunks[pos].chunkVertexBuffers[LOD].VertexCount == 0)
                     continue;
 
@@ -1102,6 +1105,8 @@ namespace FantasyVoxels
                 EntityManager.RenderChunk(pos);
             }
 
+            ParticleSystemManager.RenderSystems();
+
             GraphicsDevice.DepthStencilState = DepthStencilState.Default;
             GraphicsDevice.BlendState = BlendState.NonPremultiplied;
 
@@ -1226,13 +1231,13 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))) && loadedChunks[CCPos((cx, cy, cz))].generated)
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk) && loadedChunks[CCPos((cx, cy, cz))].generated)
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
 
-                return loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)];
+                return chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)];
             }
             return -1;
         }
@@ -1244,12 +1249,12 @@ namespace FantasyVoxels
 
             data = new VoxelData {skyLight = 255 };
 
-            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))) && loadedChunks[CCPos((cx, cy, cz))].generated)
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk) && loadedChunks[CCPos((cx, cy, cz))].generated)
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
-                data = loadedChunks[CCPos((cx, cy, cz))].voxeldata[x + Chunk.Size * (y + Chunk.Size * z)];
+                data = chunk.voxeldata[x + Chunk.Size * (y + Chunk.Size * z)];
                 return true;
             }
             return true;
@@ -1260,15 +1265,15 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk))
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
 
-                int vox = loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)];
+                int vox = chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)];
 
-                if (Voxel.voxelTypes[vox].myClass != null) Voxel.voxelTypes[vox].myClass.TryUpdateBlock((x,y,z), loadedChunks[CCPos((cx, cy, cz))]);
+                Voxel.voxelTypes[vox].myClass?.TryUpdateBlock((x,y,z), chunk);
             }
         }
         public void DigVoxel(Vector3 p, int toolLevel, bool disableDrops = false)
@@ -1277,7 +1282,7 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk))
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
@@ -1285,12 +1290,16 @@ namespace FantasyVoxels
 
                 if (!disableDrops)
                 {
-                    var t = Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
+                    var t = Voxel.voxelTypes[chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
+
+                    int tex = t.frontTexture;
+                    ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, tex, p + Vector3.One * 0.5f, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
+
                     if (t.droppedItemID >= 0 && t.requiredLevel <= toolLevel)
                     {
                         if (t.myClass == null || !t.myClass.customDrops)
                         {
-                            var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID)
+                            var droppedItem = new DroppedItem(t.droppedItemID)
                             {
                                 position = p + Vector3.One * 0.6f
                             };
@@ -1326,7 +1335,7 @@ namespace FantasyVoxels
                     }
                 }
 
-                loadedChunks[CCPos((cx, cy, cz))].Modify(x, y, z, 0);
+                chunk.Modify(x, y, z, 0);
             }
         }
         public void SetVoxel(Vector3 p, int newVoxel, bool disableDrops = false, Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY)
@@ -1335,7 +1344,7 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk))
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
@@ -1343,12 +1352,16 @@ namespace FantasyVoxels
 
                 if (newVoxel == 0 && !disableDrops)
                 {
-                    var t = Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
+                    var t = Voxel.voxelTypes[chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
+
+                    int tex = t.frontTexture;
+                    ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, tex, p + Vector3.One * 0.5f, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
+
                     if (t.droppedItemID >= 0)
                     {
                         if (t.myClass == null || !t.myClass.customDrops)
                         {
-                            var droppedItem = new DroppedItem(Voxel.voxelTypes[loadedChunks[CCPos((cx, cy, cz))].voxels[x + Chunk.Size * (y + Chunk.Size * z)]].droppedItemID)
+                            var droppedItem = new DroppedItem(t.droppedItemID)
                             {
                                 position = p + Vector3.One * 0.6f
                             };
@@ -1384,7 +1397,7 @@ namespace FantasyVoxels
                     }
                 }
 
-                loadedChunks[CCPos((cx, cy, cz))].Modify(x, y, z, newVoxel, placement);
+                chunk.Modify(x, y, z, newVoxel, placement);
             }
         }
         public void SetVoxel_Q(Vector3 p, int newVoxel, bool instantRegen = false)
@@ -1393,13 +1406,13 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.ContainsKey(CCPos((cx, cy, cz))))
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk))
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
                 int z = (int)(p.Z - cz * Chunk.Size);
 
-                loadedChunks[CCPos((cx, cy, cz))].ModifyQueue(x, y, z, newVoxel);
+                chunk.ModifyQueue(x, y, z, newVoxel);
 
                 if (instantRegen && !instantRemesh.Contains(CCPos((cx, cy, cz)))) instantRemesh.Enqueue(CCPos((cx, cy, cz)));
             }

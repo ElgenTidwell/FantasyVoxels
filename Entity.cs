@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace FantasyVoxels
 {
@@ -101,6 +102,7 @@ namespace FantasyVoxels
 
             float oldGrav = gravity;
             bool wasGrounded = grounded;
+            bool wasSwimming = swimming;
 
             const int steps = 16;
             const float stsize = 1 / (float)steps;
@@ -185,6 +187,11 @@ namespace FantasyVoxels
             if (grounded && !wasGrounded && oldGrav < -12)
             {
                 OnTakeDamage(new DamageInfo { damage = (int)float.Ceiling((-oldGrav-12) / 1.5f) });
+            }
+
+            if(swimming && !wasSwimming)
+            {
+                ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, 2, min, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
             }
         }
     }

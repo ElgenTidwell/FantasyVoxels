@@ -260,6 +260,13 @@ namespace FantasyVoxels.Entities
                     autoDigTime = 0.2f;
 
                     SetAnimation(HandAnimation.Swing);
+
+                    Vector3 normal = prevHitTile - hitTile;
+                    Vector3 plane = (Vector3.One - new Vector3(float.Abs(normal.X), float.Abs(normal.Y), float.Abs(normal.Z)));
+
+                    int tex = Voxel.voxelTypes[hitVoxelType].frontTexture;
+
+                    ParticleSystemManager.AddSystem(new ParticleSystem(2, ParticleSystem.TextureProvider.BlockAtlas, tex, hitTile+normal*0.6f+Vector3.One*0.5f, normal, 0.3f, 12f, plane * 0.25f, Vector3.One));
                 }
 
                 //if its not the same voxel, reset the timer

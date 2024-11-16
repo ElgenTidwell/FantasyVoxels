@@ -633,7 +633,7 @@ namespace FantasyVoxels
                         {
                             voxels[x + Size * ((y + 1) + Size * z)] = 12;
                         }
-                        if (voxels[x + Size * (y + Size * z)] == 1 && (int)(r * 500) == tRandom.Next(-204, 204) && y < Size - 1)
+                        if (voxels[x + Size * (y + Size * z)] == 1 && (int)(r * 200) == tRandom.Next(-150, 150) && y < Size - 1)
                         {
                             voxels[x + Size * ((y + 1) + Size * z)] = 15;
                         }
@@ -717,16 +717,16 @@ namespace FantasyVoxels
             {
                 for (int z = 0; z < Size; z++)
                 {
-                    int sunLight = skylightAbove == null? Size+chunkPos.y*Size >= tHeight[x, z] ? 255 : 0 : skylightAbove[x,z];
+                    byte sunLight = (byte)(skylightAbove == null? Size+chunkPos.y*Size >= tHeight[x, z] ? 255 : 0 : skylightAbove[x,z]);
                     for (int y = MaxY+1; y >= 0; y--)
                     {
                         if (y >= Size) continue;
 
                         if (voxels[x + Size * (y + Size * z)] != 0) 
-                            sunLight = (int)MathF.Max(sunLight - Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].lightPassthrough, 10);
+                            sunLight = (byte)int.Max(sunLight - Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].lightPassthrough, 10);
 
                         //TODO: blocklight
-                        voxeldata[x + Size * (y + Size * z)].skyLight = (byte)MathF.Min(MathF.Max(sunLight, 0), 255);
+                        voxeldata[x + Size * (y + Size * z)].skyLight = byte.Min(byte.Max(sunLight, 0), 255);
                     }
 
                     if (sunLight > 0) propDownward = true; 
@@ -888,8 +888,6 @@ namespace FantasyVoxels
                         {
                             int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
 
-                            int terrainHeight = x == 0 || z == 0 || x == Size - 1 || z == Size - 1 ? (int)(GetTerrainHeight(samplex / 2f, samplez / 2f)) : 0;
-
                             if (IsOutOfBounds((x, y, z))) continue;
 
                             if (voxels[x + Size * (y + Size * z)] == 0) continue;
@@ -934,7 +932,7 @@ namespace FantasyVoxels
 
                                 if (grabbed == -1)
                                 {
-                                    vox = GetVoxel(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale), terrainHeight);
+                                    vox = 1;
                                     sky = 1;
                                     light = 0;
                                 }
@@ -1464,6 +1462,11 @@ namespace FantasyVoxels
         public static bool IsOutOfBounds((int x, int y, int z) pos)
         {
             return pos.x < 0 || pos.x >= Size || pos.y < 0 || pos.y >= Size || pos.z < 0 || pos.z >= Size;
+        }
+        public bool IsSolid((int x, int y, int z) p)
+        {
+            var v = voxels[p.x + Size * (p.y + Size * p.z)];
+            return v != 0 && !Voxel.voxelTypes[v].ignoreCollision;
         }
         public bool TestVisibility(int sideFrom, int sideTo)
         {
