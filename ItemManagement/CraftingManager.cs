@@ -10,6 +10,8 @@ namespace FantasyVoxels.ItemManagement
     {
         public int[] itemInput;
         public Item itemOutput;
+
+        public bool noOrder;
     }
     public static class CraftingManager
     {
@@ -27,52 +29,106 @@ namespace FantasyVoxels.ItemManagement
             Register(new Recipe
             {
                 itemInput = [
-                     -1,Get("glowleaf"),
-                     -1,Get("stick"),
+                    -1, -1, Get("glowleaf"),
+                    -1, -1, Get("stick"),
                 ],
                 itemOutput = new Item { itemID = Get("torch"), stack = 1 }
             });
             Register(new Recipe
             {
                 itemInput = [
-                     Get("glowleaf"),-1,
-                     Get("stick"),   -1
+                     -1,Get("glowleaf"), -1
+                     -1,Get("stick"), -1
                 ],
                 itemOutput = new Item { itemID = Get("torch"), stack = 1 }
             });
             Register(new Recipe
             {
                 itemInput = [
-                    Get("stick"),
-                    Get("stick"),
-                    Get("stick"),
-                    -1
+                     Get("glowleaf"),-1, -1,
+                     Get("stick"),   -1, -1
+                ],
+                itemOutput = new Item { itemID = Get("torch"), stack = 1 }
+            }); 
+            Register(new Recipe
+            {
+                itemInput = [
+                    Get("stick"),Get("stick"), -1,
+                    Get("stick"), -1, -1
                 ],
                 itemOutput = new Item { itemID = Get("woodaxehead"), stack = 1 }
             });
             Register(new Recipe
             {
                 itemInput = [
-                    Get("woodaxehead"),
-                    Get("clay"),
+                    Get("woodaxehead"), Get("clay"),-1,
+                    -1,-1,-1
+                ],
+                itemOutput = new Item { itemID = Get("woodaxetoolhead"), stack = 1 },
+                noOrder = true
+            });
+            Register(new Recipe
+            {
+                itemInput = [
+                    Get("wood"),
+                    -1,
+                    -1,
+                    -1,
                     -1,
                     -1
                 ],
-                itemOutput = new Item { itemID = Get("woodaxetoolhead"), stack = 1 }
+                itemOutput = new Item { itemID = Get("plank"), stack = 12 },
+                noOrder = true
+            });
+            Register(new Recipe
+            {
+                itemInput = [
+                    Get("plank"),
+                    Get("plank"),
+                    Get("plank"),
+                    Get("plank"),
+                    Get("plank"),
+                    Get("plank")
+                ],
+                itemOutput = new Item { itemID = Get("planks"), stack = 1 },
+                noOrder = false
             });
         }
         public static Item TryCraft(ItemContainer input)
         {
-            if (input.GetAllItems().Length == 5)
+            if (input.GetAllItems().Length == 7)
             {
-                int[] itemIDs = new int[4];
-
-                for(int i = 0; i < 4; i++)
+                int[] itemIDs = new int[6];
+                bool any = false;
+                for(int i = 0; i < 6; i++)
                 {
                     var item = input.PeekItem(i);
                     itemIDs[i] = item.itemID;
+                    if(item.itemID != -1) any = true;
                 }
-                var recipe = recipes.Find(e=>e.itemInput[0] == itemIDs[0] && e.itemInput[1] == itemIDs[1] && e.itemInput[2] == itemIDs[2] && e.itemInput[3] == itemIDs[3]);
+
+                if (!any) return new Item { itemID = -1, stack = 0 };
+
+                Recipe recipe = new Recipe();
+                for(int i = 0; i < recipes.Count; i++)
+                {
+                    if (!recipes[i].noOrder)
+                    {
+                        if (itemIDs.SequenceEqual(recipes[i].itemInput))
+                        {
+                            recipe = recipes[i];
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        if(recipes[i].itemInput.OrderBy(x=>x).SequenceEqual(itemIDs.OrderBy(x=>x)))
+                        {
+                            recipe = recipes[i];
+                            break;
+                        }
+                    }
+                }
 
                 if (recipe.itemInput != null && recipe.itemOutput.itemID >= 0)
                 {
@@ -83,13 +139,13 @@ namespace FantasyVoxels.ItemManagement
                     int headID = -1;
                     int handleID = -1;
 
-                    for (int i = 0; i < 4; i++)
+                    for (int i = 0; i < 6; i++)
                     {
                         var item = input.PeekItem(i);
-                        if(item.itemID != -1 && ItemManager.GetItemFromID(item.itemID).toolPiece)
+                        if(item.itemID >= 0 && ItemManager.GetItemFromID(item.itemID).toolPiece)
                         {
-                            if (((ToolPieceProperties)ItemManager.GetItemFromID(item.itemID).properties).slot == ToolPieceSlot.Head) headID = item.itemID;
-                            if (((ToolPieceProperties)ItemManager.GetItemFromID(item.itemID).properties).slot == ToolPieceSlot.Handle) handleID = item.itemID;
+                            if (item.itemID >= 0 && ItemManager.GetItemFromID(item.itemID).properties is ToolPieceProperties properties && properties.slot == ToolPieceSlot.Head) headID = item.itemID;
+                            if (item.itemID >= 0 && ItemManager.GetItemFromID(item.itemID).properties is ToolPieceProperties properties1 && properties1.slot == ToolPieceSlot.Handle) handleID = item.itemID;
                         }
                     }
 

@@ -1295,7 +1295,7 @@ namespace FantasyVoxels
                 {
                     var t = Voxel.voxelTypes[chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
 
-                    int tex = t.frontTexture;
+                    int tex = t.bottomTexture;
                     ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, tex, p + Vector3.One * 0.5f, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
 
                     if (t.droppedItemID >= 0 && t.requiredLevel <= toolLevel)
@@ -1357,7 +1357,7 @@ namespace FantasyVoxels
                 {
                     var t = Voxel.voxelTypes[chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
 
-                    int tex = t.frontTexture;
+                    int tex = t.bottomTexture;
                     ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, tex, p + Vector3.One * 0.5f, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
 
                     if (t.droppedItemID >= 0)

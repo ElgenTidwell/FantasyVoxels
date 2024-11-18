@@ -62,25 +62,26 @@ namespace FantasyVoxels.ItemManagement
 
         static ItemManager()
         {
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 1, name = "grass", displayName = "Grass" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 2, name = "dirt", displayName = "Dirt" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 4, name = "clayblock", displayName = "Clay Block" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 5, name = "wood", displayName = "Wood Log" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 8, name = "leaves", displayName = "Leaves" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 9, name = "stone", displayName = "Stone" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 10, name = "planks", displayName = "Planks" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 11, name = "cobblestone", displayName = "Cobblestone" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 12, name = "daisy", displayName = "Daisy", alwaysRenderAsSprite = true });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 13, name = "lamp", displayName = "Lamp" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 14, name = "torch", displayName = "Torch", alwaysRenderAsSprite = true });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 1, name = "grass", displayName = "Grass" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 2, name = "dirt", displayName = "Dirt" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 4, name = "clayblock", displayName = "Clay Block" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 5, name = "wood", displayName = "Wood Log" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 8, name = "leaves", displayName = "Leaves" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 9, name = "stone", displayName = "Stone" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 10, name = "planks", displayName = "Wood Planks" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 11, name = "cobblestone", displayName = "Cobblestone" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 12, name = "daisy", displayName = "Daisy", alwaysRenderAsSprite = true });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 13, name = "lamp", displayName = "Lamp" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 32, placement = 14, name = "torch", displayName = "Torch", alwaysRenderAsSprite = true });
 
-            RegisterItem(new ItemData { type = ItemType.Misc, toolPiece = true, maxStackSize = 50, name = "stick", displayName = "Stick", texture = 0 })
+            RegisterItem(new ItemData { type = ItemType.Misc, toolPiece = true, maxStackSize = 32, name = "stick", displayName = "Stick", texture = 0 })
                 .SetProperties(new ToolPieceProperties { meantFor = Voxel.MaterialType.Wood, diggingMultiplier = 1, slot = ToolPieceSlot.Handle, toolPieceLevel = 1 });
-            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "glowleaf", displayName = "Glow Leaf", texture = 1 });
-            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "woodaxehead", displayName = "Wooden Axe Head", texture = 2 });
-            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "clay", displayName = "Clay", texture = 3 });
-            RegisterItem(new ItemData { type = ItemType.Misc, toolPiece = true, maxStackSize = 50, name = "woodaxetoolhead", displayName = "Wooden Axe Tool-Head", texture = 4 })
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 32, name = "glowleaf", displayName = "Glow Leaf", texture = 1 });
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 32, name = "woodaxehead", displayName = "Wooden Axe Head", texture = 2 });
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 32, name = "clay", displayName = "Clay", texture = 3 });
+            RegisterItem(new ItemData { type = ItemType.Misc, toolPiece = true, maxStackSize = 32, name = "woodaxetoolhead", displayName = "Wooden Axe Tool-Head", texture = 4 })
                 .SetProperties(new ToolPieceProperties { meantFor = Voxel.MaterialType.Wood, diggingMultiplier = 1.5f, slot = ToolPieceSlot.Head, toolPieceLevel = 1 });
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 32, name = "plank", displayName = "Plank", texture = 5 });
         }
         public static ItemData RegisterItem(ItemData data)
         {
