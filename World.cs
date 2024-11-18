@@ -503,9 +503,9 @@ namespace FantasyVoxels
         }
         public static int GetTerrainHeight(float samplex, float samplez)
         {
-            float ocean = MathF.Pow((MathF.Min(GetOctaveNoise2D(samplex, samplez, 0.001f, 8, 0.75f, 1.5f, 24) -0.1f,0)*2.4f), 2);
-            float scalar = (GetOctaveNoise2D(samplex,samplez,0.005f,9,0.4f,1.5f)+1.2f) * 40;
-            float baseTerrainHeight = MathF.Pow((GetOctaveNoise2D(samplex, samplez, 0.005f, 9, 0.8f, 1.4f) + 0.5f),2) * scalar + (80-scalar)*0.4f;
+            float ocean = MathF.Pow((MathF.Min(GetOctaveNoise2D(samplex, samplez, 0.005f, 8, 0.75f, 1.5f, 24) -0.1f,0)*1.6f), 2);
+            float scalar = (GetOctaveNoise2D(samplex,samplez,0.001f,6,0.4f,1.5f)+1.2f) * 40;
+            float baseTerrainHeight = MathF.Pow((GetOctaveNoise2D(samplex, samplez, 0.001f, 6, 0.8f, 1.4f) + 0.5f),2) * scalar + (80-scalar)*0.4f;
             baseTerrainHeight += MathF.Pow(MathF.Max(GetOctaveNoise2D(samplex, samplez, 0.002f, 4, 0.7f,1.24f,-5),0), 0.5f) * 45;
 
             float terrainHeight = ocean * -120 + 10 + baseTerrainHeight * (1 - (MathF.Min(ocean, 1)));
