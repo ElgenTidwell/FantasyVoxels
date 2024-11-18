@@ -8,7 +8,7 @@ namespace FantasyVoxels.Entities
 {
     internal class DroppedItem : Entity
     {
-        public int itemID;
+        public Item item;
         bool renderAsSprite, fromBlockColors;
 
         float pickupAnim;
@@ -21,9 +21,9 @@ namespace FantasyVoxels.Entities
 
         private VertexPositionNormalTexture[] vertices;
         
-        public DroppedItem(int id)
+        public DroppedItem(Item id)
         {
-            this.itemID = id;
+            this.item = new Item { itemID = id.itemID, properties = id.properties, stack = 1 };
         }
 
         public override void Destroyed()
@@ -46,12 +46,12 @@ namespace FantasyVoxels.Entities
                 camForward.Y = 0;
                 camForward.Normalize();
 
-                rotation = Matrix.CreateTranslation(Vector3.UnitX * -0.5f) * Matrix.CreateRotationY(MathHelper.ToRadians(90f)) * Matrix.CreateWorld(Vector3.Zero,-camForward,Vector3.Up);
+                rotation = Matrix.CreateTranslation(Vector3.UnitY * 0.5f)*Matrix.CreateTranslation(Vector3.UnitX * -0.5f) * Matrix.CreateRotationY(MathHelper.ToRadians(90f)) * Matrix.CreateWorld(Vector3.Zero,-camForward,Vector3.Up);
             }
 
-            Matrix world = Matrix.CreateTranslation(Vector3.One*-0.5f)*
+            Matrix world = Matrix.CreateTranslation(Vector3.One*-0.5f) *
                            rotation *
-                           Matrix.CreateScale(scale) *
+                           Matrix.CreateScale(renderAsSprite? scale*2: scale) *
                            Matrix.CreateWorld((Vector3)position,Vector3.Forward,Vector3.Up);
 
             MGame.Instance.GetEntityShader().Parameters["World"].SetValue(world* MGame.Instance.world);
@@ -87,7 +87,7 @@ namespace FantasyVoxels.Entities
             
             if(wait >= 0) wait -= MGame.dt;
 
-            if(playerdist < 1.8f && wait < 0 && MGame.Instance.player.PickupItem(itemID, 1))
+            if(playerdist < 1.8f && wait < 0 && MGame.Instance.player.PickupItem(item))
             {
                 playAnim = true;
                 animStartPos = (Vector3)position;
@@ -99,10 +99,11 @@ namespace FantasyVoxels.Entities
         public override void Start()
         {
             //change UVS
+            if(item.itemID != -2)
             {
-                bool block = ItemManager.GetItemFromID(itemID).type == ItemType.Block;
+                bool block = ItemManager.GetItemFromID(item.itemID).type == ItemType.Block;
                 fromBlockColors = block;
-                bool spr = ItemManager.GetItemFromID(itemID).alwaysRenderAsSprite || !block;
+                bool spr = ItemManager.GetItemFromID(item.itemID).alwaysRenderAsSprite || !block;
                 vertices = new VertexPositionNormalTexture[(spr ? 6 : 6 * 6)];
                 renderAsSprite = spr;
                 for (int i = 0; i < (spr ? 1 : 6); i++)
@@ -113,17 +114,17 @@ namespace FantasyVoxels.Entities
                     {
                         switch (i)
                         {
-                            case 0: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].rightTexture; break;
-                            case 1: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].leftTexture; break;
-                            case 2: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].topTexture; break;
-                            case 3: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].bottomTexture; break;
-                            case 4: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].frontTexture; break;
-                            case 5: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(itemID).placement].backTexture; break;
+                            case 0: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(item.itemID).placement].rightTexture; break;
+                            case 1: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(item.itemID).placement].leftTexture; break;
+                            case 2: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(item.itemID).placement].topTexture; break;
+                            case 3: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(item.itemID).placement].bottomTexture; break;
+                            case 4: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(item.itemID).placement].frontTexture; break;
+                            case 5: tex = Voxel.voxelTypes[ItemManager.GetItemFromID(item.itemID).placement].backTexture; break;
                         }
                     }
                     else
                     {
-                        tex = ItemManager.GetItemFromID(itemID).texture;
+                        tex = ItemManager.GetItemFromID(item.itemID).texture;
                     }
 
                     vertices[i * 6 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (block?MGame.AtlasSize:MGame.ItemAtlasSize));
@@ -134,12 +135,46 @@ namespace FantasyVoxels.Entities
                     vertices[i * 6 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3], new Vector3(Chunk.positionChecks[i].x,Chunk.positionChecks[i].y,Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (block?MGame.AtlasSize:MGame.ItemAtlasSize));
                 }
             }
+            else
+            {
+                if(item.properties is ToolProperties)
+                {
+                    bool block = false;
+                    fromBlockColors = block;
+                    bool spr = true;
+                    vertices = new VertexPositionNormalTexture[12];
+                    renderAsSprite = spr;
+
+                    int head = ((ToolProperties)item.properties).toolHead;
+                    int handle = ((ToolProperties)item.properties).toolHandle;
+
+                    int tex = 0;
+                    tex = ItemManager.GetItemFromID(head).texture;
+
+                    int i = 0;
+
+                    vertices[0 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[0 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[0 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[0 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[0 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[0 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+
+                    tex = ItemManager.GetItemFromID(handle).texture;
+                    vertices[6 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x-0.01f, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[6 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1], new Vector3(Chunk.positionChecks[i].x-0.01f, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[6 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x-0.01f, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[6 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x-0.01f, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[6 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x-0.01f, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                    vertices[6 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3], new Vector3(Chunk.positionChecks[i].x-0.01f, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                }
+            }
 
             bounds = new BoundingBox(Vector3.One * -0.125f, Vector3.One * 0.125f);
 
             rotation.Z = (float)Random.Shared.NextDouble()*360f;
         }
-        public override void RestoreCustomSaveData(JObject data)
+        public override void RestoreCustomSaveData(object data)
         {
         }
         public override object CaptureCustomSaveData()

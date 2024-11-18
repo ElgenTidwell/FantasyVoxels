@@ -30,7 +30,7 @@ namespace FantasyVoxels.ItemManagement
                 SetItem(item, slot);
                 return true;
             }
-            if (items[slot].stack > ItemManager.GetItemFromID(items[slot].itemID).maxStackSize) return false;
+            if (items[slot].itemID == -2 || items[slot].stack > ItemManager.GetItemFromID(items[slot].itemID).maxStackSize) return false;
 
             if (items[slot].itemID != item.itemID) return false;
 
@@ -50,7 +50,7 @@ namespace FantasyVoxels.ItemManagement
             {
                 return true;
             }
-            if (items[slot].stack >= ItemManager.GetItemFromID(items[slot].itemID).maxStackSize) return false;
+            if (items[slot].itemID == -2 || items[slot].stack >= ItemManager.GetItemFromID(items[slot].itemID).maxStackSize) return false;
 
             return (items[slot].itemID == item.itemID);
         }
@@ -87,7 +87,11 @@ namespace FantasyVoxels.ItemManagement
         }
         public Item? TakeItem(int slot, byte quantity)
         {
-            if (items[slot].stack == 0 || items[slot].itemID < 0) return null;
+            if (items[slot].stack == 0 || items[slot].itemID == -1)
+            {
+                items[slot].itemID = -1;
+                return null;
+            }
 
             if (quantity >= items[slot].stack) return TakeItemStack(slot);
 

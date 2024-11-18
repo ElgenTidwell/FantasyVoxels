@@ -15,7 +15,8 @@ namespace FantasyVoxels.ItemManagement
     public struct ToolPieceProperties
     {
         public ToolPieceSlot slot;
-        public float[] diggingMultipliers;
+        public Voxel.MaterialType meantFor;
+        public float diggingMultiplier;
         public int toolPieceLevel;
     }
     public enum ToolPieceSlot
@@ -32,12 +33,15 @@ namespace FantasyVoxels.ItemManagement
         public string displayName;
         public int texture;
         public bool alwaysRenderAsSprite;
+        public bool toolPiece;
         public object properties;
+
+        public void SetProperties(object properties) => this.properties = properties;
     }
     public struct ToolProperties
     {
-        public Item toolHandle;
-        public Item toolHead;
+        public int toolHandle;
+        public int toolHead;
     }
     public struct Item
     {
@@ -60,7 +64,7 @@ namespace FantasyVoxels.ItemManagement
         {
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 1, name = "grass", displayName = "Grass" });
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 2, name = "dirt", displayName = "Dirt" });
-            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 4, name = "sand", displayName = "Sand" });
+            RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 4, name = "clayblock", displayName = "Clay Block" });
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 5, name = "wood", displayName = "Wood Log" });
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 8, name = "leaves", displayName = "Leaves" });
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 9, name = "stone", displayName = "Stone" });
@@ -70,16 +74,20 @@ namespace FantasyVoxels.ItemManagement
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 13, name = "lamp", displayName = "Lamp" });
             RegisterItem(new ItemData { type = ItemType.Block, maxStackSize = 50, placement = 14, name = "torch", displayName = "Torch", alwaysRenderAsSprite = true });
 
-            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "stick", displayName = "Stick", texture = 0 });
+            RegisterItem(new ItemData { type = ItemType.Misc, toolPiece = true, maxStackSize = 50, name = "stick", displayName = "Stick", texture = 0 })
+                .SetProperties(new ToolPieceProperties { meantFor = Voxel.MaterialType.Wood, diggingMultiplier = 1, slot = ToolPieceSlot.Handle, toolPieceLevel = 1 });
             RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "glowleaf", displayName = "Glow Leaf", texture = 1 });
-
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "woodaxehead", displayName = "Wooden Axe Head", texture = 2 });
+            RegisterItem(new ItemData { type = ItemType.Misc, maxStackSize = 50, name = "clay", displayName = "Clay", texture = 3 });
+            RegisterItem(new ItemData { type = ItemType.Misc, toolPiece = true, maxStackSize = 50, name = "woodaxetoolhead", displayName = "Wooden Axe Tool-Head", texture = 4 })
+                .SetProperties(new ToolPieceProperties { meantFor = Voxel.MaterialType.Wood, diggingMultiplier = 1.5f, slot = ToolPieceSlot.Head, toolPieceLevel = 1 });
         }
-        public static int RegisterItem(ItemData data)
+        public static ItemData RegisterItem(ItemData data)
         {
             int id = loadedItems.Count;
             loadedItems.Add(data);
             itemNameToIndices.Add(data.name,id);
-            return id;
+            return data;
         }
 
 

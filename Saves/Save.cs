@@ -47,11 +47,14 @@ namespace FantasyVoxels.Saves
 
             await File.WriteAllTextAsync($"{savename}/overworld.txt", sb.ToString());
 
+            int cx = (int)double.Floor(Instance.player.position.X / Chunk.Size);
+            int cz = (int)double.Floor(Instance.player.position.Z / Chunk.Size);
+
             IList<Task> writeTaskList = new List<Task>();
             List<KeyValuePair<long,Chunk>> chunksToSave =
             [
                 .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk=>
-                (int.Max(int.Max(int.Abs(Instance.playerChunkPos.x - chunk.Value.chunkPos.x), int.Abs(Instance.playerChunkPos.y - chunk.Value.chunkPos.y)), int.Abs(Instance.playerChunkPos.z - chunk.Value.chunkPos.z)) < 8
+                (int.Max(int.Abs(cx - chunk.Value.chunkPos.x), int.Abs(cz - chunk.Value.chunkPos.z)) < 10
                 || chunk.Value.modified) && !chunk.Value.CompletelyEmpty && chunk.Value.generated),
             ];
 
@@ -86,7 +89,7 @@ namespace FantasyVoxels.Saves
                 customSaveData = MGame.Instance.player.CaptureCustomSaveData()
             };
 
-            string playerJson = JsonConvert.SerializeObject(playerSaveData);
+            string playerJson = JsonConvert.SerializeObject(playerSaveData,jsonSerializerSettings);
             await File.WriteAllTextAsync($"{savename}/entity/player.json", playerJson);
 
             await Task.Delay(4000);
@@ -217,7 +220,7 @@ namespace FantasyVoxels.Saves
                 }
             }
 
-            EntitySaveData playerData = JsonConvert.DeserializeObject<EntitySaveData>(File.ReadAllText($"{savename}/entity/player.json"));
+            EntitySaveData playerData = JsonConvert.DeserializeObject<EntitySaveData>(File.ReadAllText($"{savename}/entity/player.json"),jsonSerializerSettings);
 
             RestoreEntity(MGame.Instance.player,playerData);
 
@@ -233,7 +236,7 @@ namespace FantasyVoxels.Saves
             entity.rotation = data.rotation;
             entity.maxHealth = data.maxHealth;
             entity.health = data.health;
-            if (data.customSaveData != null) entity.RestoreCustomSaveData((JObject)data.customSaveData);
+            if (data.customSaveData != null) entity.RestoreCustomSaveData(data.customSaveData);
         }
         public static void DeleteSave(string _savename)
         {

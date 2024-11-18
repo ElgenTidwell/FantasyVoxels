@@ -20,6 +20,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using static Icaria.Engine.Procedural.IcariaNoise;
 using static System.Net.Mime.MediaTypeNames;
+using FantasyVoxels.ItemManagement;
 
 namespace FantasyVoxels
 {
@@ -328,6 +329,8 @@ namespace FantasyVoxels
             Paragraph.BaseSize = 3;
 
             TitleMenu.ReInit();
+
+            CraftingManager.Setup();
 
             base.Initialize();
         }
@@ -1231,7 +1234,7 @@ namespace FantasyVoxels
             int cy = (int)MathF.Floor(p.Y / Chunk.Size);
             int cz = (int)MathF.Floor(p.Z / Chunk.Size);
 
-            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk) && loadedChunks[CCPos((cx, cy, cz))].generated)
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk) && chunk.generated)
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
@@ -1249,7 +1252,7 @@ namespace FantasyVoxels
 
             data = new VoxelData {skyLight = 255 };
 
-            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk) && loadedChunks[CCPos((cx, cy, cz))].generated)
+            if (loadedChunks.TryGetValue(CCPos((cx, cy, cz)), out var chunk) && chunk.generated)
             {
                 int x = (int)(p.X - cx * Chunk.Size);
                 int y = (int)(p.Y - cy * Chunk.Size);
@@ -1299,7 +1302,7 @@ namespace FantasyVoxels
                     {
                         if (t.myClass == null || !t.myClass.customDrops)
                         {
-                            var droppedItem = new DroppedItem(t.droppedItemID)
+                            var droppedItem = new DroppedItem(new Item { itemID = t.droppedItemID })
                             {
                                 position = p + Vector3.One * 0.6f
                             };
@@ -1319,7 +1322,7 @@ namespace FantasyVoxels
                                 {
                                     for (int i = 0; i < d.stack; i++)
                                     {
-                                        var droppedItem = new DroppedItem(d.itemID)
+                                        var droppedItem = new DroppedItem(d)
                                         {
                                             position = p + Vector3.One * 0.6f
                                         };
@@ -1361,7 +1364,7 @@ namespace FantasyVoxels
                     {
                         if (t.myClass == null || !t.myClass.customDrops)
                         {
-                            var droppedItem = new DroppedItem(t.droppedItemID)
+                            var droppedItem = new DroppedItem(new Item { itemID = t.droppedItemID })
                             {
                                 position = p + Vector3.One * 0.6f
                             };
@@ -1381,7 +1384,7 @@ namespace FantasyVoxels
                                 {
                                     for(int i = 0; i < d.stack; i++)
                                     {
-                                        var droppedItem = new DroppedItem(d.itemID)
+                                        var droppedItem = new DroppedItem(d)
                                         {
                                             position = p + Vector3.One * 0.6f
                                         };

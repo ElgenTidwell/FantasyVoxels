@@ -79,7 +79,7 @@ namespace FantasyVoxels
         public abstract void Destroyed();
 
         public abstract object CaptureCustomSaveData();
-        public abstract void RestoreCustomSaveData(JObject data);
+        public abstract void RestoreCustomSaveData(object data);
 
         public void HandleCollisions()
         {
@@ -99,6 +99,11 @@ namespace FantasyVoxels
 
             if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
             if (!MGame.Instance.loadedChunks[MGame.CCPos((cx, cy, cz))].generated) return;
+
+            min.X = bounds.Min.X * 0.9f + position.X;
+            min.Z = bounds.Min.Z * 0.9f + position.Z;
+            max.X = bounds.Max.X * 0.9f + position.X;
+            max.Z = bounds.Max.X * 0.9f + position.Z;
 
             float oldGrav = gravity;
             bool wasGrounded = grounded;
@@ -150,6 +155,8 @@ namespace FantasyVoxels
             swimming = false;
 
             {
+                min = bounds.Min + position;
+                max = bounds.Max + position;
                 int minx = (int)Math.Floor(min.X);
                 int minz = (int)Math.Floor(min.Z);
                 int maxx = (int)Math.Ceiling(max.X);
@@ -186,12 +193,14 @@ namespace FantasyVoxels
 
             if (grounded && !wasGrounded && oldGrav < -12)
             {
+                ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, Voxel.voxelTypes[MGame.Instance.GrabVoxel(new Vector3((float)position.X, (float)(min.Y), (float)position.Z))].topTexture, new Vector3Double(position.X, min.Y, position.Z), Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
+
                 OnTakeDamage(new DamageInfo { damage = (int)float.Ceiling((-oldGrav-12) / 1.5f) });
             }
 
             if(swimming && !wasSwimming)
             {
-                ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, 2, min, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
+                ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, 2, new Vector3Double(position.X,min.Y,position.Z), Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
             }
         }
     }

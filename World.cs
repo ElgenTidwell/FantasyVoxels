@@ -21,7 +21,7 @@ namespace FantasyVoxels
     {
         const float LEAVESDIG = 0.25f;
         const float DIRTDIG = 0.8f;
-        const float LOGDIG = 3.25f;
+        const float LOGDIG = 6.5f;
         const float STONEDIG = 6.5f;
 
         public static Voxel[] voxelTypes =
@@ -50,13 +50,14 @@ namespace FantasyVoxels
             .SetTextureData(TextureSetSettings.ALLSIDES, 2)
             .SetClass(new WaterBlock()),
             
-            //Sand
+            //Clay
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 3)
             .SetSurfaceType(SurfaceType.Dirt)
             .SetMaterialType(MaterialType.Soil)
             .SetBaseDigTime(DIRTDIG)
-            .SetItem("sand"),
+            .SetClass(new ClayBlock())
+            .SetItem("clayblock"),
             
             //Log
             new Voxel()
@@ -64,7 +65,8 @@ namespace FantasyVoxels
             .SetSurfaceType(SurfaceType.Wood)
             .SetMaterialType(MaterialType.Wood)
             .SetBaseDigTime(LOGDIG)
-            .SetItem("wood"),
+            .SetItem("wood")
+            .RequireLevel(1),
             
             //Log
             new Voxel()
@@ -98,8 +100,9 @@ namespace FantasyVoxels
             .SetSurfaceType(SurfaceType.Wood)
             .SetMaterialType(MaterialType.Wood)
             .SetBaseDigTime(LOGDIG)
-            .SetItem("planks"),
-            
+            .SetItem("planks")
+            .RequireLevel(1),
+
             //Cobble
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 11)
@@ -127,8 +130,8 @@ namespace FantasyVoxels
             .SetBaseDigTime(STONEDIG)
             .SetItem("lamp"),
 
-            //Torch
-            new Voxel(blocklight: 225, lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
+            //GlowleafTorch
+            new Voxel(blocklight: 100, lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
             .SetTextureData(TextureSetSettings.ALLSIDES, 14)
             .SetSurfaceType(SurfaceType.Wood)
             .SetMaterialType(MaterialType.Wood)
@@ -138,7 +141,7 @@ namespace FantasyVoxels
             .SetItem("torch"),
 
             //Glow Bush
-            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false, shaderEffect: 2, blocklight:50)
+            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false, shaderEffect: 2, blocklight:100)
             .SetTextureData(TextureSetSettings.ALLSIDES, 15)
             .SetClass(new GlowBushBlock())
             .SetSurfaceType(SurfaceType.Grass)
@@ -500,7 +503,7 @@ namespace FantasyVoxels
         }
         public static int GetTerrainHeight(float samplex, float samplez)
         {
-            float ocean = MathF.Pow((MathF.Min(GetOctaveNoise2D(samplex, samplez, 0.001f, 8, 0.75f, 1.5f, 24) -0.1f,0)*1.4f), 2);
+            float ocean = MathF.Pow((MathF.Min(GetOctaveNoise2D(samplex, samplez, 0.001f, 8, 0.75f, 1.5f, 24) -0.1f,0)*2.4f), 2);
             float scalar = (GetOctaveNoise2D(samplex,samplez,0.005f,9,0.4f,1.5f)+1.2f) * 40;
             float baseTerrainHeight = MathF.Pow((GetOctaveNoise2D(samplex, samplez, 0.005f, 9, 0.8f, 1.4f) + 0.5f),2) * scalar + (80-scalar)*0.4f;
             baseTerrainHeight += MathF.Pow(MathF.Max(GetOctaveNoise2D(samplex, samplez, 0.002f, 4, 0.7f,1.24f,-5),0), 0.5f) * 45;
@@ -513,7 +516,7 @@ namespace FantasyVoxels
         public static byte GetVoxel(float x, float y, float z, int terrainHeight)
         {
             // Main terrain voxel assignment with 3D noise layers
-            byte voxel = (byte)(y <= terrainHeight ? y < 5 ? 4 : 2 : 0);
+            byte voxel = (byte)(y <= terrainHeight ? y < 11 ? 4 : 2 : 0);
 
             // Water voxel assignment for regions below sea level
             if (y < 5 && y >= terrainHeight)
@@ -623,9 +626,9 @@ namespace FantasyVoxels
                             voxels[x + Size * (y + Size * z)] = 2;
                         }
 
-                        float r = IcariaNoise.CellularNoise(samplex * 0.1f, samplez * 0.1f, MGame.Instance.seed - 10).r;
+                        float r = IcariaNoise.GradientNoise(samplex * 0.01f, samplez * 0.01f, MGame.Instance.seed - 10);
 
-                        if (voxels[x + Size * (y + Size * z)] == 1 && (int)(r * 10) == tRandom.Next(0, 10) && shortGrassChance > 0.6f)
+                        if (voxels[x + Size * (y + Size * z)] == 1 && (int)(r * 15) == tRandom.Next(0, 10) && shortGrassChance > 0.6f)
                         {
                             VoxelStructurePlacer.Place(samplex, sampley, samplez, new Tree());
                         }

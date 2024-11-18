@@ -95,6 +95,7 @@ namespace FantasyVoxels.Entities
         ItemContainer cursor = new ItemContainer(1);
         ItemContainer hotbar = new ItemContainer(9);
         ItemContainer inventory = new ItemContainer(20);
+        ItemContainer crafting = new ItemContainer(5);
         Item heldItem => hotbar.PeekItem(activeHotbarSlot);
         Item prevHeldItem;
 
@@ -228,7 +229,7 @@ namespace FantasyVoxels.Entities
 
                 if (item.HasValue)
                 {
-                    var droppedItem = new DroppedItem(item.Value.itemID);
+                    var droppedItem = new DroppedItem(item.Value);
                     droppedItem.position = (Vector3)position + MGame.Instance.cameraForward * 0.6f;
                     droppedItem.velocity = velocity + MGame.Instance.cameraForward * 8;
                     droppedItem.gravity = droppedItem.velocity.Y;
@@ -266,7 +267,15 @@ namespace FantasyVoxels.Entities
 
                     int tex = Voxel.voxelTypes[hitVoxelType].frontTexture;
 
-                    ParticleSystemManager.AddSystem(new ParticleSystem(2, ParticleSystem.TextureProvider.BlockAtlas, tex, hitTile+normal*0.6f+Vector3.One*0.5f, normal, 0.3f, 12f, plane * 0.25f, Vector3.One));
+                    ParticleSystemManager.AddSystem(new ParticleSystem(4, ParticleSystem.TextureProvider.BlockAtlas, tex, hitTile+normal*0.55f+Vector3.One*0.5f, normal, 0.45f, 12f, plane * 0.5f, Vector3.One));
+                }
+
+                ToolPieceProperties toolHead = new ToolPieceProperties { diggingMultiplier = 1 };
+
+                if (hotbar.PeekItem(activeHotbarSlot).itemID == -2 && hotbar.PeekItem(activeHotbarSlot).properties is ToolProperties)
+                {
+                    var tool = (ToolProperties)hotbar.PeekItem(activeHotbarSlot).properties;
+                    toolHead = (ToolPieceProperties)ItemManager.GetItemFromID(tool.toolHead).properties;
                 }
 
                 //if its not the same voxel, reset the timer
@@ -275,7 +284,7 @@ namespace FantasyVoxels.Entities
                     diggingTimer = 0;
                 }
 
-                diggingTimer += MGame.dt;
+                diggingTimer += MGame.dt * (Voxel.voxelTypes[hitVoxel.vox].materialType == toolHead.meantFor ? toolHead.diggingMultiplier : 1);
 
                 if(diggingTimer >= Voxel.voxelTypes[hitVoxel.vox].baseDigTime)
                 {
@@ -286,7 +295,7 @@ namespace FantasyVoxels.Entities
                     if (vID > 0)
                     {
                         //TODO: tool levels
-                        MGame.Instance.DigVoxel(hitTile, 0);
+                        MGame.Instance.DigVoxel(hitTile, Voxel.voxelTypes[hitVoxel.vox].materialType == toolHead.meantFor? toolHead.toolPieceLevel:0);
                     }
                 }
             } 
@@ -300,34 +309,38 @@ namespace FantasyVoxels.Entities
 
                 if (id != -1)
                 {
-                    switch (ItemManager.GetItemFromID(id).type)
+                    void testitemtype(ItemType type)
                     {
-                        case ItemType.Block:
+                        switch (type)
+                        {
+                            case ItemType.Block:
 
-                            BoundingBox placeBox = new BoundingBox(prevHitTile - (Vector3)position + Vector3.One * 0.1f, prevHitTile + Vector3.One * 0.9f - (Vector3)position);
-                            
-                            Vector3 place = hitTile - prevHitTile;
-                            Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY;
-                            if (place.X > 0) placement = Voxel.PlacementSettings.RIGHT;
-                            if (place.X < 0) placement = Voxel.PlacementSettings.LEFT;
-                            if (place.Y > 0) placement = Voxel.PlacementSettings.TOP;
-                            if (place.Y < 0) placement = Voxel.PlacementSettings.BOTTOM;
-                            if (place.Z > 0) placement = Voxel.PlacementSettings.FRONT;
-                            if (place.Z < 0) placement = Voxel.PlacementSettings.BACK;
+                                BoundingBox placeBox = new BoundingBox(prevHitTile - (Vector3)position + Vector3.One * 0.1f, prevHitTile + Vector3.One * 0.9f - (Vector3)position);
 
-                            if ((placeBox.Contains(bounds) == ContainmentType.Disjoint || Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].ignoreCollision)
-                                 && Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].AllowsPlacement(placement)
-                                 && !(Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].myClass != null && !Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].myClass.CanPlace(placement,hitVoxelType)))
-                            {
-                                autoDigTime = 0.25f;
+                                Vector3 place = hitTile - prevHitTile;
+                                Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY;
+                                if (place.X > 0) placement = Voxel.PlacementSettings.RIGHT;
+                                if (place.X < 0) placement = Voxel.PlacementSettings.LEFT;
+                                if (place.Y > 0) placement = Voxel.PlacementSettings.TOP;
+                                if (place.Y < 0) placement = Voxel.PlacementSettings.BOTTOM;
+                                if (place.Z > 0) placement = Voxel.PlacementSettings.FRONT;
+                                if (place.Z < 0) placement = Voxel.PlacementSettings.BACK;
 
-                                MGame.Instance.SetVoxel(prevHitTile, ItemManager.GetItemFromID(id).placement, placement: placement);
-                                hotbar.TakeItem(activeHotbarSlot, 1);
-                                SetAnimation(HandAnimation.Swing);
-                            }
+                                if ((placeBox.Contains(bounds) == ContainmentType.Disjoint || Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].ignoreCollision)
+                                     && Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].AllowsPlacement(placement)
+                                     && !(Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].myClass != null && !Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].myClass.CanPlace(placement, hitVoxelType)))
+                                {
+                                    autoDigTime = 0.25f;
 
-                            break;
+                                    MGame.Instance.SetVoxel(prevHitTile, ItemManager.GetItemFromID(id).placement, placement: placement);
+                                    hotbar.TakeItem(activeHotbarSlot, 1);
+                                    SetAnimation(HandAnimation.Swing);
+                                }
+
+                                break;
+                        }
                     }
+                    if (id >= 0) testitemtype(ItemManager.GetItemFromID(id).type);
                 }
             }
             if (Mouse.GetState().RightButton == ButtonState.Released && Mouse.GetState().LeftButton == ButtonState.Released) autoDigTime = 0f;
@@ -471,8 +484,9 @@ namespace FantasyVoxels.Entities
 
                 drawHand = false;
 
-                if (id >= 0)
+                if (id != -1)
                 {
+                    if(id >= 0)
                     {
                         drawHand = true;
                         bool spr = ItemManager.GetItemFromID(id).type == ItemType.Block?ItemManager.GetItemFromID(id).alwaysRenderAsSprite:true;
@@ -509,6 +523,41 @@ namespace FantasyVoxels.Entities
                             heldBlockModel[(spr ? 0 : i * 6) + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (ItemManager.GetItemFromID(id).type == ItemType.Block?MGame.AtlasSize:MGame.ItemAtlasSize));
                         }
                     }
+                    else
+                    {
+                        if(hotbar.PeekItem(activeHotbarSlot).properties is ToolProperties)
+                        {
+                            int head = ((ToolProperties)hotbar.PeekItem(activeHotbarSlot).properties).toolHead;
+                            int handle = ((ToolProperties)hotbar.PeekItem(activeHotbarSlot).properties).toolHandle;
+
+                            drawHand = true;
+                            bool spr = true;
+                            handIsSprite = spr;
+                            handFromBlockColors = false;
+                            heldBlockModel = new VertexPositionNormalTexture[12];
+
+                            int i = 1;
+
+                            int tex = 0;
+                            tex = ItemManager.GetItemFromID(head).texture;
+
+                            heldBlockModel[0 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[0 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[0 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[0 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[0 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[0 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3] + (spr ? new Vector3(0.5f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+
+                            tex = ItemManager.GetItemFromID(handle).texture;
+
+                            heldBlockModel[6 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.5001f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[6 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1] + (spr ? new Vector3(0.5001f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[6 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.5001f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[6 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0] + (spr ? new Vector3(0.5001f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[6 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2] + (spr ? new Vector3(0.5001f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                            heldBlockModel[6 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3] + (spr ? new Vector3(0.5001f, 0, 0) : Vector3.Zero), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / (MGame.ItemAtlasSize));
+                        }
+                    }
                 }
             }
             prevHeldItem = hotbar.PeekItem(activeHotbarSlot);
@@ -532,13 +581,13 @@ namespace FantasyVoxels.Entities
 
             if (!accessingInventory) return;
         }
-        public bool PickupItem(int id, byte stack = 1)
+        public bool PickupItem(Item item)
         {
             if (health <= 0) return false;
 
-            if(!hotbar.AddItem(new Item { itemID = id, stack = stack },out int leftover))
+            if(!hotbar.AddItem(item, out int leftover))
             {
-                return inventory.AddItem(new Item { itemID = id, stack = stack }, out leftover);
+                return inventory.AddItem(item, out leftover);
             }
             else
             {
@@ -555,7 +604,7 @@ namespace FantasyVoxels.Entities
             }
 
             float curSpeed = new Vector2(velocity.X, velocity.Z).Length();
-            float addSpeed = MathHelper.Clamp(curwalkspeed - curSpeed, 0, (grounded || swimming ? 200 : 60)*MGame.dt);
+            float addSpeed = MathHelper.Clamp(curwalkspeed - curSpeed, 0, (grounded || swimming ? 200 : 10)*MGame.dt);
 
             Vector3 initWish = addSpeed * wishDir;
             velocity += initWish;
@@ -686,7 +735,7 @@ namespace FantasyVoxels.Entities
                 int id = hotbar.PeekItem(i).itemID;
                 if (id != -1)
                 {
-                    DrawItem(new Vector2(horizPos,UserInterface.Active.ScreenHeight),uiScale,id,hotbar.PeekItem(i).stack);
+                    DrawItem(new Vector2(horizPos,UserInterface.Active.ScreenHeight),uiScale,id,hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
                 }
             }
             float healthFloat = health / 4f;
@@ -725,7 +774,7 @@ namespace FantasyVoxels.Entities
                     int id = hotbar.PeekItem(i).itemID;
                     if (id != -1)
                     {
-                        DrawItem(new Vector2(backpackX+8 * scale + i * scale * 21, backpackY-6 * scale), scale, id, hotbar.PeekItem(i).stack);
+                        DrawItem(new Vector2(backpackX+8 * scale + i * scale * 21, backpackY-6 * scale), scale, id, hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
                     }
 
                     if (isSelected)
@@ -734,12 +783,15 @@ namespace FantasyVoxels.Entities
 
                         if (id != -1)
                         {
-                            Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(ItemManager.GetItemFromID(id).displayName) + Vector2.One*2) * scale;
+                            string displayname = id >= 0 ? ItemManager.GetItemFromID(id).displayName :
+                                                           ItemManager.GetItemFromID(((ToolProperties)hotbar.PeekItem(i).properties).toolHead).displayName.TrimEnd("Tool-Head".ToCharArray()).Trim();
+
+                            Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(displayname) + Vector2.One * 2) * scale;
 
                             Vector2 pos = (Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale)) * scale;
 
-                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, new Rectangle((int)pos.X, (int)pos.Y, (int)size.X + scale*5, (int)size.Y), null,Color.Black, 0f, Vector2.Zero, SpriteEffects.None, 0.99f);
-                            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], ItemManager.GetItemFromID(id).displayName, pos + Vector2.UnitX*scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, new Rectangle((int)pos.X, (int)pos.Y, (int)size.X + scale * 5, (int)size.Y), null, Color.Black, 0f, Vector2.Zero, SpriteEffects.None, 0.99f);
+                            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], displayname, pos + Vector2.UnitX * scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
                         }
 
                         MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
@@ -755,7 +807,7 @@ namespace FantasyVoxels.Entities
                     int id = inventory.PeekItem(i).itemID;
                     if (id != -1)
                     {
-                        DrawItem(new Vector2(backpackX + 8 * scale + (i%5) * scale * 21, backpackY - 111 * scale + (i/5)*scale*21), scale, id, inventory.PeekItem(i).stack);
+                        DrawItem(new Vector2(backpackX + 8 * scale + (i%5) * scale * 21, backpackY - 111 * scale + (i/5)*scale*21), scale, id, inventory.PeekItem(i).stack, inventory.PeekItem(i));
                     }
 
                     if (isSelected)
@@ -764,15 +816,79 @@ namespace FantasyVoxels.Entities
 
                         if (id != -1)
                         {
-                            Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(ItemManager.GetItemFromID(id).displayName) + Vector2.One * 2) * scale;
+                            string displayname = id >= 0 ? ItemManager.GetItemFromID(id).displayName :
+                                                           ItemManager.GetItemFromID(((ToolProperties)inventory.PeekItem(i).properties).toolHead).displayName.TrimEnd("Tool-Head".ToCharArray()).Trim();
+
+                            Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(displayname) + Vector2.One * 2) * scale;
 
                             Vector2 pos = (Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale)) * scale;
 
                             MGame.Instance.spriteBatch.Draw(MGame.Instance.white, new Rectangle((int)pos.X, (int)pos.Y, (int)size.X + scale * 5, (int)size.Y), null, Color.Black, 0f, Vector2.Zero, SpriteEffects.None, 0.99f);
-                            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], ItemManager.GetItemFromID(id).displayName, pos + Vector2.UnitX * scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
+                            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], displayname, pos + Vector2.UnitX * scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
                         }
 
                         MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                    }
+                }
+
+                //crafting
+                for (int i = 0; i < 5; i++)
+                {
+                    int x = backpackX + 155 * scale + (i % 2) * scale * 21;
+                    int y = backpackY - 111 * scale + (i<4? (i / 2) : 3) * scale * 21;
+
+                    var slotbounds = new Rectangle(x + 2*scale, y - scale * 21, scale * 18, scale * 18);
+                    bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+
+                    int id = crafting.PeekItem(i).itemID;
+                    if (id != -1)
+                    {
+                        DrawItem(new Vector2(x, y), scale, id, crafting.PeekItem(i).stack, crafting.PeekItem(i));
+                    }
+
+                    if (isSelected)
+                    {
+                        if (i < 4) TryTransferContainerToCursor(ref crafting, i);
+                        else
+                        {
+                            if (BetterMouse.WasLeftPressed())
+                            {
+                                var add = crafting.TakeItemStack(i);
+                                if (add.itemID != -1 && cursor.TestAddItem(add, 0))
+                                {
+                                    cursor.AddItem(add, 0, out int remainder);
+
+                                    for(i = 0; i < 4; i++)
+                                    {
+                                        crafting.TakeItem(i,1);
+                                    }
+                                    if(remainder > 0)
+                                    {
+                                        crafting.SetItem(new Item { itemID = add.itemID, stack = (byte)remainder},i);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (id != -1)
+                        {
+                            string displayname = id >= 0 ? ItemManager.GetItemFromID(id).displayName : 
+                                                           ItemManager.GetItemFromID(((ToolProperties)crafting.PeekItem(i).properties).toolHead).displayName.TrimEnd("Tool-Head".ToCharArray()).Trim();
+
+                            Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(displayname) + Vector2.One * 2) * scale;
+
+                            Vector2 pos = (Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale)) * scale;
+
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, new Rectangle((int)pos.X, (int)pos.Y, (int)size.X + scale * 5, (int)size.Y), null, Color.Black, 0f, Vector2.Zero, SpriteEffects.None, 0.99f);
+                            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], displayname, pos + Vector2.UnitX * scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
+                        }
+
+                        MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                    }
+
+                    if(i == 4)
+                    {
+                        crafting.SetItem(CraftingManager.TryCraft(crafting),i);
                     }
                 }
                 //clicked outside the window
@@ -781,29 +897,29 @@ namespace FantasyVoxels.Entities
                     SpitContents(ref cursor);
                 }
 
-                if (cursor.PeekItem(0).itemID >= 0)
+                if (cursor.PeekItem(0).itemID != -1)
                 {
-                    DrawItem(Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale) * scale + new Vector2(-12,12) * scale, scale, cursor.PeekItem(0).itemID, cursor.PeekItem(0).stack,0.9f);
+                    DrawItem(Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale) * scale + new Vector2(-12,12) * scale, scale, cursor.PeekItem(0).itemID, cursor.PeekItem(0).stack,cursor.PeekItem(0),0.9f);
                 }
 
                 MGame.Instance.spriteBatch.End();
             }
         }
-        void TryTransferContainerToCursor(ref ItemContainer container, int i)
+        void TryTransferContainerToCursor(ref ItemContainer container, int i, bool noplace = false)
         {
             if (BetterMouse.WasLeftPressed())
             {
-                if (cursor.PeekItem(0).itemID >= 0 && container.TestAddItem(cursor.PeekItem(0), i))
+                if (cursor.PeekItem(0).itemID != -1 && container.TestAddItem(cursor.PeekItem(0), i) && !noplace)
                 {
                     container.AddItem(cursor.PeekItem(0), i, out int leftover);
 
                     if (leftover == 0) cursor.SetItem(new Item { itemID = -1, stack = 0 }, 0);
                     else cursor.SetItem(new Item { itemID = cursor.PeekItem(0).itemID, stack = (byte)leftover }, 0);
                 }
-                else if (container.PeekItem(i).itemID >= 0)
+                else if (container.PeekItem(i).itemID != -1)
                 {
                     Item copy = new Item { itemID = -1, stack = 0 };
-                    if (cursor.PeekItem(0).itemID >= 0)
+                    if (cursor.PeekItem(0).itemID != -1)
                     {
                         copy = cursor.PeekItem(0);
                     }
@@ -816,47 +932,105 @@ namespace FantasyVoxels.Entities
             else
             if (BetterMouse.WasRightPressed())
             {
-                if (cursor.PeekItem(0).itemID >= 0 && container.TestAddItem(new Item { itemID = cursor.PeekItem(0).itemID, stack = 1 }, i))
+                if (cursor.PeekItem(0).itemID != -1 && container.TestAddItem(new Item { itemID = cursor.PeekItem(0).itemID, stack = 1 }, i) && !noplace)
                 {
                     container.AddItem(cursor.TakeItem(0, 1).Value, i, out int leftover);
                 }
-                else if (container.PeekItem(i).itemID >= 0)
+                else if (container.PeekItem(i).itemID != -1)
                 {
                     cursor.SetItem(container.TakeItem(i, (byte)float.Ceiling(container.PeekItem(i).stack / 2f)).Value, 0);
                 }
             }
         }
 
-        private void DrawItem(Vector2 pos, float uiScale, int id, int stack, float depth = 0.5f)
+        private void DrawItem(Vector2 pos, float uiScale, int id, int stack, Item bitem, float depth = 0.5f)
         {
-            var item = ItemManager.GetItemFromID(id);
-            if (item.type == ItemType.Block)
+            //Compound item
+            if(id == -2)
             {
-                int tex = Voxel.voxelTypes[item.placement].frontTexture;
+                if(bitem.properties is ToolProperties)
+                {
+                    var item = ItemManager.GetItemFromID(((ToolProperties)bitem.properties).toolHandle);
+                    if (item.type == ItemType.Block)
+                    {
+                        int tex = Voxel.voxelTypes[item.placement].frontTexture;
 
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
-                                                new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                Vector2.One * uiScale,
-                                                SpriteEffects.None,
-                                                depth);
+                        MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
+                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                        Vector2.One * uiScale,
+                                                        SpriteEffects.None,
+                                                        depth);
+                    }
+                    else
+                    {
+                        int tex = item.texture;
+
+                        MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
+                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                        Vector2.One * uiScale,
+                                                        SpriteEffects.None,
+                                                        depth);
+                    }
+                    item = ItemManager.GetItemFromID(((ToolProperties)bitem.properties).toolHead);
+                    if (item.type == ItemType.Block)
+                    {
+                        int tex = Voxel.voxelTypes[item.placement].frontTexture;
+
+                        MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
+                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                        Vector2.One * uiScale,
+                                                        SpriteEffects.None,
+                                                        depth + 0.001f);
+                    }
+                    else
+                    {
+                        int tex = item.texture;
+
+                        MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
+                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                        Vector2.One * uiScale,
+                                                        SpriteEffects.None,
+                                                        depth+0.001f);
+                    }
+                }
             }
             else
             {
-                int tex = item.texture;
+                var item = ItemManager.GetItemFromID(id);
+                if (item.type == ItemType.Block)
+                {
+                    int tex = Voxel.voxelTypes[item.placement].frontTexture;
 
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
-                                                new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                Vector2.One * uiScale,
-                                                SpriteEffects.None,
-                                                depth);
+                    MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
+                                                    new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                    new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                    Vector2.One * uiScale,
+                                                    SpriteEffects.None,
+                                                    depth);
+                }
+                else
+                {
+                    int tex = item.texture;
+
+                    MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
+                                                    new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
+                                                    new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
+                                                    Vector2.One * uiScale,
+                                                    SpriteEffects.None,
+                                                    depth);
+                }
+
+                if (stack <= 1) return;
+
+                Vector2 shift = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(stack.ToString()) * uiScale;
+
+                MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 21 * uiScale, pos.Y - 0 * uiScale) - shift, Color.Black, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.01f);
+                MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 20 * uiScale, pos.Y - 1 * uiScale) - shift, Color.White, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.02f);
             }
-
-            Vector2 shift = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(stack.ToString()) * uiScale;
-
-            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 21 * uiScale, pos.Y - 0 * uiScale) - shift, Color.Black, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.01f);
-            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 20 * uiScale, pos.Y - 1 * uiScale) - shift, Color.White, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.02f);
         }
         void SpitContents(ref ItemContainer container, bool random = false)
         {
@@ -865,12 +1039,13 @@ namespace FantasyVoxels.Entities
                 if (container.PeekItem(j).stack > 0)
                 {
                     var item = container.TakeItemStack(j);
+                    container.SetItem(new Item { itemID = -1, stack = 0 },j);
 
-                    if (item.itemID >= 0)
+                    if (item.itemID != -1 && item.stack != 0)
                     {
                         for (int i = 0; i < item.stack; i++)
                         {
-                            var droppedItem = new DroppedItem(item.itemID);
+                            var droppedItem = new DroppedItem(item);
                             droppedItem.position = (Vector3)position + MGame.Instance.cameraForward * 0.6f;
                             droppedItem.velocity = random ? new Vector3(Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle(), Random.Shared.NextSingle() * 2 - 1) * (3 + (float)Random.Shared.NextDouble()) : velocity + MGame.Instance.cameraForward * (9 + (float)Random.Shared.NextDouble());
                             droppedItem.gravity = droppedItem.velocity.Y;
@@ -891,6 +1066,7 @@ namespace FantasyVoxels.Entities
                 Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
 
                 SpitContents(ref cursor);
+                SpitContents(ref crafting);
 
                 return true;
             }
@@ -915,9 +1091,9 @@ namespace FantasyVoxels.Entities
             };
         }
 
-        public override void RestoreCustomSaveData(JObject data)
+        public override void RestoreCustomSaveData(object data)
         {
-            PlayerSaveData pData = data.ToObject<PlayerSaveData>();
+            PlayerSaveData pData = (PlayerSaveData)data;
 
             hotbar.SetAllItems(pData.hotbar);
             inventory.SetAllItems(pData.inventory);

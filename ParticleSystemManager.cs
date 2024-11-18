@@ -25,7 +25,7 @@ namespace FantasyVoxels
         public float lifetime;
         public float gravity;
         public float curlife;
-        public float tint = 0.7f;
+        public float tint = 0.0f;
 
         public ParticleSystem(int particles, TextureProvider provider, int texIndex, Vector3Double origin, Vector3 velocity, float lifetime, float gravity, Vector3 randomPosScalar, Vector3 randomVelScalar)
         {
@@ -36,11 +36,6 @@ namespace FantasyVoxels
             {
                 this.particlePositions[i] = origin + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)*randomPosScalar;
                 this.particleVelocities[i] = velocity + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)* randomVelScalar;
-
-                MGame.Instance.GrabVoxelData((Vector3)particlePositions[i] + Vector3.Up * 0.1f, out var voxelData);
-
-                float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage + voxelData.blockLight / 255f;
-                tint = float.Max(tint,ourLight);
             }
             this.textureProvider = provider;
             this.textureIndex = texIndex;
@@ -53,13 +48,12 @@ namespace FantasyVoxels
     {
         private static VertexPositionTexture[] vertices =
         [
-            new(new Vector3(0, 0, 1), new Vector2(0, 1)),
-            new(new Vector3(0, 1, 1), new Vector2(1, 1)),
-            new(new Vector3(0, 1, 0), new Vector2(1, 0)),
-
-            new(new Vector3(0, 0, 1), new Vector2(0, 1)),
-            new(new Vector3(0, 1, 0), new Vector2(1, 0)),
-            new(new Vector3(0, 0, 0), new Vector2(0, 0)),
+            new(new Vector3(-0.5f,-0.5f, 0.5f), new Vector2(0, 1)),
+            new(new Vector3(-0.5f, 0.5f, 0.5f), new Vector2(1, 1)),
+            new(new Vector3(-0.5f, 0.5f,-0.5f), new Vector2(1, 0)),
+            new(new Vector3(-0.5f,-0.5f, 0.5f), new Vector2(0, 1)),
+            new(new Vector3(-0.5f, 0.5f,-0.5f), new Vector2(1, 0)),
+            new(new Vector3(-0.5f,-0.5f,-0.5f), new Vector2(0, 0)),
         ];
         private static List<ParticleSystem> systems = new List<ParticleSystem>();
 
@@ -92,12 +86,12 @@ namespace FantasyVoxels
 
                     system.particleVelocities[p].Y -= system.gravity * MGame.dt;
 
-                    int x = (int)system.particlePositions[p].X - cx * Chunk.Size;
-                    int y = (int)system.particlePositions[p].Y - cy * Chunk.Size;
-                    int z = (int)system.particlePositions[p].Z - cz * Chunk.Size;
+                    int x = (int)double.Floor(system.particlePositions[p].X) - cx * Chunk.Size;
+                    int y = (int)double.Floor(system.particlePositions[p].Y) - cy * Chunk.Size;
+                    int z = (int)double.Floor(system.particlePositions[p].Z) - cz * Chunk.Size;
 
                     bool collision = rootChunkExists ? 
-                        Chunk.IsOutOfBounds((x,y,z)) ? (CollisionDetector.IsSolidTile((int)system.particlePositions[p].X, (int)system.particlePositions[p].Y, (int)system.particlePositions[p].Z))
+                        Chunk.IsOutOfBounds((x,y,z)) ? (CollisionDetector.IsSolidTile((int)double.Floor(system.particlePositions[p].X), (int)double.Floor(system.particlePositions[p].Y), (int)double.Floor(system.particlePositions[p].Z)))
                         : MGame.Instance.loadedChunks[rootChunk].IsSolid((x, y, z))
                         : false;
 
@@ -122,7 +116,12 @@ namespace FantasyVoxels
             {
                 ParticleSystem system = systems[i];
 
-                switch(system.textureProvider)
+                MGame.Instance.GrabVoxelData(system.origin + Vector3.Up * 0.1f, out var voxelData);
+
+                float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage + voxelData.blockLight / 255f;
+                system.tint = ourLight;
+
+                switch (system.textureProvider)
                 {
                     case ParticleSystem.TextureProvider.BlockAtlas:
 

@@ -11,6 +11,7 @@
         <ApplicationIcon>Icon.ico</ApplicationIcon>
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
         <SignAssembly>False</SignAssembly>
+        <StartupObject>Program</StartupObject>
       </PropertyGroup>
       <ItemGroup>
         <None Remove="Icon.ico" />
@@ -21,6 +22,7 @@
         <EmbeddedResource Include="Icon.bmp" />
       </ItemGroup>
     <ItemGroup>
+	    <PackageReference Include="log4net" Version="3.0.3" />
 	    <PackageReference Include="MessagePack" Version="2.5.192" />
 	    <PackageReference Include="MonoGame.Content.Builder.Task.Compute" Version="3.8.3" />
 	    <PackageReference Include="MonoGame.Framework.Compute.DesktopGL" Version="3.8.3" />
