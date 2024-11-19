@@ -20,7 +20,7 @@ namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 4.0f, run = 6.8f, sneak = 2f, swim = 0.5f;
+        static float walk = 128, run = 6.8f, sneak = 2f, swim = 0.5f;
         static BoundingBox standingBounds = new BoundingBox(new Vector3(-0.2f, -1.6f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
         static BoundingBox crouchedBounds = new BoundingBox(new Vector3(-0.2f, -1.5f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
 
@@ -133,6 +133,7 @@ namespace FantasyVoxels.Entities
         {
             maxHealth = 16;
             health = maxHealth;
+            fly = true;
         }
 
         public override void Start()
@@ -218,9 +219,9 @@ namespace FantasyVoxels.Entities
 
             if(wishDir.Length() > 0) wishDir.Normalize();
 
-            if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming))
+            if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming||fly))
             {
-                gravity = swimming ? MathF.Min(gravity+28*MGame.dt, 4.5f) : 7f;
+                gravity = swimming ? MathF.Min(gravity+28*MGame.dt, 4.5f) : 8f;
                 grounded = false;
             }
             if (BetterKeyboard.HasBeenPressed(Keys.Q))
@@ -237,9 +238,9 @@ namespace FantasyVoxels.Entities
                     EntityManager.SpawnEntity(droppedItem);
                 }
             }
-            if (crouched && swimming)
+            if (crouched && (swimming||fly))
             {
-                gravity = -3f;
+                gravity = -8f;
             }
 
             rotmat = Matrix.CreateRotationX(rotation.X) * Matrix.CreateRotationY(rotation.Y);

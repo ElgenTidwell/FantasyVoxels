@@ -88,5 +88,23 @@ namespace FantasyVoxels
                 return;
             }
         }
+        public static void BackgroundGenerate(CancellationToken cancel)
+        {
+            try
+            {
+                while (!cancel.IsCancellationRequested)
+                {
+                    while(!MGame.Instance.toGenerate.IsEmpty)
+                    {
+                        MGame.Instance.ProcessGeneration();
+                    }
+                }
+            }
+            catch (ThreadInterruptedException ex)
+            {
+                Console.WriteLine(ex.ToString());
+                return;
+            }
+        }
     }
 }

@@ -35,6 +35,7 @@ namespace FantasyVoxels
         public float gravity;
         public bool grounded;
         public bool swimming;
+        public bool fly;
         public byte health,maxHealth;
         protected bool disallowWalkingOffEdge;
 
@@ -65,10 +66,17 @@ namespace FantasyVoxels
         public abstract void Start();
         public virtual void Update()
         {
-            if (grounded) gravity = !swimming?-0.6f:0;
+            if(fly)
+            {
+                gravity = Maths.MoveTowards(gravity, 0f, MGame.dt * 18);
+            }
             else
             {
-                gravity = swimming? Maths.MoveTowards(gravity, -2f,MGame.dt*18) : gravity - 22 * MGame.dt;
+                if (grounded) gravity = !swimming ? -0.6f : 0;
+                else
+                {
+                    gravity = swimming ? Maths.MoveTowards(gravity, -2f, MGame.dt * 18) : gravity - 22 * MGame.dt;
+                }
             }
 
             velocity.Y = grounded ? 0 : gravity;

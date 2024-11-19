@@ -1,4 +1,5 @@
-﻿using FantasyVoxels.Blocks;
+﻿using FantasyVoxels.Biomes;
+using FantasyVoxels.Blocks;
 using FantasyVoxels.Entities;
 using FantasyVoxels.ItemManagement;
 using FantasyVoxels.Saves;
@@ -132,7 +133,7 @@ namespace FantasyVoxels
             .SetItem("lamp"),
 
             //GlowleafTorch
-            new Voxel(blocklight: 100, lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
+            new Voxel(blocklight: 80, lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
             .SetTextureData(TextureSetSettings.ALLSIDES, 14)
             .SetSurfaceType(SurfaceType.Wood)
             .SetMaterialType(MaterialType.Wood)
@@ -142,7 +143,7 @@ namespace FantasyVoxels
             .SetItem("torch"),
 
             //Glow Bush
-            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false, blocklight:100)
+            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false, blocklight:80)
             .SetTextureData(TextureSetSettings.ALLSIDES, 15)
             .SetClass(new GlowBushBlock())
             .SetSurfaceType(SurfaceType.Grass)
@@ -150,6 +151,14 @@ namespace FantasyVoxels
             .SetBaseDigTime(0.0f)
             .DisallowPlacement(PlacementSettings.HORIZONTAL | PlacementSettings.TOP)
             .SetItem("stick"),
+
+            //Glow Leaves
+            new Voxel(shaderEffect: 2, lightPassthrough: 190, renderNeighbors: true, blocklight: 80)
+            .SetTextureData(TextureSetSettings.ALLSIDES, 16)
+            .SetMaterialType(MaterialType.Wood)
+            .SetBaseDigTime(LEAVESDIG)
+            .SetSurfaceType(SurfaceType.Grass)
+            .SetItem("glowleaf"),
         ];
 
         public Block myClass;
@@ -296,7 +305,7 @@ namespace FantasyVoxels
     [MessagePackObject]
     public class Chunk
     {
-        public const int Size = 16;
+        public const int Size = 24;
         [Key(0)]
         public (int x, int y, int z) chunkPos;
         [Key(1)]
@@ -468,7 +477,7 @@ namespace FantasyVoxels
             Array.Fill(voxels, (byte)0);
             Array.Fill(voxeldata, new VoxelData { skyLight = 255 });
         }
-        public static float GetOctaveNoise2D(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
+        static float GetOctaveNoise2D(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
             float totalNoise = 0;
             float amplitude = 1;
@@ -480,7 +489,7 @@ namespace FantasyVoxels
                 amplitude *= persistence;    // Decrease amplitude for each octave
                 frequency *= lacunarity;     // Increase frequency for each octave
             }
-            return totalNoise/maxAmplitude;
+            return totalNoise / maxAmplitude;
         }
         public static float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
@@ -489,80 +498,12 @@ namespace FantasyVoxels
             float maxAmplitude = 0; // Used to normalize the result
             for (int i = 0; i < octaveCount; i++)
             {
-                totalNoise += IcariaNoise.GradientNoise3D(x * frequency, y * frequency, z * frequency,MGame.Instance.seed-seedOffset) * amplitude;
+                totalNoise += IcariaNoise.GradientNoise3D(x * frequency, y * frequency, z * frequency, MGame.Instance.seed - seedOffset) * amplitude;
                 maxAmplitude += amplitude;
                 amplitude *= persistence;    // Decrease amplitude for each octave
                 frequency *= lacunarity;     // Increase frequency for each octave
             }
             return totalNoise / maxAmplitude;
-        }
-        public static int GetTerrainHeight(float samplex, float samplez)
-        {
-            float ocean = MathF.Pow((MathF.Min(GetOctaveNoise2D(samplex, samplez, 0.005f, 8, 0.75f, 1.5f, 24) -0.1f,0)*1.6f), 2);
-            float scalar = (GetOctaveNoise2D(samplex,samplez,0.001f,6,0.4f,1.5f)+1.2f) * 40;
-            float baseTerrainHeight = MathF.Pow((GetOctaveNoise2D(samplex, samplez, 0.001f, 6, 0.8f, 1.4f) + 0.5f),2) * scalar + (80-scalar)*0.4f;
-            baseTerrainHeight += MathF.Pow(MathF.Max(GetOctaveNoise2D(samplex, samplez, 0.002f, 4, 0.7f,1.24f,-5),0), 0.5f) * 45;
-
-            float terrainHeight = ocean * -120 + 10 + baseTerrainHeight * (1 - (MathF.Min(ocean, 1)));
-
-            return (int)terrainHeight;
-        }
-
-        public static byte GetVoxel(float x, float y, float z, int terrainHeight)
-        {
-            // Main terrain voxel assignment with 3D noise layers
-            byte voxel = (byte)(y <= terrainHeight ? y < 11 ? 4 : 2 : 0);
-
-            // Water voxel assignment for regions below sea level
-            if (y < 5 && y >= terrainHeight)
-                voxel = 3;
-
-            float frequency = 0.012f;
-            float yscale = (GetOctaveNoise3D(x, y, z, 0.004f, 1, 0.9f, 1.24f, -2)+1)*0.8f;
-
-            float n1 = IcariaNoise.BrokenGradientNoise3D(x * frequency, y * frequency* yscale, z * frequency, MGame.Instance.seed - 10);
-            float n2 = IcariaNoise.GradientNoise3D(x * frequency* 1.5f, y * frequency * yscale*2, z * frequency*1.5f, MGame.Instance.seed - 25);
-            float n3 = IcariaNoise.GradientNoise3D(x * frequency, y * frequency*2, z * frequency, MGame.Instance.seed + 15);
-
-            float mix = (IcariaNoise.GradientNoise3D(x * frequency * 0.2f, y * frequency * 0.2f, z * frequency * 0.2f, MGame.Instance.seed))*2;
-
-            float density = float.Abs(IcariaNoise.GradientNoise(x * frequency * 0.1f, z * frequency * 0.1f, MGame.Instance.seed - 15))*0.59f+0.01f;
-
-            if (((n1 * mix - n2)+0.2f) / (MathF.Max(y - terrainHeight, 1)*0.8f) > density && y > terrainHeight)
-                voxel = 2;
-
-            // Cave generation parameters
-            float caveFrequency = 0.02f;  // Adjusts the size and frequency of caves (lower values = larger caves)
-            float caveThreshold = 0.02f;  // Threshold for determining if a voxel is part of a cave
-
-            // Function to determine if a voxel is part of a cave (returns true for caves, false for solid ground)
-            bool IsCave(float x, float y, float z)
-            {
-                float caveChance = IcariaNoise.GradientNoise3D(
-                    x * caveFrequency * 0.001f,
-                    y * caveFrequency * 0.01f,
-                    z * caveFrequency * 0.001f,
-                    MGame.Instance.seed - 60);
-                if (caveChance <= 0) return false;
-
-                // Apply 3D Perlin noise at the given (x, y, z) position
-                float caveNoise = IcariaNoise.GradientNoise3D(
-                    x * caveFrequency,
-                    y * caveFrequency,
-                    z * caveFrequency,
-                    MGame.Instance.seed + 10);
-
-                // Return true if the noise is within the cave threshold range (indicating air/cave space)
-                return MathF.Abs(caveNoise) < caveThreshold- caveChance*0.1f;
-            }
-
-            //if (IsCave(x,y,z) && voxel != 3)
-            //    voxel = 0;
-
-            if (y < terrainHeight && y < terrainHeight - 3 - MathF.Abs(IcariaNoise.GradientNoise(x * 0.9f, z * 0.9f)) * 2 && voxel != 0)
-                voxel = 9;
-
-            return voxel;
         }
         public void Generate()
         {
@@ -575,18 +516,34 @@ namespace FantasyVoxels
                 {
                     int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
 
-                    //float ocean = (IcariaNoise.GradientNoise(samplex * 0.001f, samplez * 0.001f, 1 + MGame.Instance.seed) +1f);
-                    float ocean = 0f;
-                    int terrainHeight = (int)(GetTerrainHeight(samplex, samplez)*(1-ocean) + (ocean*2));
+                    float continentalness = GetOctaveNoise2D(samplex, samplez, 0.004f, 10, 0.7f, 1.45f, 1);
+                    float erosion = GetOctaveNoise2D(samplex,samplez, 0.001f, 4,0.8f,1.4f,10);
+                    float PV = GetOctaveNoise2D(samplex,samplez,0.03f,3,0.4f,1.4f,25);
+
+                    BiomeProvider biome = BiomeTracker.biomes[0];
+
+                    float density = (IcariaNoise.GradientNoise(samplex * 0.002f, samplez * 0.002f, 1 + MGame.Instance.seed) +1f);
+                    //int terrainHeight = (int)(float.Lerp(biome1.GetTerrainHeight(samplex,samplez),biome2.GetTerrainHeight(samplex,samplez),biomeSelector%1));
+                    int terrainHeight = (int)(biome.ContinentalnessCurve.Evaluate(continentalness) + biome.ErosionCurve.Evaluate(erosion) * biome.PVCurve.Evaluate(PV));
                     tHeight[x, z] = terrainHeight;
 
-                    int shortGrassHeight = tRandom.Next(1,4);
-                    float shortGrassChance = (float)(tRandom.NextDouble() * 2 - 1);
                     bool grassed = false;
 
                     for (int y = Size-1; y >= 0; y--)
                     {
                         int sampley = y + chunkPos.y * Size;
+
+                        byte GetVoxel(int sx, int sy, int sz, int th)
+                        {
+                            byte vox = biome.GetVoxel(sx,sy,sz,th,false);
+
+                            float perlin = IcariaNoise.GradientNoise3D(sx*0.006f,sy* 0.006f, sz* 0.006f, MGame.Instance.seed+504);
+                            float pY = biome.DensityCurve.Evaluate(sy-terrainHeight) * density;
+
+                            if (perlin * pY > 0.1f) vox = 2;
+
+                            return vox;
+                        }
 
                         // Main terrain voxel assignment with 3D noise layers
                         voxels[x + Size * (y + Size * z)] = GetVoxel(samplex,sampley,samplez,terrainHeight);
@@ -621,19 +578,10 @@ namespace FantasyVoxels
                             voxels[x + Size * (y + Size * z)] = 2;
                         }
 
-                        float r = IcariaNoise.GradientNoise(samplex * 0.01f, samplez * 0.01f, MGame.Instance.seed - 10);
-
-                        if (voxels[x + Size * (y + Size * z)] == 1 && (int)(r * 15) == tRandom.Next(0, 10) && shortGrassChance > 0.6f)
+                        if (voxels[x + Size * (y + Size * z)] == 1 && y < Size-1)
                         {
-                            VoxelStructurePlacer.Place(samplex, sampley, samplez, new Tree());
-                        }
-                        if (voxels[x + Size * (y + Size * z)] == 1 && (int)(r * 50) == tRandom.Next(-150, 150) && y < Size-1)
-                        {
-                            voxels[x + Size * ((y + 1) + Size * z)] = 12;
-                        }
-                        if (voxels[x + Size * (y + Size * z)] == 1 && (int)(r * 200) == tRandom.Next(-150, 150) && y < Size - 1)
-                        {
-                            voxels[x + Size * ((y + 1) + Size * z)] = 15;
+                            byte v = biome.RequestFolliage(samplex, sampley, samplez, tRandom);
+                            if (v > 0) voxels[x + Size * ((y + 1) + Size * z)] = v;
                         }
 
                         elementsCount++;
@@ -915,7 +863,7 @@ namespace FantasyVoxels
                                 case 5: tex = Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].backTexture; break;
                             }
 
-                            UVCoords += new Vector2(tex % 16, tex / 16) * 16;
+                            UVCoords += new Vector2(tex % (MGame.AtlasSize/16), tex / (MGame.AtlasSize / 16)) * 16;
 
                             UVCoords /= MGame.AtlasSize;
 

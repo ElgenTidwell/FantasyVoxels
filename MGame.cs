@@ -467,10 +467,6 @@ namespace FantasyVoxels
 
             chunkUpdateThread.Start();
 
-            player.position.Y = Chunk.GetTerrainHeight(0, 0) + 2;
-
-            worldSpawnpoint = player.position;
-
             player.Start();
 
             if(!fromsave)
@@ -487,6 +483,8 @@ namespace FantasyVoxels
                 int cx;
                 int cy;
                 int cz;
+                
+                player.position.Y = 0;
 
                 cx = (int)MathF.Floor(cameraPosition.X / Chunk.Size);
                 cy = (int)MathF.Floor(cameraPosition.Y / Chunk.Size);
@@ -526,6 +524,15 @@ namespace FantasyVoxels
                 });
                 UserInterface.Active.RemoveEntity(label);
                 UserInterface.Active.RemoveEntity(prog);
+
+                for(int y = 0; y < 8; y++)
+                {
+                    if (!loadedChunks.TryGetValue(CCPos((cx, y, cz)), out var c)) continue;
+
+                    player.position.Y = float.Max((float)player.position.Y, c.MaxY);
+                }
+
+                worldSpawnpoint = player.position;
             }
         }
         public void QuitWorld()
@@ -555,7 +562,7 @@ namespace FantasyVoxels
 
             loadedChunks[CCPos(t)].Remesh();
         }
-        void ProcessGeneration()
+        public void ProcessGeneration()
         {
             if (!toGenerate.TryDequeue(out (int x, int y, int z) t)) return;
 
@@ -569,7 +576,7 @@ namespace FantasyVoxels
             //    loadedChunks.TryAdd(CCPos(t), chunk);
             //    return;
             //}
-
+            
             Chunk c = new Chunk();
 
             c.chunkPos = t;
@@ -710,7 +717,7 @@ namespace FantasyVoxels
                         continue;
                     }
 
-                    if(!currentChunk.CompletelyEmpty)
+                    if (!currentChunk.CompletelyEmpty)
                         toRender.Add((x, y, z));
 
                     // BFS to neighbors through visible faces
