@@ -17,6 +17,7 @@ namespace FantasyVoxels.Blocks
         public bool supportsCustomMeshing;
         public bool smoothLightingEnable;
         public bool customDrops;
+        public bool customBounds;
         public Block SetTextureData(TextureSetSettings settings, short texture)
         {
             if (settings.HasFlag(TextureSetSettings.RIGHT)) voxelTypes[myVoxelID].rightTexture = texture;
@@ -55,6 +56,10 @@ namespace FantasyVoxels.Blocks
         public virtual Item[] GetCustomDrops()
         {
             return null;
+        }
+        public virtual BoundingBox GetCustomBounds(PlacementSettings placement)
+        {
+            return new BoundingBox();
         }
         public abstract void Init();
         public void TryUpdateBlock((int x, int y, int z) posInChunk, Chunk chunk, bool force = false)

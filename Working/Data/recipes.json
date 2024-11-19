@@ -1,0 +1,158 @@
+[
+  {
+    "itemInput": [
+      "",
+      "",
+      "glowleaf",
+      "",
+      "",
+      "stick"
+    ],
+    "itemOutput": "torch",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "stick",
+      "stick",
+      "",
+      "stick",
+      "",
+      ""
+    ],
+    "itemOutput": "woodaxehead",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "stick",
+      "stick",
+      "",
+      "stick",
+      "clay",
+      ""
+    ],
+    "itemOutput": "woodaxetoolhead",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "woodaxehead",
+      "clay",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "woodaxetoolhead",
+    "outputStack": 1,
+    "noOrder": true
+  },
+  {
+    "itemInput": [
+      "wood",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "plank",
+    "outputStack": 12,
+    "noOrder": true
+  },
+  {
+    "itemInput": [
+      "plank",
+      "plank",
+      "plank",
+      "plank",
+      "plank",
+      "plank"
+    ],
+    "itemOutput": "planks",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "stick",
+      "stick",
+      "stick",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "woodpickhead",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "stick",
+      "stick",
+      "stick",
+      "",
+      "clay",
+      ""
+    ],
+    "itemOutput": "woodpicktoolhead",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "woodpickhead",
+      "clay",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "woodpicktoolhead",
+    "outputStack": 1,
+    "noOrder": true
+  },
+  {
+    "itemInput": [
+      "stonechunk",
+      "clay",
+      "stonechunk",
+      "clay",
+      "stonechunk",
+      "clay"
+    ],
+    "itemOutput": "cobblestone",
+    "outputStack": 4,
+    "noOrder": true
+  },
+  {
+    "itemInput": [
+      "clay",
+      "stonechunk",
+      "",
+      "clay",
+      "stonechunk",
+      ""
+    ],
+    "itemOutput": "stonestick",
+    "outputStack": 4,
+    "noOrder": true
+  },
+  {
+    "itemInput": [
+      "plank",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "stick",
+    "outputStack": 4,
+    "noOrder": true
+  }
+]

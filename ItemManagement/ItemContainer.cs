@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -103,5 +104,10 @@ namespace FantasyVoxels.ItemManagement
 
         public Item[] GetAllItems() => items;
         public void SetAllItems(Item[] items) => this.items = items;
+
+        internal bool UseItem(int slot)
+        {
+            return items[slot].Use();
+        }
     }
 }

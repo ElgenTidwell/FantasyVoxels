@@ -1,4 +1,5 @@
 ﻿using FantasyVoxels.ItemManagement;
+using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +11,7 @@ namespace FantasyVoxels.Blocks
     public class GlowBushBlock : BasicFlowerBlock
     {
         public GlowBushBlock() :base() { customDrops = true; }
+
         public override Item[] GetCustomDrops()
         {
             if (Random.Shared.Next(0, 4) == 1) return null;

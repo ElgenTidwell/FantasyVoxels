@@ -13,6 +13,7 @@ namespace FantasyVoxels
         public int particleCount;
         public Vector3Double[] particlePositions;
         public Vector3[] particleVelocities;
+        public float[] particleRotations;
         public Vector3 origin;
         public enum TextureProvider
         {
@@ -32,10 +33,12 @@ namespace FantasyVoxels
             this.particleCount = particles;
             this.particlePositions = new Vector3Double[particles];
             this.particleVelocities = new Vector3[particles];
-            for(int i = 0; i < particles; i++)
+            this.particleRotations = new float[particles];
+            for (int i = 0; i < particles; i++)
             {
                 this.particlePositions[i] = origin + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)*randomPosScalar;
                 this.particleVelocities[i] = velocity + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)* randomVelScalar;
+                this.particleRotations[i] = Random.Shared.NextSingle();
             }
             this.textureProvider = provider;
             this.textureIndex = texIndex;
@@ -86,6 +89,8 @@ namespace FantasyVoxels
 
                     system.particleVelocities[p].Y -= system.gravity * MGame.dt;
 
+                    system.particleRotations[p] += system.particleVelocities[p].LengthSquared() * MGame.dt * ((p * 0.5f + 1)*(p%2==0?-1:1))*0.1f;
+
                     int x = (int)double.Floor(system.particlePositions[p].X) - cx * Chunk.Size;
                     int y = (int)double.Floor(system.particlePositions[p].Y) - cy * Chunk.Size;
                     int z = (int)double.Floor(system.particlePositions[p].Z) - cz * Chunk.Size;
@@ -118,8 +123,7 @@ namespace FantasyVoxels
 
                 MGame.Instance.GrabVoxelData(system.origin + Vector3.Up * 0.1f, out var voxelData);
 
-                float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage + voxelData.blockLight / 255f;
-                system.tint = ourLight;
+                float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage;
 
                 switch (system.textureProvider)
                 {
@@ -138,11 +142,12 @@ namespace FantasyVoxels
                 }
                 shader.Parameters["texIndex"].SetValue(system.textureIndex);
                 shader.Parameters["uvScale"].SetValue(0.25f);
-                shader.Parameters["tint"].SetValue(system.tint);
+                shader.Parameters["tint"].SetValue(ourLight);
+                shader.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
 
                 for (int p = 0; p < system.particleCount; p++)
                 {
-                    Matrix m =Matrix.CreateScale(0.125f)*Matrix.CreateRotationY(MathHelper.ToRadians(90f))*Matrix.CreateWorld((Vector3)system.particlePositions[p],MGame.Instance.cameraForward,Vector3.Up);
+                    Matrix m = Matrix.CreateScale(0.125f) * Matrix.CreateRotationX(system.particleRotations[p])*Matrix.CreateRotationY(MathHelper.ToRadians(90f))*Matrix.CreateWorld((Vector3)system.particlePositions[p],MGame.Instance.cameraForward,Vector3.Up);
 
                     shader.Parameters["World"].SetValue(m*MGame.Instance.world);
                     shader.Parameters["uvOffset"].SetValue(new Vector2(p%4,p/4)/4f);

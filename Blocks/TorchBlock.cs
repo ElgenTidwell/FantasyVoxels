@@ -22,6 +22,7 @@ namespace FantasyVoxels.Blocks
         {
             supportsCustomMeshing = true;
             smoothLightingEnable = false;
+            customBounds = true;
         }
         public override void Init()
         {
@@ -34,6 +35,23 @@ namespace FantasyVoxels.Blocks
         {
             //just one face is all we need.
             return checkFace == 0;
+        }
+        public override BoundingBox GetCustomBounds(Voxel.PlacementSettings placement)
+        {
+            const float pix = 1 / 16f;
+            switch (placement)
+            {
+                default:
+                    return new BoundingBox(new Vector3(0.4f, 0.0f, 0.4f), new Vector3(0.6f, pix*12, 0.6f));
+                case Voxel.PlacementSettings.LEFT:
+                    return new BoundingBox(new Vector3(0.0f, pix * 2, 0.4f), new Vector3(0.2f, pix * 14, 0.6f));
+                case Voxel.PlacementSettings.RIGHT:
+                    return new BoundingBox(new Vector3(0.8f, pix * 2, 0.4f), new Vector3(1, pix * 14, 0.6f));
+                case Voxel.PlacementSettings.BACK:
+                    return new BoundingBox(new Vector3(0.4f, pix * 2, 0.0f), new Vector3(0.6f, pix * 14, 0.2f));
+                case Voxel.PlacementSettings.FRONT:
+                    return new BoundingBox(new Vector3(0.4f, pix * 2, 0.8f), new Vector3(0.6f, pix * 14, 1f));
+            }
         }
         public override List<VertexPositionNormalTexture> CustomMesh(int x, int y, int z, int checkFace, int otherVoxel, Vector2 baseUVOffset, Vector3 chunkPos)
         {

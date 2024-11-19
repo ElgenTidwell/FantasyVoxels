@@ -55,7 +55,7 @@ namespace FantasyVoxels.Saves
             [
                 .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk=>
                 (int.Max(int.Abs(cx - chunk.Value.chunkPos.x), int.Abs(cz - chunk.Value.chunkPos.z)) < 10
-                || chunk.Value.modified) && !chunk.Value.CompletelyEmpty && chunk.Value.generated),
+                || chunk.Value.modified) && chunk.Value.generated),
             ];
 
             //Parallel.ForEach(chunks, (chunk)=>
@@ -92,7 +92,7 @@ namespace FantasyVoxels.Saves
             string playerJson = JsonConvert.SerializeObject(playerSaveData,jsonSerializerSettings);
             await File.WriteAllTextAsync($"{savename}/entity/player.json", playerJson);
 
-            await Task.Delay(4000);
+            await Task.Delay(1000);
         }
         public static string[] GetAllSavedWorlds()
         {

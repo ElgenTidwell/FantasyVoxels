@@ -9,12 +9,18 @@ sampler mainSampler : register(s0) = sampler_state
 {
     Texture = <mainTexture>;
 };
+texture lightmap;
+sampler lightmapSampler : register(s1) = sampler_state
+{
+    Texture = <lightmap>;
+};
 
 float4x4 World;
 float4x4 View;
 float4x4 Projection;
 
 float tint;
+float blocklightTint;
 
 float uvScale;
 float2 uvOffset;
@@ -53,7 +59,7 @@ PSOut MainPS(VSOutput input)
     clip(output.Color0.a - 0.1f);
     
     output.Color0.a = 1;
-    output.Color0.xyz *= tint;
+    output.Color0.xyz *= float3(tint, tint, tint) + tex2D(lightmapSampler, float2(pow(blocklightTint, 0.8f), 0)).xyz;
     
     return output;
 }

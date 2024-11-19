@@ -92,6 +92,7 @@ namespace FantasyVoxels
             .SetMaterialType(MaterialType.Stone)
             .SetBaseDigTime(STONEDIG)
             .RequireLevel(1)
+            .SetClass(new StoneBlock())
             .SetItem("stone"),
             
             //Plank
@@ -113,7 +114,7 @@ namespace FantasyVoxels
             .SetItem("cobblestone"),
 
             //Daisy
-            new Voxel(lightPassthrough:0,renderNeighbors:true,ignoreCollision:true,ignoreRaycast:false, shaderEffect:2)
+            new Voxel(lightPassthrough:0,renderNeighbors:true,ignoreCollision:true,ignoreRaycast:false)
             .SetTextureData(TextureSetSettings.ALLSIDES, 12)
             .SetClass(new BasicFlowerBlock())
             .SetSurfaceType(SurfaceType.Grass)
@@ -141,7 +142,7 @@ namespace FantasyVoxels
             .SetItem("torch"),
 
             //Glow Bush
-            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false, shaderEffect: 2, blocklight:100)
+            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false, blocklight:100)
             .SetTextureData(TextureSetSettings.ALLSIDES, 15)
             .SetClass(new GlowBushBlock())
             .SetSurfaceType(SurfaceType.Grass)
@@ -220,12 +221,6 @@ namespace FantasyVoxels
             None,
             Grass,
             Dirt,
-            Wood,
-            Stone
-        }
-        public enum MaterialType
-        {
-            Soil,
             Wood,
             Stone
         }
@@ -836,7 +831,7 @@ namespace FantasyVoxels
 
                     if (rx == x && ry == y && rz == z) continue;
                     if (voxels[x + Size * (y + Size * z)] != 0) continue;
-                    if (voxeldata[rx + Size * (ry + Size * rz)].blockLight - voxeldata[x + Size * (y + Size * z)].blockLight < 30) continue;
+                    if (voxeldata[rx + Size * (ry + Size * rz)].blockLight - voxeldata[x + Size * (y + Size * z)].blockLight < 18) continue;
 
                     voxeldata[x + Size * (y + Size * z)].blockLight += (byte)((voxeldata[rx + Size * (ry + Size * rz)].blockLight - voxeldata[x + Size * (y + Size * z)].blockLight) * 0.6f);
 

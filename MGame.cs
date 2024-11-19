@@ -386,6 +386,8 @@ namespace FantasyVoxels
             chunk.Parameters["colors"]?.SetValue(colors);
             chunk.Parameters["normal"]?.SetValue(normals);
             chunk.Parameters["lightmap"]?.SetValue(lightmap);
+            entity.Parameters["lightmap"]?.SetValue(lightmap);
+            particles.Parameters["lightmap"]?.SetValue(lightmap);
 
             postProcessing.Parameters["NoiseTexture"]?.SetValue(noise);
 
@@ -619,7 +621,7 @@ namespace FantasyVoxels
 
             if (BetterKeyboard.HasBeenPressed(Keys.F12)) TakeScreenCap();
 
-            if(!gamePaused && !IsActive)
+            if(!gamePaused && !IsActive && !player.OtherMenusActive())
             {
                 gamePaused = true;
                 PauseMenu.Show();

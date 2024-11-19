@@ -53,7 +53,7 @@ namespace FantasyVoxels
                     vector.Z - planeNormal.Z * dot / sqrMag);
             }
         }
-        public static bool Raycast(Vector3 start, Vector3 direction, float distance, out Vector3 prevHitTile, out Vector3 hitTile, out int voxel)
+        public static bool Raycast(Vector3 start, Vector3 direction, float distance, out Vector3 prevHitTile, out Vector3 hitTile, out int voxel, out VoxelData data)
         {
             // Current position in the grid (tilemap coordinates)
             int x = (int)Math.Floor(start.X);
@@ -95,7 +95,20 @@ namespace FantasyVoxels
                     if (CollisionDetector.IsSolidTile(x,y,z,true))
                     {
                         voxel = MGame.Instance.GrabVoxel(new (x,y,z));
-                        return true;
+                        data = MGame.Instance.GrabVoxelData(new(x, y, z), out var _data)?_data:new VoxelData();
+                        
+                        if(voxel >= 0 && Voxel.voxelTypes[voxel].myClass != null && Voxel.voxelTypes[voxel].myClass.customBounds)
+                        {
+                            var b = Voxel.voxelTypes[voxel].myClass.GetCustomBounds(data.placement);
+
+                            b.Min += new Vector3(x,y,z);
+                            b.Max += new Vector3(x,y,z);
+                            if ((b.Intersects(new Ray(start, direction)).HasValue)) return true;
+                        }
+                        else
+                        {
+                            return true;
+                        }
                     }
                 }
 
@@ -132,6 +145,7 @@ namespace FantasyVoxels
             hitPosition = Vector3.Zero;
             hitTile = new Vector3(-1, -1, -1);
             voxel = 0;
+            data = new VoxelData();
             return false;
         }
     }

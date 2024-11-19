@@ -34,8 +34,9 @@ namespace FantasyVoxels.Entities
         {
             MGame.Instance.GrabVoxelData((Vector3)position, out var voxelData);
 
-            float ourLight = (voxelData.skyLight / 255f)*MGame.Instance.daylightPercentage + voxelData.blockLight / 255f;
+            float ourLight = (voxelData.skyLight / 255f)*MGame.Instance.daylightPercentage;
             MGame.Instance.GetEntityShader().Parameters["tint"].SetValue(ourLight);
+            MGame.Instance.GetEntityShader().Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
             MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(fromBlockColors ? MGame.Instance.colors : MGame.Instance.items);
 
             Matrix rotation = Matrix.CreateRotationX(this.rotation.Y) * Matrix.CreateRotationY(this.rotation.Z) * Matrix.CreateRotationZ(this.rotation.X);
