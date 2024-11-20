@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{055ac23b-80c7-4e7b-bf69-5d1a1e4cfe9a}">
+		<property name="assetPath">
+			<value>grassnoise-03.ogg</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>44.0999985</value>
+		</property>
+		<property name="channelCount">
+			<value>1</value>
+		</property>
+		<property name="length">
+			<value>0.25907029478458049</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{133dc659-1481-4538-9aa7-86acd14a192a}</destination>
+		</relationship>
+	</object>
+</objects>

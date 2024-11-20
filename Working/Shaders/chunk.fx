@@ -223,7 +223,7 @@ PSOut MainPS(VSOutput input)
     
     float2 depth = input.Depth.xy;
     
-    float fog = max(depth.x - ChunkSize * 0.5f, 0) / (renderDistance * ChunkSize * 0.5f);
+    float fog = max(depth.x - ChunkSize * 0.5f, 0) / ((renderDistance+1) * ChunkSize * 0.5f);
     float fogColor = pow(saturate(normalize(input.WorldPos - cameraPosition).y),1.25f);
     
     float4 dat = input.Color;

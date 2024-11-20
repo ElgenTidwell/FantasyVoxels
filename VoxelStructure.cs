@@ -96,11 +96,13 @@ namespace FantasyVoxels
 
     public class Tree : VoxelStructure
     {
-        const int BARK=5, LOG=6, LEAVES = 8;
+        const int BARK=5, PLEAVES=16, LEAVES = 8;
 
         public override void Place(int worldX, int worldY, int worldZ)
         {
             int treeHeight = 4 + (int)((IcariaNoise.GradientNoise(worldX * 0.8f, worldZ * 0.8f)+1) * 4);
+
+            bool ttype = (int)((IcariaNoise.GradientNoise(worldX * 0.3f, worldZ * 0.3f, MGame.Instance.seed - 15)) * 3) % 2 == 0;
 
             for (int y = worldY + treeHeight - 2; y <= worldY + treeHeight+1; y++)
             {
@@ -114,7 +116,7 @@ namespace FantasyVoxels
 
                         if (int.Abs(x) - offset == rad && int.Abs(z) - offset == rad && y <= worldY + treeHeight) continue;
 
-                        SetVoxel(x + worldX, y, z + worldZ, LEAVES);
+                        SetVoxel(x + worldX, y, z + worldZ, ttype ? LEAVES : PLEAVES);
                     }
                 }
             }

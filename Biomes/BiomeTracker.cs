@@ -10,11 +10,25 @@ namespace FantasyVoxels.Biomes
     {
         public static BiomeProvider[] biomes;
 
+        const int HumidityLevels = 3;
+        const int TemperatureLevels = 3;
+        public static int[,] biomeIndexes = new int[TemperatureLevels,HumidityLevels];
+
         static BiomeTracker()
         {
-            biomes = ReflectiveEnumerator.GetEnumerableOfType<BiomeProvider>().ToArray();
+            biomes = [new GlowForest()];
+        }
+        /// <summary>
+        /// Fetches a biome.
+        /// </summary>
+        /// <param name="humidity">humidity in range 0 - 1</param>
+        /// <param name="temperature">termperature in range 0 - 1</param>
+        public static BiomeProvider GetBiome(float humidity, float temperature)
+        {
+            int H = (int)(humidity*(HumidityLevels-1));
+            int T = (int)(humidity*(TemperatureLevels-1));
 
-            foreach (var biome in biomes) biome.Setup();
+            return biomes[biomeIndexes[T, H]];
         }
     }
 }

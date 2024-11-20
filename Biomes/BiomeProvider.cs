@@ -39,13 +39,9 @@ namespace FantasyVoxels.Biomes
             return totalNoise / maxAmplitude;
         }
         public abstract string Name { get; }
-        public Curve ContinentalnessCurve = new Curve();
-        public Curve ErosionCurve = new Curve();
-        public Curve PVCurve = new Curve();
-        public Curve DensityCurve = new Curve();
-        public abstract void Setup();
         public abstract byte GetVoxel(float x, float y, float z, int terrainHeight, bool p3d);
         public abstract byte RequestFolliage(float samplex, float sampley, float samplez, Random tRandom);
+        public abstract byte GetSurfaceVoxel(float samplex, float sampley, float samplez);
 
         public int CompareTo(BiomeProvider other)
         {

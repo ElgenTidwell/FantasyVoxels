@@ -21,6 +21,8 @@ using System.Threading.Tasks;
 using static Icaria.Engine.Procedural.IcariaNoise;
 using static System.Net.Mime.MediaTypeNames;
 using FantasyVoxels.ItemManagement;
+using FmodForFoxes;
+using FmodForFoxes.Studio;
 
 namespace FantasyVoxels
 {
@@ -109,9 +111,10 @@ namespace FantasyVoxels
         DepthStencilState stencilDraw;
 
         int threadsActive = 0;
-        TaskPool generationPool;
+        //TaskPool generationPool;
         CancellationTokenSource chunkThreadCancel;
         Thread chunkUpdateThread;
+        Thread chunkGenerateThread;
 
         int meshesWorking;
         int generateWorking;
@@ -218,9 +221,10 @@ namespace FantasyVoxels
 
         #region AudioVariables
 
-        const int numWalkSounds = 4, numPlaceSounds = 4;
-
-        SoundEffect[,] blockSounds = new SoundEffect[Enum.GetValues(typeof(Voxel.SurfaceType)).Cast<int>().Max()-1, numPlaceSounds+numWalkSounds];
+        public static List<Bank> soundBanks = new List<Bank>();
+        public static EventDescription[] placeBlockEvents = new EventDescription[(int)Enum.GetValues(typeof(Voxel.SurfaceType)).Length-1];
+        public static EventDescription[] walkBlockEvents = new EventDescription[(int)Enum.GetValues(typeof(Voxel.SurfaceType)).Length-1];
+        public static Listener3D listener;
 
         #endregion
         public enum PlayState
@@ -332,6 +336,19 @@ namespace FantasyVoxels
 
             CraftingManager.Setup();
 
+            FmodManager.Init(new DesktopNativeFmodLibrary(), FmodInitMode.CoreAndStudio, "Content");
+
+            soundBanks.Add(StudioSystem.LoadBank("Master.bank"));
+            soundBanks.Add(StudioSystem.LoadBank("Master.strings.bank"));
+
+            for(int i = 0; i < placeBlockEvents.Length; i++)
+            {
+                placeBlockEvents[i] = StudioSystem.GetEvent($"event:/Blocks/{((Voxel.SurfaceType)(i+1))}_place");
+                walkBlockEvents[i] = StudioSystem.GetEvent($"event:/Blocks/{((Voxel.SurfaceType)(i+1))}_walk");
+            }
+
+            listener = new Listener3D();
+
             base.Initialize();
         }
         protected override void LoadContent()
@@ -419,7 +436,6 @@ namespace FantasyVoxels
                 MaxMipLevel = 0,
                 MaxAnisotropy = 0
             };
-            generationPool = new TaskPool(1);
 
 
             //for(int i = 1; i < blockSounds.GetLength(0); i++)
@@ -436,8 +452,8 @@ namespace FantasyVoxels
         }
         protected override void UnloadContent()
         {
+            FmodManager.Unload();
             UserInterface.Active.Dispose();
-            generationPool.Stop();
             chunkThreadCancel?.Dispose();
 
             base.UnloadContent();
@@ -456,7 +472,12 @@ namespace FantasyVoxels
             chunkUpdateThread.Name = "Background Chunk Update Thread";
             chunkUpdateThread.Priority = ThreadPriority.AboveNormal;
             chunkUpdateThread.IsBackground = false;
-            
+
+            chunkGenerateThread = new Thread(() => BackgroundWorkers.BackgroundGenerate(chunkThreadCancel.Token));
+            chunkGenerateThread.Name = "Background Chunk Generate Thread";
+            chunkGenerateThread.Priority = ThreadPriority.Highest;
+            chunkGenerateThread.IsBackground = false;
+
             IsMouseVisible = false;
 
             player = new Player();
@@ -466,10 +487,19 @@ namespace FantasyVoxels
             totalTime = 0;
 
             chunkUpdateThread.Start();
+            chunkGenerateThread.Start();
 
             player.Start();
 
-            if(!fromsave)
+            Chunk.noise3d = new FastNoiseLite(seed + 10);
+            Chunk.noise3d.SetNoiseType(FastNoiseLite.NoiseType.Value);
+
+            Chunk.domainWarp = new FastNoiseLite(seed + 10);
+            Chunk.domainWarp.SetDomainWarpType(FastNoiseLite.DomainWarpType.BasicGrid);
+            Chunk.domainWarp.SetDomainWarpAmp(72);
+            Chunk.domainWarp.SetFrequency(.02f);
+
+            if (!fromsave)
             {
                 var label = new Label("Building terrain", Anchor.AutoCenter);
                 var prog = new ProgressBar(0, 100, new Vector2(800,70), Anchor.AutoCenter);
@@ -541,6 +571,8 @@ namespace FantasyVoxels
 
             chunkUpdateThread.Interrupt();
             chunkUpdateThread.Join();
+            chunkGenerateThread.Interrupt();
+            chunkGenerateThread.Join();
 
             loadedChunks.Clear();
 
@@ -581,13 +613,17 @@ namespace FantasyVoxels
 
             c.chunkPos = t;
 
-            c.Generate();
+            c.Generate(true);
 
             loadedChunks.TryAdd(CCPos(t), c);
+
+            c.CheckQueue(true);
         }
         protected override void Update(GameTime gameTime)
         {
             dt = gamePaused ? 0 : (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+            FmodManager.Update();
 
             BetterKeyboard.GetState();
             BetterMouse.GetState(false);
@@ -692,12 +728,12 @@ namespace FantasyVoxels
                     if (!loadedChunks.TryGetValue(CCPos((x, y, z)), out currentChunk))
                     {
                         if (generatedWithPreference > 256) continue;
+                        if (toGenerate.Count > 16) continue;
 
                         // If chunk is not yet generated or queued, add it to generate queue
                         if (!toGenerate.Contains((x, y, z)))
                         {
                             toGenerate.Enqueue((x, y, z));
-                            generationPool.EnqueueTask(ProcessGeneration);
                         }
 
                         // Mark any existing neighbors, it's safer to not tunnel or fly with it. This is the "chunk zipping"
@@ -777,70 +813,11 @@ namespace FantasyVoxels
 
                     neighbors.Add((cPos.x - 1, cPos.y, cPos.z, RIGHT_FACE));
                     neighbors.Add((cPos.x + 1, cPos.y, cPos.z, LEFT_FACE));
-                    neighbors.Add((cPos.x, cPos.y + 1, cPos.z, BOTTOM_FACE));
-                    neighbors.Add((cPos.x, cPos.y - 1, cPos.z, TOP_FACE));
                     neighbors.Add((cPos.x, cPos.y, cPos.z - 1, BACK_FACE));
                     neighbors.Add((cPos.x, cPos.y, cPos.z + 1, FRONT_FACE));
 
                     return neighbors;
                 }
-            }
-            else
-            {
-                for (int _x = -RenderDistance; _x < RenderDistance; _x++)
-                {
-                    for (int _y = -RenderDistance / 2; _y < RenderDistance / 2; _y++)
-                    {
-                        for (int _z = -RenderDistance; _z < RenderDistance; _z++)
-                        {
-                            int x = _x + cx;
-                            int y = _y + cy;
-                            int z = _z + cz;
-
-                            // Check if we have exceeded the render distance
-                            if (MathF.Abs(x - cx) + MathF.Abs(y - cy) * 2 + MathF.Abs(z - cz) >= RenderDistance) continue;
-
-                            if (!loadedChunks.TryGetValue(CCPos((x, y, z)), out var currentChunk))
-                            {
-                                // If chunk is not yet generated or queued, add it to generate queue
-                                if (!toGenerate.Contains((x, y, z)) && toGenerate.Count < 32)
-                                {
-                                    toGenerate.Enqueue((x, y, z));
-                                    generationPool.EnqueueTask(ProcessGeneration);
-                                }
-                                continue;
-                            }
-
-                            BoundingBox chunkbounds = new BoundingBox(new Vector3(x, y, z) * Chunk.Size, (new Vector3(x + 1, y + 1, z + 1) * Chunk.Size));
-                            if (frustum.Contains(chunkbounds) == ContainmentType.Disjoint)
-                                continue;
-
-                            if (currentChunk.queueModified)
-                            {
-                                currentChunk.queueModified = false;
-                                if (x == cx && z == cz) currentChunk.CheckQueue(true);
-                                else generationPool.EnqueueTask(() => currentChunk.CheckQueue(false));
-                            }
-                            if (!currentChunk.meshUpdated[currentChunk.GetLOD()] && !toMesh.Contains((x, y, z)) && toMesh.Count < 32)
-                            {
-                                toMesh.Enqueue((x, y, z));
-                                generationPool.EnqueueTask(ProcessMesh);
-                            }
-
-                            // Add to render queue if the chunk is not completely empty
-                            if (!currentChunk.CompletelyEmpty)
-                                toRender.Add((x, y, z));
-                        }
-                    }
-                }
-
-                toRender.Sort(((int x, int y, int z) a, (int x, int y, int z) b) =>
-                {
-                    float adist = MathF.Abs(a.x - cx) + MathF.Abs(a.y - cy) + MathF.Abs(a.z - cz);
-                    float bdist = MathF.Abs(b.x - cx) + MathF.Abs(b.y - cy) + MathF.Abs(b.z - cz);
-
-                    return adist.CompareTo(bdist);
-                });
             }
 
             for (int _x = -RenderDistance; _x < RenderDistance; _x++)
@@ -1305,6 +1282,7 @@ namespace FantasyVoxels
                     var t = Voxel.voxelTypes[chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
 
                     int tex = t.bottomTexture;
+                    PlayDigSound(t, p + Vector3.One * 0.5f);
                     ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, tex, p + Vector3.One * 0.5f, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
 
                     if (t.droppedItemID >= 0 && t.requiredLevel <= toolLevel)
@@ -1350,6 +1328,20 @@ namespace FantasyVoxels
                 chunk.Modify(x, y, z, 0);
             }
         }
+
+        public static void PlayDigSound(Voxel t, Vector3 p)
+        {
+            var instance = placeBlockEvents[(int)t.surfaceType - 1].CreateInstance();
+            instance.Position3D = p;
+            instance.Start();
+        }
+        public static void PlayWalkSound(Voxel t, Vector3 p)
+        {
+            var instance = walkBlockEvents[(int)t.surfaceType - 1].CreateInstance();
+            instance.Position3D = p;
+            instance.Start();
+        }
+
         public void SetVoxel(Vector3 p, int newVoxel, bool disableDrops = false, Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY)
         {
             int cx = (int)MathF.Floor(p.X / Chunk.Size);
@@ -1367,6 +1359,7 @@ namespace FantasyVoxels
                     var t = Voxel.voxelTypes[chunk.voxels[x + Chunk.Size * (y + Chunk.Size * z)]];
 
                     int tex = t.bottomTexture;
+                    PlayDigSound(t, p + Vector3.One * 0.5f);
                     ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, tex, p + Vector3.One * 0.5f, Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
 
                     if (t.droppedItemID >= 0)

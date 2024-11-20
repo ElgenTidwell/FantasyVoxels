@@ -15,12 +15,14 @@ using GeonBit.UI.Entities;
 using Newtonsoft.Json.Linq;
 using System.Collections;
 using FantasyVoxels.UI;
+using FmodForFoxes;
+using FmodForFoxes.Studio;
 
 namespace FantasyVoxels.Entities
 {
     public class Player : Entity
     {
-        static float walk = 128, run = 6.8f, sneak = 2f, swim = 0.5f;
+        static float walk = 4, run = 6.8f, sneak = 2f, swim = 0.5f;
         static BoundingBox standingBounds = new BoundingBox(new Vector3(-0.2f, -1.6f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
         static BoundingBox crouchedBounds = new BoundingBox(new Vector3(-0.2f, -1.5f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
 
@@ -111,6 +113,8 @@ namespace FantasyVoxels.Entities
         float vmswayX;
         float vmswayY;
         float vmoffsetY;
+        float vmoffsetSwayY;
+        float vmoffsetSwayX;
 
         float diggingTimer;
         float waterDamageTimer;
@@ -128,12 +132,11 @@ namespace FantasyVoxels.Entities
             0f,
             5f,
         ];
-
+        bool step = false;
         public Player()
         {
             maxHealth = 16;
             health = maxHealth;
-            fly = true;
         }
 
         public override void Start()
@@ -221,7 +224,7 @@ namespace FantasyVoxels.Entities
 
             if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming||fly))
             {
-                gravity = swimming ? MathF.Min(gravity+28*MGame.dt, 4.5f) : 8f;
+                gravity = swimming ? MathF.Min(gravity+28*MGame.dt, 4.5f) : (fly? 12f : 7f);
                 grounded = false;
             }
             if (BetterKeyboard.HasBeenPressed(Keys.Q))
@@ -240,7 +243,7 @@ namespace FantasyVoxels.Entities
             }
             if (crouched && (swimming||fly))
             {
-                gravity = -8f;
+                gravity = fly?-10f:-3f;
             }
 
             rotmat = Matrix.CreateRotationX(rotation.X) * Matrix.CreateRotationY(rotation.Y);
@@ -267,6 +270,8 @@ namespace FantasyVoxels.Entities
                     Vector3 plane = (Vector3.One - new Vector3(float.Abs(normal.X), float.Abs(normal.Y), float.Abs(normal.Z)));
 
                     int tex = Voxel.voxelTypes[hitVoxelType].bottomTexture;
+
+                    MGame.PlayWalkSound(Voxel.voxelTypes[hitVoxelType], hitTile + Vector3.One * 0.5f);
 
                     ParticleSystemManager.AddSystem(new ParticleSystem(4, ParticleSystem.TextureProvider.BlockAtlas, tex, hitTile+normal*0.55f+Vector3.One*0.5f, normal, 0.45f, 12f, plane * 0.5f, Vector3.One));
                 }
@@ -345,6 +350,7 @@ namespace FantasyVoxels.Entities
                                 {
                                     autoDigTime = 0.25f;
 
+                                    MGame.PlayDigSound(Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement],prevHitTile);
                                     MGame.Instance.SetVoxel(prevHitTile, ItemManager.GetItemFromID(id).placement, placement: placement);
                                     hotbar.TakeItem(activeHotbarSlot, 1);
                                     SetAnimation(HandAnimation.Swing);
@@ -375,16 +381,22 @@ namespace FantasyVoxels.Entities
 
             Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
             oldState = Mouse.GetState();
+
+            rotmat = Matrix.CreateRotationX(rotation.X) * Matrix.CreateRotationY(rotation.Y);
+
+            var lforward = rotmat.Forward;
+            var lup = rotmat.Up;
+
+            MGame.listener.Position3D = (Vector3)position;
+            MGame.listener.ForwardOrientation = lforward;
+            MGame.listener.UpOrientation = -lup;
         }
         public override void Die()
         {
             deathUIshown = true;
 
-            var forward = MGame.Instance.cameraForward;
-            MGame.Instance.cameraForward = Vector3.Up;
             SpitContents(ref inventory, true);
             SpitContents(ref hotbar,true);
-            MGame.Instance.cameraForward = forward;
 
             var respawnButton = new Button("Respawn",ButtonSkin.Alternative,Anchor.Center, new Vector2(800, 70));
             var quitButton = new Button("Quit to Menu", ButtonSkin.Alternative, Anchor.AutoCenter, new Vector2(800, 70));
@@ -428,11 +440,23 @@ namespace FantasyVoxels.Entities
                 bobTime += MGame.dt * ((speed / walk - 1) * 0.3f + 1);
 
                 xsin = MathF.Sin(bobTime * 7.5f) * bob;
-                ysin = MathF.Sin(bobTime * 7.5f + MathHelper.ToRadians(90)) * bob;
+                ysin = MathF.Cos(bobTime * 7.5f) * bob;
+
+                if(float.Abs(ysin) >0.9f*bob && !step && bob >= 0.1f)
+                {
+                    step = true;
+                    int v = MGame.Instance.GrabVoxel(new Vector3((float)position.X, (float)(bounds.Min.Y+position.Y-0.5f), (float)position.Z));
+                    if(v>=0 && Voxel.voxelTypes[v].surfaceType != Voxel.SurfaceType.None)
+                        MGame.PlayWalkSound(Voxel.voxelTypes[v], (Vector3)position+Vector3.Up*bounds.Min.Y);
+                }
+                if(step && float.Abs(ysin) < 0.9f * bob)
+                {
+                    step = false;
+                }
 
                 bob = Maths.MoveTowards(bob, bobMulti * 1.2f, MGame.dt * 12 * float.Abs(bob - bobMulti * 1.2f));
 
-                curwalkspeed = (crouched ? sneak : running ? run : walk) * (swimming ? swim : 1);
+                curwalkspeed = ((crouched ? sneak : running ? run : walk) * (swimming ? swim : 1))*(fly?6:1);
 
                 HandleInventory();
 
@@ -461,7 +485,6 @@ namespace FantasyVoxels.Entities
             vmswayY = Maths.MoveTowards(vmswayY, 0, MGame.dt * 15 * float.Abs(vmswayY));
             vmswayX += (oldRotation.Y - rotation.Y) * 0.2f;
             vmswayY += (oldRotation.X - rotation.X) * 0.2f;
-
             float cameraY = (float)(position.Y + MathF.Abs(xsin) * 0.16f);
 
             MGame.Instance.FOV = Maths.MoveTowards(MGame.Instance.FOV, desiredFOV + (running && MathF.Abs(velocity.X) + MathF.Abs(velocity.Z) > walk ? 5 : 0), MGame.dt * 30);
@@ -607,22 +630,22 @@ namespace FantasyVoxels.Entities
                 verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 2]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 2] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
                 verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 3]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 3] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
 
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 1]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 1] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 3]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 3] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 1]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 1] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 3]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 3] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
             }
 
             for (int y = 0; y < 16; y++)
             {
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
 
                 verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
                 verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
@@ -672,7 +695,7 @@ namespace FantasyVoxels.Entities
             }
 
             float curSpeed = new Vector2(velocity.X, velocity.Z).Length();
-            float addSpeed = MathHelper.Clamp(curwalkspeed - curSpeed, 0, (grounded || swimming ? 200 : 10)*MGame.dt);
+            float addSpeed = MathHelper.Clamp(curwalkspeed - curSpeed, 0, fly?1200:(grounded || swimming ? 200 : 10)*MGame.dt);
 
             Vector3 initWish = addSpeed * wishDir;
             velocity += initWish;
@@ -765,12 +788,18 @@ namespace FantasyVoxels.Entities
                     break;
             }
 
-            Matrix world = Matrix.CreateTranslation(Vector3.One*0.5f)*
+            vmoffsetSwayY = Maths.MoveTowards(vmoffsetSwayY, -float.Abs(vmswayX), MGame.dt*(float.Abs(vmoffsetSwayY- float.Abs(vmswayX))+0.1f)*2f);
+            float xtarg = Vector3.Dot(new Vector3(velocity.X, 0, velocity.Z), right)*-0.05f;
+            vmoffsetSwayX = Maths.MoveTowards(vmoffsetSwayX, xtarg, MGame.dt*(float.Abs(vmoffsetSwayX-xtarg)+0.01f)*12);
+
+            Matrix world = Matrix.CreateRotationZ(vmoffsetSwayX*0.1f) * 
+                           Matrix.CreateTranslation(Vector3.One*0.5f) *
                            Matrix.CreateScale(handIsSprite? 0.8f: 0.6f) *
                            Matrix.CreateRotationY(MathHelper.ToRadians(20))*
                            Matrix.CreateRotationX(MathHelper.ToRadians(0))*
                            animMatrix *
                            Matrix.CreateWorld(new Vector3(0.2f+ ysin * 0.15f*bob, -1.4f-(((float.Pow(float.Abs(xsin),0.8f) * 1.5f)) * bob) * 0.15f + vmoffsetY, -1.6f), Vector3.Forward, Vector3.Up)*
+                           Matrix.CreateTranslation(vmoffsetSwayX*0.1f, vmoffsetSwayY-vmoffsetSwayX*0.04f, 0) *
                            Matrix.CreateRotationX(MathHelper.ToRadians(velocity.Y * -0.2f)+ vmswayY) *
                            Matrix.CreateRotationY(vmswayX) *
                            Matrix.CreateRotationZ(painResponse*0.01f);

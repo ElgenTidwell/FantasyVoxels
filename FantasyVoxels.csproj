@@ -22,6 +22,7 @@
         <EmbeddedResource Include="Icon.bmp" />
       </ItemGroup>
     <ItemGroup>
+	    <PackageReference Include="FmodForFoxes" Version="3.1.0" />
 	    <PackageReference Include="log4net" Version="3.0.3" />
 	    <PackageReference Include="MessagePack" Version="2.5.192" />
 	    <PackageReference Include="MonoGame.Content.Builder.Task.Compute" Version="3.8.3" />
@@ -29,6 +30,38 @@
 	    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 	    <PackageReference Include="Newtonsoft.Json.Bson" Version="1.0.3" />
 	    <PackageReference Include="Nopipeline.Task" Version="2.3.0" />
+    </ItemGroup>
+    <ItemGroup>
+      <None Update="fmod.dll">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="fmodstudio.dll">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="fmodstudio_vc.lib">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="fmod_vc.lib">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="libfmod.so">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="libfmod.so.13">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="libfmod.so.13.8">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="libfmodstudio.so">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="libfmodstudio.so.13">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="libfmodstudio.so.13.8">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
     <Target Name="RestoreDotnetTools" BeforeTargets="Restore">
 	    <Message Text="Restoring dotnet tools" Importance="High" />

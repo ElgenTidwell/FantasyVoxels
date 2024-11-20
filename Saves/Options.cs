@@ -14,12 +14,12 @@ namespace FantasyVoxels.Saves
     {
         public enum RenderDistance
         {
-            Tiny    = 4,
-            Near    = 10,
-            Normal  = 16,
-            Far     = 24,
-            Super   = 48,
-            Crazy   = 64
+            Tiny    = 3,
+            Near    = 6,
+            Normal  = 10,
+            Far     = 16,
+            Super   = 32,
+            Crazy   = 48
         }
         struct GameSettings
         {

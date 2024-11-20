@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="EffectPreset" id="{c4a88bae-6639-4dcc-aa24-083fe68ef4b6}">
+		<property name="name">
+			<value>BlockSpatializer</value>
+		</property>
+		<relationship name="folder">
+			<destination>{062bcf5f-435e-4597-a6a6-85c7da11a52e}</destination>
+		</relationship>
+		<relationship name="effect">
+			<destination>{4e829fb1-602a-4841-a7bc-a8e1b4388726}</destination>
+		</relationship>
+	</object>
+	<object class="ObjectSpatialiserEffect" id="{4e829fb1-602a-4841-a7bc-a8e1b4388726}">
+		<property name="maximumDistance">
+			<value>15</value>
+		</property>
+		<property name="overrideRange">
+			<value>true</value>
+		</property>
+		<property name="soundSize">
+			<value>3.79999995</value>
+		</property>
+	</object>
+</objects>

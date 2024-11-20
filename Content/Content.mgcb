@@ -13,6 +13,23 @@
 
 #---------------------------------- Content ---------------------------------#
 
+#begin ../Working/Data/items.json
+/copy:../Working/Data/items.json;Data/items.json
+
+#begin ../Working/Data/recipes.json
+/copy:../Working/Data/recipes.json;Data/recipes.json
+
+#begin ../Working/FMODStudio/fvoxel/Build/Desktop/Master.bank
+/copy:../Working/FMODStudio/fvoxel/Build/Desktop/Master.bank;Master.bank
+
+#begin ../Working/FMODStudio/fvoxel/Build/Desktop/Master.strings.bank
+/copy:../Working/FMODStudio/fvoxel/Build/Desktop/Master.strings.bank;Master.strings.bank
+
+#begin ../Working/Shaders/breakingVoxel.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/breakingVoxel.fx;Shaders/breakingVoxel.fx
+
 #begin ../Working/Shaders/chunk.fx
 /importer:EffectImporter
 /processor:EffectProcessor
@@ -22,6 +39,16 @@
 /importer:EffectImporter
 /processor:EffectProcessor
 /build:../Working/Shaders/chunkbuilder.fx;Shaders/chunkbuilder.fx
+
+#begin ../Working/Shaders/entity.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/entity.fx;Shaders/entity.fx
+
+#begin ../Working/Shaders/particles.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/particles.fx;Shaders/particles.fx
 
 #begin ../Working/Shaders/pscreen.fx
 /importer:EffectImporter
@@ -43,6 +70,9 @@
 /processor:EffectProcessor
 /build:../Working/Shaders/tiledBackground.fx;Shaders/tiledBackground.fx
 
+#begin ../Working/Sounds/test.ogg
+/copy:../Working/Sounds/test.ogg;Sounds/test.ogg
+
 #begin ../Working/Textures/aomap.png
 /importer:TextureImporter
 /processor:TextureProcessor
@@ -54,6 +84,42 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/aomap.png;Textures/aomap.png
+
+#begin ../Working/Textures/backpack.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/backpack.png;Textures/backpack.png
+
+#begin ../Working/Textures/black.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/black.png;Textures/black.png
+
+#begin ../Working/Textures/breaking.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/breaking.png;Textures/breaking.png
 
 #begin ../Working/Textures/colors_backupspring.png
 /importer:TextureImporter
@@ -79,6 +145,18 @@
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/colors.png;Textures/colors.png
 
+#begin ../Working/Textures/items.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/items.png;Textures/items.png
+
 #begin ../Working/Textures/items/testitem.png
 /importer:TextureImporter
 /processor:TextureProcessor
@@ -90,6 +168,18 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/items/testitem.png;Textures/items/testitem.png
+
+#begin ../Working/Textures/lightmap.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/lightmap.png;Textures/lightmap.png
 
 #begin ../Working/Textures/moon.png
 /importer:TextureImporter
@@ -150,6 +240,42 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/UITextures.png;Textures/UITextures.png
+
+#begin ../Working/Textures/water_dudv.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/water_dudv.png;Textures/water_dudv.png
+
+#begin ../Working/Textures/waterOverlay.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/waterOverlay.png;Textures/waterOverlay.png
+
+#begin ../Working/Textures/white.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/white.png;Textures/white.png
 
 #begin BuiltEffects/disabled.xnb
 /copy:BuiltEffects/disabled.xnb
@@ -4632,119 +4758,3 @@
 
 #begin GeonBit.UI/Themes/lowres/ThemeData.xml
 /copy:GeonBit.UI/Themes/lowres/ThemeData.xml
-#begin ../Working/Shaders/entity.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/build:../Working/Shaders/entity.fx;Shaders/entity.fx
-
-#begin ../Working/Textures/backpack.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/backpack.png;Textures/backpack.png
-
-#begin ../Working/Textures/black.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/black.png;Textures/black.png
-
-#begin ../Working/Textures/white.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/white.png;Textures/white.png
-
-#begin ../Working/Textures/breaking.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/breaking.png;Textures/breaking.png
-
-#begin ../Working/Shaders/breakingVoxel.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/build:../Working/Shaders/breakingVoxel.fx;Shaders/breakingVoxel.fx
-
-#begin ../Working/Textures/lightmap.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/lightmap.png;Textures/lightmap.png
-
-#begin ../Working/Textures/waterOverlay.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/waterOverlay.png;Textures/waterOverlay.png
-
-#begin ../Working/Textures/water_dudv.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/water_dudv.png;Textures/water_dudv.png
-
-#begin ../Working/Textures/items.png
-/importer:TextureImporter
-/processor:TextureProcessor
-/processorParam:ColorKeyColor=255,0,255,255
-/processorParam:ColorKeyEnabled=True
-/processorParam:GenerateMipmaps=False
-/processorParam:PremultiplyAlpha=True
-/processorParam:ResizeToPowerOfTwo=False
-/processorParam:MakeSquare=False
-/processorParam:TextureFormat=Color
-/build:../Working/Textures/items.png;Textures/items.png
-
-#begin ../Working/Shaders/particles.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/build:../Working/Shaders/particles.fx;Shaders/particles.fx
-
-#begin ../Working/Data/recipes.json
-/copy:../Working/Data/recipes.json;Data/recipes.json
-
-#begin ../Working/Data/items.json
-/copy:../Working/Data/items.json;Data/items.json

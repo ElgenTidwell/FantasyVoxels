@@ -152,13 +152,20 @@ namespace FantasyVoxels
             .DisallowPlacement(PlacementSettings.HORIZONTAL | PlacementSettings.TOP)
             .SetItem("stick"),
 
-            //Glow Leaves
-            new Voxel(shaderEffect: 2, lightPassthrough: 190, renderNeighbors: true, blocklight: 80)
+            //Purple Leaves
+            new Voxel(shaderEffect: 2, lightPassthrough: 190, renderNeighbors: true)
             .SetTextureData(TextureSetSettings.ALLSIDES, 16)
             .SetMaterialType(MaterialType.Wood)
             .SetBaseDigTime(LEAVESDIG)
-            .SetSurfaceType(SurfaceType.Grass)
-            .SetItem("glowleaf"),
+            .SetSurfaceType(SurfaceType.Grass),
+
+            //Iron-rich Soil
+            new Voxel()
+            .SetTextureData(TextureSetSettings.ALLSIDES, 17)
+            .SetSurfaceType(SurfaceType.Dirt)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(DIRTDIG)
+            .SetItem("lamp"),
         ];
 
         public Block myClass;
@@ -305,7 +312,7 @@ namespace FantasyVoxels
     [MessagePackObject]
     public class Chunk
     {
-        public const int Size = 24;
+        public const int Size = 32;
         [Key(0)]
         public (int x, int y, int z) chunkPos;
         [Key(1)]
@@ -471,6 +478,11 @@ namespace FantasyVoxels
         [IgnoreMember]
         private bool[,,] visibilityPropogation = new bool[Size, Size, Size];
 
+        [IgnoreMember]
+        public static FastNoiseLite domainWarp;
+        [IgnoreMember]
+        public static FastNoiseLite noise3d;
+
         public Chunk()
         {
             chunkVertexBuffers = new VertexBuffer[5];
@@ -505,7 +517,7 @@ namespace FantasyVoxels
             }
             return totalNoise / maxAmplitude;
         }
-        public void Generate()
+        public void Generate(bool noRemesh = false)
         {
             tRandom = new Random(MGame.Instance.seed + 4 + chunkPos.x * 2 + chunkPos.z / 2);
             CompletelyEmpty = true;
@@ -516,15 +528,15 @@ namespace FantasyVoxels
                 {
                     int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
 
-                    float continentalness = GetOctaveNoise2D(samplex, samplez, 0.004f, 10, 0.7f, 1.45f, 1);
-                    float erosion = GetOctaveNoise2D(samplex,samplez, 0.001f, 4,0.8f,1.4f,10);
-                    float PV = GetOctaveNoise2D(samplex,samplez,0.03f,3,0.4f,1.4f,25);
+                    float continentalness = GetOctaveNoise2D(samplex, samplez, 0.002f, 10, 0.7f, 1.45f, 1);
+                    float erosion = GetOctaveNoise2D(samplex,samplez, 0.001f, 6,0.8f,1.4f,10);
+                    float PV = GetOctaveNoise2D(samplex,samplez, 0.004f, 5,0.6f,1.7f,25);
 
-                    BiomeProvider biome = BiomeTracker.biomes[0];
+                    BiomeProvider biome = BiomeTracker.GetBiome(WorldBuilder.GetHumidity(samplex,samplez), WorldBuilder.GetTemperature(samplex, samplez));
 
-                    float density = (IcariaNoise.GradientNoise(samplex * 0.002f, samplez * 0.002f, 1 + MGame.Instance.seed) +1f);
+                    float density = float.Max(IcariaNoise.GradientNoise(samplex * 0.008f, samplez * 0.008f, 1 - MGame.Instance.seed),0)*2;
                     //int terrainHeight = (int)(float.Lerp(biome1.GetTerrainHeight(samplex,samplez),biome2.GetTerrainHeight(samplex,samplez),biomeSelector%1));
-                    int terrainHeight = (int)(biome.ContinentalnessCurve.Evaluate(continentalness) + biome.ErosionCurve.Evaluate(erosion) * biome.PVCurve.Evaluate(PV));
+                    int terrainHeight = (int)(WorldBuilder.ContinentalnessCurve.Evaluate(continentalness) + WorldBuilder.ErosionCurve.Evaluate(erosion) * WorldBuilder.PVCurve.Evaluate(PV));
                     tHeight[x, z] = terrainHeight;
 
                     bool grassed = false;
@@ -537,10 +549,26 @@ namespace FantasyVoxels
                         {
                             byte vox = biome.GetVoxel(sx,sy,sz,th,false);
 
-                            float perlin = IcariaNoise.GradientNoise3D(sx*0.006f,sy* 0.006f, sz* 0.006f, MGame.Instance.seed+504);
-                            float pY = biome.DensityCurve.Evaluate(sy-terrainHeight) * density;
+                            float pY = WorldBuilder.DensityCurve.Evaluate(sy-terrainHeight) * density;
 
-                            if (perlin * pY > 0.1f) vox = 2;
+                            if(pY>0.1f)
+                            {
+                                if (sy >= terrainHeight)
+                                {
+                                    float samx = sx * 0.005f;
+                                    float samy = sy * 0.005f;
+                                    float samz = sz * 0.005f;
+
+                                    domainWarp.DomainWarp(ref samx, ref samz);
+
+                                    float perlin = IcariaNoise.GradientNoise3D(samx,samy,samz, MGame.Instance.seed + 504);
+                                    if (perlin * pY > 0.1f) vox = biome.GetSurfaceVoxel(sx,sy,sz);
+                                }
+
+                                float perlincave = IcariaNoise.GradientNoise3D(sx * 0.06f, sy * 0.06f, sz * 0.06f, MGame.Instance.seed + 5204);
+
+                                if (perlincave * pY > 0.4f && perlincave * pY < 0.5f) vox = 0;
+                            }
 
                             return vox;
                         }
@@ -590,7 +618,14 @@ namespace FantasyVoxels
             }
 
             GenerateVisibility(true);
-            Remesh(false);
+            if (!noRemesh)
+            {
+                Remesh(false);
+            }
+            else
+            {
+                meshUpdated = [false, false, false, false];
+            }
 
             generated = true;
 
@@ -1121,6 +1156,7 @@ namespace FantasyVoxels
 
         public void Remesh(bool all = false,bool useOldLight = false, bool disableIteration = false)
         {
+            if (!generated) return;
             if(!useOldLight) ReLight(disableIteration);
             if (CompletelyEmpty) return;
             if (!all)
