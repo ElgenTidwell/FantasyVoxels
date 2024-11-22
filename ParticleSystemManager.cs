@@ -38,7 +38,6 @@ namespace FantasyVoxels
             {
                 this.particlePositions[i] = origin + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)*randomPosScalar;
                 this.particleVelocities[i] = velocity + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)* randomVelScalar;
-                this.particleRotations[i] = Random.Shared.NextSingle();
             }
             this.textureProvider = provider;
             this.textureIndex = texIndex;
@@ -88,8 +87,6 @@ namespace FantasyVoxels
                     system.particleVelocities[p].Z -= system.particleVelocities[p].Z * MGame.dt;
 
                     system.particleVelocities[p].Y -= system.gravity * MGame.dt;
-
-                    system.particleRotations[p] += system.particleVelocities[p].LengthSquared() * MGame.dt * ((p * 0.5f + 1)*(p%2==0?-1:1))*0.1f;
 
                     int x = (int)double.Floor(system.particlePositions[p].X) - cx * Chunk.Size;
                     int y = (int)double.Floor(system.particlePositions[p].Y) - cy * Chunk.Size;
@@ -147,7 +144,7 @@ namespace FantasyVoxels
 
                 for (int p = 0; p < system.particleCount; p++)
                 {
-                    Matrix m = Matrix.CreateScale(0.125f) * Matrix.CreateRotationX(system.particleRotations[p])*Matrix.CreateRotationY(MathHelper.ToRadians(90f))*Matrix.CreateWorld((Vector3)system.particlePositions[p],MGame.Instance.cameraForward,Vector3.Up);
+                    Matrix m = Matrix.CreateScale(0.1f) * Matrix.CreateRotationX(system.particleRotations[p])*Matrix.CreateRotationY(MathHelper.ToRadians(90f))*Matrix.CreateWorld((Vector3)system.particlePositions[p],MGame.Instance.cameraForward,Vector3.Up);
 
                     shader.Parameters["World"].SetValue(m*MGame.Instance.world);
                     shader.Parameters["uvOffset"].SetValue(new Vector2(p%4,p/4)/4f);

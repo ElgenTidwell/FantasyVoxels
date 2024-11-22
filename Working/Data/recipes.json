@@ -154,5 +154,18 @@
     "itemOutput": "stick",
     "outputStack": 4,
     "noOrder": true
+  },
+  {
+    "itemInput": [
+      "stick",
+      "",
+      "stick",
+      "stick",
+      "stick",
+      "stick"
+    ],
+    "itemOutput": "basket",
+    "outputStack": 1,
+    "noOrder": false
   }
 ]

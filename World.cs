@@ -159,13 +159,15 @@ namespace FantasyVoxels
             .SetBaseDigTime(LEAVESDIG)
             .SetSurfaceType(SurfaceType.Grass),
 
-            //Iron-rich Soil
+            //Basket
             new Voxel()
             .SetTextureData(TextureSetSettings.ALLSIDES, 17)
-            .SetSurfaceType(SurfaceType.Dirt)
-            .SetMaterialType(MaterialType.Soil)
+            .SetTextureData(TextureSetSettings.TOP, 18)
+            .SetTextureData(TextureSetSettings.BOTTOM, 19)
+            .SetMaterialType(MaterialType.Wood)
             .SetBaseDigTime(DIRTDIG)
-            .SetItem("lamp"),
+            .SetSurfaceType(SurfaceType.Wood)
+            .SetItem("basket"),
         ];
 
         public Block myClass;
@@ -179,6 +181,7 @@ namespace FantasyVoxels
         public SurfaceType surfaceType;
         public MaterialType materialType;
         public PlacementSettings allowedPlacements;
+        public PlacementMode placementMode;
         public int droppedItemID;
 
         public Voxel()
@@ -232,6 +235,11 @@ namespace FantasyVoxels
             VERTICAL = TOP|BOTTOM,
             ANY = 0
         }
+        public enum PlacementMode
+        {
+            BlockFace,
+            PlayerDirection
+        }
         public enum SurfaceType
         {
             None,
@@ -281,6 +289,12 @@ namespace FantasyVoxels
 
             return this;
         }
+        public Voxel SetPlacementMode(PlacementMode settings)
+        {
+            this.placementMode = settings;
+
+            return this;
+        }
         public Voxel SetClass(Block block)
         {
             myClass = block;
@@ -308,6 +322,8 @@ namespace FantasyVoxels
         public int shade;
         [Key(3)]
         public Voxel.PlacementSettings placement;
+        [Key(4)]
+        public object otherData;
     }
     [MessagePackObject]
     public class Chunk
@@ -521,23 +537,47 @@ namespace FantasyVoxels
         {
             tRandom = new Random(MGame.Instance.seed + 4 + chunkPos.x * 2 + chunkPos.z / 2);
             CompletelyEmpty = true;
+
+            bool noBelow = true;
+            if(MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos((chunkPos.x,chunkPos.y-1,chunkPos.z)), out var c0) && c0.generated)
+            {
+                tHeight = c0.tHeight;
+                noBelow = false;
+            }
+            else
+            if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos((chunkPos.x, chunkPos.y + 1, chunkPos.z)), out c0) && c0.generated)
+            {
+                tHeight = c0.tHeight;
+                noBelow = false;
+            }
+
             int elementsCount = 0;
             for (int x = 0; x < Size; x++)
             {
                 for (int z = 0; z < Size; z++)
                 {
                     int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
-
-                    float continentalness = GetOctaveNoise2D(samplex, samplez, 0.002f, 10, 0.7f, 1.45f, 1);
-                    float erosion = GetOctaveNoise2D(samplex,samplez, 0.001f, 6,0.8f,1.4f,10);
-                    float PV = GetOctaveNoise2D(samplex,samplez, 0.004f, 5,0.6f,1.7f,25);
+                    const float scalar = 0.6f;
 
                     BiomeProvider biome = BiomeTracker.GetBiome(WorldBuilder.GetHumidity(samplex,samplez), WorldBuilder.GetTemperature(samplex, samplez));
 
-                    float density = float.Max(IcariaNoise.GradientNoise(samplex * 0.008f, samplez * 0.008f, 1 - MGame.Instance.seed),0)*2;
+                    float density = IcariaNoise.GradientNoise(samplex * 0.008f, samplez * 0.008f, 1 - MGame.Instance.seed)+1;
                     //int terrainHeight = (int)(float.Lerp(biome1.GetTerrainHeight(samplex,samplez),biome2.GetTerrainHeight(samplex,samplez),biomeSelector%1));
-                    int terrainHeight = (int)(WorldBuilder.ContinentalnessCurve.Evaluate(continentalness) + WorldBuilder.ErosionCurve.Evaluate(erosion) * WorldBuilder.PVCurve.Evaluate(PV));
-                    tHeight[x, z] = terrainHeight;
+
+                    int terrainHeight = 0;
+                    if(noBelow)
+                    {
+                        float continentalness = GetOctaveNoise2D(samplex, samplez, 0.002f * scalar, 10, 0.7f, 1.45f, 1);
+                        float erosion = GetOctaveNoise2D(samplex, samplez, 0.001f * scalar, 6, 0.8f, 1.4f, 10);
+                        float PV = GetOctaveNoise2D(samplex, samplez, 0.004f * scalar, 5, 0.6f, 1.7f, 25);
+
+                        terrainHeight = (int)(WorldBuilder.ContinentalnessCurve.Evaluate(continentalness) + WorldBuilder.ErosionCurve.Evaluate(erosion) * WorldBuilder.PVCurve.Evaluate(PV));
+                        tHeight[x, z] = terrainHeight;
+                    }
+                    else
+                    {
+                        terrainHeight = tHeight[x, z];
+                    }
 
                     bool grassed = false;
 
@@ -559,15 +599,16 @@ namespace FantasyVoxels
                                     float samy = sy * 0.005f;
                                     float samz = sz * 0.005f;
 
-                                    domainWarp.DomainWarp(ref samx, ref samz);
+                                    domainWarp.DomainWarp(ref samx,ref samy, ref samz);
 
-                                    float perlin = IcariaNoise.GradientNoise3D(samx,samy,samz, MGame.Instance.seed + 504);
+                                    float perlin = GetOctaveNoise3D(samx,samy,samz, 1f, 6, 0.7f, 1.6f, MGame.Instance.seed + 504);
                                     if (perlin * pY > 0.1f) vox = biome.GetSurfaceVoxel(sx,sy,sz);
                                 }
 
-                                float perlincave = IcariaNoise.GradientNoise3D(sx * 0.06f, sy * 0.06f, sz * 0.06f, MGame.Instance.seed + 5204);
+                                //float perlincave = noise3d.GetNoise(sx * 0.01f, sy * 0.01f, sz * 0.01f);
+                                //float perlincaveB = IcariaNoise.BrokenGradientNoise3D(sx * 0.1f, sy * 0.1f, sz * 0.1f, MGame.Instance.seed + 604);
 
-                                if (perlincave * pY > 0.4f && perlincave * pY < 0.5f) vox = 0;
+                                //if (float.Abs(perlincave) > 0.85f+(perlincaveB*0.1f)) vox = 0;
                             }
 
                             return vox;

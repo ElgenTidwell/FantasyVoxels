@@ -224,7 +224,13 @@ namespace FantasyVoxels
         public static List<Bank> soundBanks = new List<Bank>();
         public static EventDescription[] placeBlockEvents = new EventDescription[(int)Enum.GetValues(typeof(Voxel.SurfaceType)).Length-1];
         public static EventDescription[] walkBlockEvents = new EventDescription[(int)Enum.GetValues(typeof(Voxel.SurfaceType)).Length-1];
+        public static EventDescription robotMoveEvent;
+        public static EventDescription robotServoEvent;
+        public static EventDescription robotPainEvent;
         public static Listener3D listener;
+        const int randSoundPoolSize = 10;
+        static EventInstance[] miscSoundPool = new EventInstance[randSoundPoolSize];
+        static int curPoolIndex = 0;
 
         #endregion
         public enum PlayState
@@ -346,6 +352,9 @@ namespace FantasyVoxels
                 placeBlockEvents[i] = StudioSystem.GetEvent($"event:/Blocks/{((Voxel.SurfaceType)(i+1))}_place");
                 walkBlockEvents[i] = StudioSystem.GetEvent($"event:/Blocks/{((Voxel.SurfaceType)(i+1))}_walk");
             }
+            robotMoveEvent = StudioSystem.GetEvent("event:/RobotMove");
+            robotPainEvent = StudioSystem.GetEvent("event:/RobotPain");
+            robotServoEvent = StudioSystem.GetEvent("event:/RobotServo");
 
             listener = new Listener3D();
 
@@ -492,7 +501,9 @@ namespace FantasyVoxels
             player.Start();
 
             Chunk.noise3d = new FastNoiseLite(seed + 10);
-            Chunk.noise3d.SetNoiseType(FastNoiseLite.NoiseType.Value);
+            Chunk.noise3d.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2S);
+            Chunk.noise3d.SetFractalType(FastNoiseLite.FractalType.Ridged);
+            Chunk.noise3d.SetFrequency(.5f);
 
             Chunk.domainWarp = new FastNoiseLite(seed + 10);
             Chunk.domainWarp.SetDomainWarpType(FastNoiseLite.DomainWarpType.BasicGrid);
@@ -813,6 +824,8 @@ namespace FantasyVoxels
 
                     neighbors.Add((cPos.x - 1, cPos.y, cPos.z, RIGHT_FACE));
                     neighbors.Add((cPos.x + 1, cPos.y, cPos.z, LEFT_FACE));
+                    neighbors.Add((cPos.x + 1, cPos.y, cPos.z, TOP_FACE));
+                    neighbors.Add((cPos.x + 1, cPos.y, cPos.z, BOTTOM_FACE));
                     neighbors.Add((cPos.x, cPos.y, cPos.z - 1, BACK_FACE));
                     neighbors.Add((cPos.x, cPos.y, cPos.z + 1, FRONT_FACE));
 
@@ -1331,15 +1344,25 @@ namespace FantasyVoxels
 
         public static void PlayDigSound(Voxel t, Vector3 p)
         {
-            var instance = placeBlockEvents[(int)t.surfaceType - 1].CreateInstance();
-            instance.Position3D = p;
-            instance.Start();
+            curPoolIndex++;
+            curPoolIndex %= (randSoundPoolSize - 1);
+
+            if (miscSoundPool[curPoolIndex] != null && miscSoundPool[curPoolIndex].PlaybackState != FMOD.Studio.PLAYBACK_STATE.STOPPED) miscSoundPool[curPoolIndex].Stop(true);
+
+            miscSoundPool[curPoolIndex] = placeBlockEvents[(int)t.surfaceType - 1].CreateInstance();
+            miscSoundPool[curPoolIndex].Position3D = p;
+            miscSoundPool[curPoolIndex].Start();
         }
         public static void PlayWalkSound(Voxel t, Vector3 p)
         {
-            var instance = walkBlockEvents[(int)t.surfaceType - 1].CreateInstance();
-            instance.Position3D = p;
-            instance.Start();
+            curPoolIndex++;
+            curPoolIndex %= (randSoundPoolSize - 1);
+
+            if (miscSoundPool[curPoolIndex] != null && miscSoundPool[curPoolIndex].PlaybackState != FMOD.Studio.PLAYBACK_STATE.STOPPED) miscSoundPool[curPoolIndex].Stop(true);
+
+            miscSoundPool[curPoolIndex] = walkBlockEvents[(int)t.surfaceType - 1].CreateInstance();
+            miscSoundPool[curPoolIndex].Position3D = p;
+            miscSoundPool[curPoolIndex].Start();
         }
 
         public void SetVoxel(Vector3 p, int newVoxel, bool disableDrops = false, Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY)

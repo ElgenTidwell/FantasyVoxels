@@ -20,20 +20,20 @@ namespace FantasyVoxels
         static WorldBuilder()
         {
             ContinentalnessCurve.Keys.Add(new CurveKey(1, 350));
-            ContinentalnessCurve.Keys.Add(new CurveKey(0.3f, 178));
-            ContinentalnessCurve.Keys.Add(new CurveKey(0.28f, 90));
+            ContinentalnessCurve.Keys.Add(new CurveKey(0.2f, 178));
+            ContinentalnessCurve.Keys.Add(new CurveKey(0.1f, 90));
             ContinentalnessCurve.Keys.Add(new CurveKey(0.04f, 80));
-            ContinentalnessCurve.Keys.Add(new CurveKey(0.0f, 25));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.1f, 15));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.2f, 0));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.8f, -25));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.1f, 25));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.3f, 18));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.5f, -25));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.8f, -12));
             ContinentalnessCurve.Keys.Add(new CurveKey(-1.0f, 60));
 
             ErosionCurve.Keys.Add(new CurveKey(-1, 3));
             ErosionCurve.Keys.Add(new CurveKey(-0.3f, 2));
             ErosionCurve.Keys.Add(new CurveKey(-0.1f, -1));
-            ErosionCurve.Keys.Add(new CurveKey(0.85f, 0.02f));
-            ErosionCurve.Keys.Add(new CurveKey(1, 0.4f));
+            ErosionCurve.Keys.Add(new CurveKey(0.85f, 0.2f));
+            ErosionCurve.Keys.Add(new CurveKey(1, 2f));
 
             PVCurve.Keys.Add(new CurveKey(-1, -400));
             PVCurve.Keys.Add(new CurveKey(-0.5f, -70));
@@ -42,7 +42,7 @@ namespace FantasyVoxels
 
             DensityCurve.Keys.Add(new CurveKey(-30, 0.8f));
             DensityCurve.Keys.Add(new CurveKey(0, 0.7f));
-            DensityCurve.Keys.Add(new CurveKey(30, 0.4f));
+            DensityCurve.Keys.Add(new CurveKey(30, 0.5f));
             DensityCurve.Keys.Add(new CurveKey(100, 0.2f));
             DensityCurve.Keys.Add(new CurveKey(140, 0.0f));
 

@@ -17,6 +17,7 @@ using System.Collections;
 using FantasyVoxels.UI;
 using FmodForFoxes;
 using FmodForFoxes.Studio;
+using static FantasyVoxels.Voxel;
 
 namespace FantasyVoxels.Entities
 {
@@ -37,6 +38,8 @@ namespace FantasyVoxels.Entities
         bool running,crouched;
         bool deathUIshown = false;
         bool accessingInventory;
+
+        bool wasGrounded = false;
 
         public static VertexPosition[] voxelBoxVert =
         [
@@ -133,10 +136,16 @@ namespace FantasyVoxels.Entities
             5f,
         ];
         bool step = false;
+
+        EventInstance robotMoveNoise;
+        EventInstance robotServoNoise;
+        EventInstance robotPainNoise;
+
         public Player()
         {
             maxHealth = 16;
             health = maxHealth;
+            fly = true;
         }
 
         public override void Start()
@@ -174,10 +183,17 @@ namespace FantasyVoxels.Entities
             //hotbar.SetItem(new Item("stone",255),6);
             //hotbar.SetItem(new Item("grass",255),7);
             //hotbar.SetItem(new Item("lamp",255),8);
+
+            robotMoveNoise = MGame.robotMoveEvent.CreateInstance();
+            robotPainNoise = MGame.robotPainEvent.CreateInstance();
+            robotServoNoise = MGame.robotServoEvent.CreateInstance();
+            robotServoNoise.Start();
         }
         public override void OnTakeDamage(DamageInfo info)
         {
             painResponse = (info.damage-1)*0.5f+1;
+            robotPainNoise.Stop();
+            robotPainNoise.Start();
 
             base.OnTakeDamage(info);
         }
@@ -334,15 +350,49 @@ namespace FantasyVoxels.Entities
                                 {
                                     MGame.Instance.SetVoxel(prevHitTile, 0);
                                 }
+                                PlacementMode mode = Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].placementMode;
 
-                                Vector3 place = hitTile - prevHitTile;
-                                Voxel.PlacementSettings placement = Voxel.PlacementSettings.ANY;
-                                if (place.X > 0) placement = Voxel.PlacementSettings.RIGHT;
-                                if (place.X < 0) placement = Voxel.PlacementSettings.LEFT;
-                                if (place.Y > 0) placement = Voxel.PlacementSettings.TOP;
-                                if (place.Y < 0) placement = Voxel.PlacementSettings.BOTTOM;
-                                if (place.Z > 0) placement = Voxel.PlacementSettings.FRONT;
-                                if (place.Z < 0) placement = Voxel.PlacementSettings.BACK;
+                                Vector3 place = Vector3.Zero;
+
+                                if(mode == PlacementMode.BlockFace)
+                                {
+                                    place = hitTile - prevHitTile;
+                                }
+                                else
+                                {
+                                    Vector3 dir = hitTile - Vector3.Floor((Vector3)position);
+
+                                    if(dir.X > dir.Z)
+                                    {
+                                        if (dir.X > dir.Y)
+                                        {
+                                            place.X = dir.X;
+                                        }
+                                        else
+                                        {
+                                            place.Y = dir.Y;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (dir.Z > dir.Y)
+                                        {
+                                            place.Z = dir.Z;
+                                        }
+                                        else
+                                        {
+                                            place.Y = dir.Y;
+                                        }
+                                    }
+                                }
+
+                                PlacementSettings placement= PlacementSettings.ANY;
+                                if (place.X > 0) placement = PlacementSettings.RIGHT;
+                                if (place.X < 0) placement = PlacementSettings.LEFT;
+                                if (place.Y > 0) placement = PlacementSettings.TOP;
+                                if (place.Y < 0) placement = PlacementSettings.BOTTOM;
+                                if (place.Z > 0) placement = PlacementSettings.FRONT;
+                                if (place.Z < 0) placement = PlacementSettings.BACK;
 
                                 if ((placeBox.Contains(bounds) == ContainmentType.Disjoint || Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].ignoreCollision)
                                      && Voxel.voxelTypes[ItemManager.GetItemFromID(id).placement].AllowsPlacement(placement)
@@ -442,12 +492,14 @@ namespace FantasyVoxels.Entities
                 xsin = MathF.Sin(bobTime * 7.5f) * bob;
                 ysin = MathF.Cos(bobTime * 7.5f) * bob;
 
-                if(float.Abs(ysin) >0.9f*bob && !step && bob >= 0.1f)
+                if((float.Abs(ysin) > 0.9f * bob && !step && bob >= 0.1f)||(!wasGrounded && grounded))
                 {
                     step = true;
                     int v = MGame.Instance.GrabVoxel(new Vector3((float)position.X, (float)(bounds.Min.Y+position.Y-0.5f), (float)position.Z));
                     if(v>=0 && Voxel.voxelTypes[v].surfaceType != Voxel.SurfaceType.None)
                         MGame.PlayWalkSound(Voxel.voxelTypes[v], (Vector3)position+Vector3.Up*bounds.Min.Y);
+                    robotMoveNoise.Stop(true);
+                    robotMoveNoise.Start();
                 }
                 if(step && float.Abs(ysin) < 0.9f * bob)
                 {
@@ -480,6 +532,8 @@ namespace FantasyVoxels.Entities
             {
                 painResponse = Maths.MoveTowards(painResponse, 4, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
             }
+
+            robotServoNoise.SetParameterValue("PlayerVelocityXZ",new Vector2(velocity.X,velocity.Z).Length()/run);
 
             vmswayX = Maths.MoveTowards(vmswayX, 0, MGame.dt * 15 * float.Abs(vmswayX));
             vmswayY = Maths.MoveTowards(vmswayY, 0, MGame.dt * 15 * float.Abs(vmswayY));
@@ -605,6 +659,8 @@ namespace FantasyVoxels.Entities
             prevHeldItem = hotbar.PeekItem(activeHotbarSlot);
             oldHotbarSlot = activeHotbarSlot;
             oldRotation = rotation;
+
+            wasGrounded = grounded;
 
             applyVelocity(wishDir);
             base.Update();
@@ -1207,6 +1263,7 @@ namespace FantasyVoxels.Entities
 
         public override void Destroyed()
         {
+            robotServoNoise.Stop();
         }
 
         public override object CaptureCustomSaveData()

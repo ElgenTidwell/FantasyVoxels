@@ -200,7 +200,7 @@ namespace FantasyVoxels.UI
             if (string.IsNullOrEmpty(worldName.TextParagraph.Text)) return;
             WorldTimeManager.SetWorldTime(0f);
             Save.WorldName = worldName.TextParagraph.Text;
-            Instance.seed = string.IsNullOrEmpty(worldSeed.TextParagraph.Text) ? Random.Shared.Next() : (!int.TryParse(worldSeed.TextParagraph.Text, out int seed) ? seed : worldSeed.TextParagraph.Text.GetHashCode());
+            Instance.seed = string.IsNullOrEmpty(worldSeed.TextParagraph.Text) ? Random.Shared.Next() : (int.TryParse(worldSeed.TextParagraph.Text, out int seed) ? seed : worldSeed.TextParagraph.Text.GetHashCode());
 
             Mouse.SetPosition(200, 200);
 

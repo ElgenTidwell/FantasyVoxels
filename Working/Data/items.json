@@ -278,5 +278,17 @@
       "toolPieceLevel": 2,
       "durability": 200
     }
+  },
+  {
+    "type": 0,
+    "placement": 17,
+    "maxStackSize": 32,
+    "name": "basket",
+    "displayName": "Basket",
+    "description": "Basic container for items.",
+    "texture": 0,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
   }
 ]
