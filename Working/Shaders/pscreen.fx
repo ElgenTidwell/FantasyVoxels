@@ -124,9 +124,20 @@ float CalcAO(float2 tex,float4 reference)
     }
     AO /= 16;
     Highlight /= 16;
-    return 1 - (AO * 0.6) + Highlight * 0.6;
+    return 1 - (AO * 0.6) + Highlight * 0.8;
 }
 
+float4 applyVignette(float4 color, float2 pos)
+{
+    float2 position = pos - 0.5;
+    float dist = length(position);
+    
+    float vignette = smoothstep(1, 1 - 0.6, dist);
+
+    color.rgb = color.rgb * (vignette * 0.6 + 0.4);
+
+    return color;
+}
 float4 PShader(PixelInput p) : COLOR0
 {
     float2 watertexcoords = (p.TexCoord.xy - float2(cameraRotation.y, cameraRotation.x)) * (screenSize / 1024);
@@ -145,6 +156,8 @@ float4 PShader(PixelInput p) : COLOR0
     {
         diffuse.xyz *= (overlay.xyz * 0.8f + 0.2f);
     }
+    
+    diffuse = applyVignette(diffuse, p.TexCoord);
     
     float4 AO = tex2D(AOSampler,p.TexCoord.xy);
     

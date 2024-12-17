@@ -25,6 +25,11 @@
 #begin ../Working/FMODStudio/fvoxel/Build/Desktop/Master.strings.bank
 /copy:../Working/FMODStudio/fvoxel/Build/Desktop/Master.strings.bank;Master.strings.bank
 
+#begin ../Working/Models/roboPlayer.glb
+/importer:OpenAssetImporter
+/processor:ModelProcessor
+/build:../Working/Models/roboPlayer.glb;Models/roboPlayer.glb
+
 #begin ../Working/Shaders/breakingVoxel.fx
 /importer:EffectImporter
 /processor:EffectProcessor
@@ -39,6 +44,11 @@
 /importer:EffectImporter
 /processor:EffectProcessor
 /build:../Working/Shaders/chunkbuilder.fx;Shaders/chunkbuilder.fx
+
+#begin ../Working/Shaders/cloud.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/build:../Working/Shaders/cloud.fx;Shaders/cloud.fx
 
 #begin ../Working/Shaders/entity.fx
 /importer:EffectImporter
@@ -120,6 +130,30 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/breaking.png;Textures/breaking.png
+
+#begin ../Working/Textures/clouds_2.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/clouds_2.png;Textures/clouds_2.png
+
+#begin ../Working/Textures/clouds.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/clouds.png;Textures/clouds.png
 
 #begin ../Working/Textures/colors_backupspring.png
 /importer:TextureImporter
@@ -216,6 +250,18 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/normals.png;Textures/normals.png
+
+#begin ../Working/Textures/rbhand.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/rbhand.png;Textures/rbhand.png
 
 #begin ../Working/Textures/sun.png
 /importer:TextureImporter
@@ -4758,3 +4804,23 @@
 
 #begin GeonBit.UI/Themes/lowres/ThemeData.xml
 /copy:GeonBit.UI/Themes/lowres/ThemeData.xml
+#begin ../Working/Textures/RBBody.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/RBBody.png;Textures/RBBody.png
+
+#begin ../Working/Models/roboPlayer.obj
+/importer:OpenAssetImporter
+/processor:ModelProcessor
+/build:../Working/Models/roboPlayer.obj;Models/roboPlayer.obj
+#begin ../Working/Models/roboPlayer.fbx
+/importer:FbxImporter
+/processor:ModelProcessor
+/build:../Working/Models/roboPlayer.fbx;Models/roboPlayer.fbx

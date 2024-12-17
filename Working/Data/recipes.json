@@ -6,7 +6,10 @@
       "glowleaf",
       "",
       "",
-      "stick"
+      "stick",
+      "",
+      "",
+      ""
     ],
     "itemOutput": "torch",
     "outputStack": 1,
@@ -18,6 +21,9 @@
       "stick",
       "",
       "stick",
+      "",
+      "",
+      "",
       "",
       ""
     ],
@@ -32,6 +38,9 @@
       "",
       "stick",
       "clay",
+      "",
+      "",
+      "",
       ""
     ],
     "itemOutput": "woodaxetoolhead",
@@ -42,6 +51,9 @@
     "itemInput": [
       "woodaxehead",
       "clay",
+      "",
+      "",
+      "",
       "",
       "",
       "",
@@ -58,6 +70,9 @@
       "",
       "",
       "",
+      "",
+      "",
+      "",
       ""
     ],
     "itemOutput": "plank",
@@ -68,10 +83,13 @@
     "itemInput": [
       "plank",
       "plank",
+      "",
       "plank",
       "plank",
-      "plank",
-      "plank"
+      "",
+      "",
+      "",
+      ""
     ],
     "itemOutput": "planks",
     "outputStack": 1,
@@ -82,6 +100,9 @@
       "stick",
       "stick",
       "stick",
+      "",
+      "",
+      "",
       "",
       "",
       ""
@@ -97,6 +118,9 @@
       "stick",
       "",
       "clay",
+      "",
+      "",
+      "",
       ""
     ],
     "itemOutput": "woodpicktoolhead",
@@ -110,6 +134,9 @@
       "",
       "",
       "",
+      "",
+      "",
+      "",
       ""
     ],
     "itemOutput": "woodpicktoolhead",
@@ -123,7 +150,10 @@
       "stonechunk",
       "clay",
       "stonechunk",
-      "clay"
+      "clay",
+      "",
+      "",
+      ""
     ],
     "itemOutput": "cobblestone",
     "outputStack": 4,
@@ -136,6 +166,9 @@
       "",
       "clay",
       "stonechunk",
+      "",
+      "",
+      "",
       ""
     ],
     "itemOutput": "stonestick",
@@ -145,6 +178,9 @@
   {
     "itemInput": [
       "plank",
+      "",
+      "",
+      "",
       "",
       "",
       "",
@@ -162,7 +198,10 @@
       "stick",
       "stick",
       "stick",
-      "stick"
+      "stick",
+      "",
+      "",
+      ""
     ],
     "itemOutput": "basket",
     "outputStack": 1,

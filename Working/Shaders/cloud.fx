@@ -9,23 +9,13 @@ sampler mainSampler : register(s0) = sampler_state
 {
     Texture = <mainTexture>;
 };
-texture lightmap;
-sampler lightmapSampler : register(s1) = sampler_state
-{
-    Texture = <lightmap>;
-};
+
+float2 texOffset;
+float2 uvScale;
 
 float4x4 World;
-float4x4 RotWorld;
 float4x4 View;
 float4x4 Projection;
-
-float tint;
-float blocklightTint;
-
-float3 sunDirection;
-float3 skyColor;
-float3 skyBandColor;
 
 struct VSOutput
 {
@@ -33,17 +23,17 @@ struct VSOutput
     float4 Normal : NORMAL0;
     float4 Color : COLOR0;
     float3 Coord : TEXCOORD0;
+    float3 WorldPos : TEXCOORD1;
 };
 
 VSOutput MainVS(float4 position : POSITION, float4 normal : NORMAL0, float2 texcoord : TEXCOORD0)
 {
     VSOutput output = (VSOutput) 0;
     
-    output.Normal = normalize(mul(normal,RotWorld));
+    output.Normal = normalize(normal);
     output.Position = mul(mul(mul(position, World), View), Projection); // Apply standard transformations
-    output.Coord = float3(texcoord, 0);
-    float d = (dot(output.Normal.xyz, float3(0.2, 0.8, 0))+1)/2;
-    output.Color = float4(d,0,0,1);
+    output.Coord = float3(texcoord * uvScale + texOffset, 0);
+    output.WorldPos = position;
     
     return output;
 }
@@ -58,13 +48,9 @@ PSOut MainPS(VSOutput input)
 {
     PSOut output = (PSOut) 0;
     
-    output.Color0 = tex2D(mainSampler,input.Coord.xy);
+    output.Color0 = tex2D(mainSampler, input.Coord.xy);
     
-    clip(output.Color0.a - 0.1f);
-    
-    output.Color0.a = 1;
-    output.Color0.xyz *= float3(tint, tint, tint) + tex2D(lightmapSampler, float2(pow(blocklightTint, 0.8f), 0)).xyz;
-    output.Color0.xyz *= input.Color.x;
+    output.Color0 *= 1-(distance(input.WorldPos, float3(0.5, 0.5, 0))*2);
     
     return output;
 }

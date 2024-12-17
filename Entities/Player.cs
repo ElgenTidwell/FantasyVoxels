@@ -88,6 +88,7 @@ namespace FantasyVoxels.Entities
 
         Vector3 hitTile,prevHitTile;
         (int vox, int x, int y, int z, Voxel.PlacementSettings p) hitVoxel, oldHitVoxel;
+        Entity hitEntity;
         bool voxelHit;
         float xsin, ysin;
         float bobTime;
@@ -100,7 +101,7 @@ namespace FantasyVoxels.Entities
         ItemContainer cursor = new ItemContainer(1);
         ItemContainer hotbar = new ItemContainer(9);
         ItemContainer inventory = new ItemContainer(20);
-        ItemContainer crafting = new ItemContainer(7);
+        ItemContainer crafting = new ItemContainer(10);
         Item heldItem => hotbar.PeekItem(activeHotbarSlot);
         Item prevHeldItem;
 
@@ -110,6 +111,7 @@ namespace FantasyVoxels.Entities
         VertexPositionNormalTexture[] heldBlockModel;
         bool handFromBlockColors;
         bool handIsSprite;
+        bool handIsEmpty;
         bool drawHand;
         bool regenerateHand;
 
@@ -145,7 +147,6 @@ namespace FantasyVoxels.Entities
         {
             maxHealth = 16;
             health = maxHealth;
-            fly = true;
         }
 
         public override void Start()
@@ -271,10 +272,12 @@ namespace FantasyVoxels.Entities
             oldHitVoxel = hitVoxel;
             voxelHit = Maths.Raycast((Vector3)position, forward, 5, out prevHitTile, out hitTile, out int hitVoxelType, out var voxelData);
             hitVoxel = (hitVoxelType, (int)hitTile.X, (int)hitTile.Y, (int)hitTile.Z, voxelData.placement);
+            hitEntity = Maths.RaycastEntities((Vector3)position, forward, 5, this);
+            if (hitEntity is not null) voxelHit = false;
 
             autoDigTime -= MGame.dt;
             if (Mouse.GetState().LeftButton == ButtonState.Released) diggingTimer = 0;
-            if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit)
+            if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit && hitEntity is null)
             {
                 if (autoDigTime <= 0)
                 {
@@ -330,6 +333,10 @@ namespace FantasyVoxels.Entities
             else if(BetterMouse.WasLeftPressed())
             {
                 SetAnimation(HandAnimation.Swing);
+                if (hitEntity is not null)
+                {
+                    hitEntity.OnTakeDamage(new DamageInfo { from = position, damage = 1 });
+                }
             }
             if (Mouse.GetState().RightButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
             {
@@ -475,6 +482,12 @@ namespace FantasyVoxels.Entities
                 PauseMenu.QuitWorld();
             };
         }
+        void playstepsound()
+        {
+            int v = MGame.Instance.GrabVoxel(new Vector3((float)position.X, (float)(bounds.Min.Y + position.Y - 0.8f), (float)position.Z));
+            if (v >= 0 && Voxel.voxelTypes[v].surfaceType != Voxel.SurfaceType.None)
+                MGame.PlayWalkSound(Voxel.voxelTypes[v], (Vector3)position + Vector3.Up * bounds.Min.Y);
+        }
         public override void Update()
         {
             if (health <= 0 && !deathUIshown) Die();
@@ -487,17 +500,17 @@ namespace FantasyVoxels.Entities
                 float speed = new Vector2(velocity.X, velocity.Z).Length();
                 float bobMulti = grounded ? speed / run : 0;
 
-                bobTime += MGame.dt * ((speed / walk - 1) * 0.3f + 1);
+                bobTime += MGame.dt * ((speed / walk - 1) * 0.8f + 1);
 
                 xsin = MathF.Sin(bobTime * 7.5f) * bob;
                 ysin = MathF.Cos(bobTime * 7.5f) * bob;
 
-                if((float.Abs(ysin) > 0.9f * bob && !step && bob >= 0.1f)||(!wasGrounded && grounded))
+                if (wasGrounded != grounded) playstepsound();
+
+                if((float.Abs(ysin) > 0.9f * bob && !step && bob >= 0.1f))
                 {
                     step = true;
-                    int v = MGame.Instance.GrabVoxel(new Vector3((float)position.X, (float)(bounds.Min.Y+position.Y-0.5f), (float)position.Z));
-                    if(v>=0 && Voxel.voxelTypes[v].surfaceType != Voxel.SurfaceType.None)
-                        MGame.PlayWalkSound(Voxel.voxelTypes[v], (Vector3)position+Vector3.Up*bounds.Min.Y);
+                    playstepsound();
                     robotMoveNoise.Stop(true);
                     robotMoveNoise.Start();
                 }
@@ -531,6 +544,14 @@ namespace FantasyVoxels.Entities
             else
             {
                 painResponse = Maths.MoveTowards(painResponse, 4, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
+            }
+
+            if(BetterKeyboard.HasBeenPressed(Keys.R))
+            {
+                WanderAITest test = new WanderAITest();
+                test.position = position + forward;
+
+                EntityManager.SpawnEntity(test);
             }
 
             robotServoNoise.SetParameterValue("PlayerVelocityXZ",new Vector2(velocity.X,velocity.Z).Length()/run);
@@ -578,6 +599,7 @@ namespace FantasyVoxels.Entities
                 vmoffsetY = -0.5f;
 
                 drawHand = false;
+                handIsEmpty = false;
 
                 if (id != -1)
                 {
@@ -655,6 +677,48 @@ namespace FantasyVoxels.Entities
                         }
                     }
                 }
+                //else
+                //{
+                //    handIsEmpty = true;
+                //    drawHand = true;
+
+                //    List<VertexPositionNormalTexture> verts = new List<VertexPositionNormalTexture>();
+
+                //    int i = 4;
+                //    const float pix = 1 / 16f;
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0]/(pix*16))* new Vector3(pix * 6,pix*10,pix*10)+ new Vector3(0.2f,-0.1f,0), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(6,10) + new Vector2(3,3))*pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 1]/(pix*16))* new Vector3(pix * 6,pix*10,pix*10)+ new Vector3(0.2f,-0.1f,0), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * new Vector2(6,10)  + new Vector2(3,3))*pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2]/(pix*16))* new Vector3(pix * 6,pix*10,pix*10)+ new Vector3(0.2f,-0.1f,0), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(6,10)  + new Vector2(3,3))*pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0]/(pix*16))* new Vector3(pix * 6,pix*10,pix*10)+ new Vector3(0.2f,-0.1f,0), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(6,10)  + new Vector2(3,3))*pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2]/(pix*16))* new Vector3(pix * 6,pix*10,pix*10)+ new Vector3(0.2f,-0.1f,0), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(6,10)  + new Vector2(3,3))*pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 3]/(pix*16))* new Vector3(pix * 6,pix*10,pix*10)+ new Vector3(0.2f,-0.1f,0), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * new Vector2(6,10)  + new Vector2(3,3))*pix));
+
+                //    i = 1;
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0] / (pix * 16)) * new Vector3(pix * 6,pix*10,pix*3)+ new Vector3(0.2f,-0.1f,pix*7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(3,10) + new Vector2(0, 3)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 1] / (pix * 16)) * new Vector3(pix * 6,pix*10,pix*3)+ new Vector3(0.2f,-0.1f,pix*7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * new Vector2(3,10) + new Vector2(0, 3)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2] / (pix * 16)) * new Vector3(pix * 6,pix*10,pix*3)+ new Vector3(0.2f,-0.1f,pix*7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(3,10) + new Vector2(0, 3)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0] / (pix * 16)) * new Vector3(pix * 6,pix*10,pix*3)+ new Vector3(0.2f,-0.1f,pix*7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(3,10) + new Vector2(0, 3)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2] / (pix * 16)) * new Vector3(pix * 6,pix*10,pix*3)+ new Vector3(0.2f,-0.1f,pix*7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(3,10) + new Vector2(0, 3)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 3] / (pix * 16)) * new Vector3(pix * 6,pix*10,pix*3)+ new Vector3(0.2f,-0.1f,pix*7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * new Vector2(3,10) + new Vector2(0, 3)) * pix));
+
+                //    i = 3;
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(3, 3) + new Vector2(3, 9)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 1] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * new Vector2(3, 3) + new Vector2(3, 9)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(3, 3) + new Vector2(3, 9)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(3, 3) + new Vector2(3, 9)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(3, 3) + new Vector2(3, 9)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 3] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * new Vector2(3, 3) + new Vector2(3, 9)) * pix));
+
+                //    i = 2;
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(3, 3) + new Vector2(3, 0)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 1] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * new Vector2(3, 3) + new Vector2(3, 0)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(3, 3) + new Vector2(3, 0)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 0] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * new Vector2(3, 3) + new Vector2(3, 0)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 2] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * new Vector2(3, 3) + new Vector2(3, 0)) * pix));
+                //    verts.Add(new VertexPositionNormalTexture((Chunk.vertsPerCheck[i * 4 + 3] / (pix * 16)) * new Vector3(pix * 6, pix * 10, pix * 3) + new Vector3(0.2f, -0.1f, pix * 7), new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * new Vector2(3, 3) + new Vector2(3, 0)) * pix));
+
+                //    heldBlockModel = verts.ToArray();
+                //}
             }
             prevHeldItem = hotbar.PeekItem(activeHotbarSlot);
             oldHotbarSlot = activeHotbarSlot;
@@ -821,7 +885,7 @@ namespace FantasyVoxels.Entities
             MGame.Instance.GetEntityShader().Parameters["tint"].SetValue(ourLight);
             MGame.Instance.GetEntityShader().Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
 
-            MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(handFromBlockColors? MGame.Instance.colors : MGame.Instance.items);
+            MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(handIsEmpty?MGame.Instance.handSpr: handFromBlockColors ? MGame.Instance.colors : MGame.Instance.items);
 
             Matrix animMatrix = Matrix.Identity;
 
@@ -923,8 +987,8 @@ namespace FantasyVoxels.Entities
 
                 int scale = (int)(uiScale * 1);
                 int backpackX = (int)(-103 * scale + UserInterface.Active.ScreenWidth / 2f);
-                int backpackY = (int)(60 * scale + UserInterface.Active.ScreenHeight / 2f);
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiBackback, new Vector2(backpackX, backpackY - 142*scale), new Rectangle(0, 0, 206, 142), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
+                int backpackY = (int)(50 * scale + UserInterface.Active.ScreenHeight / 2f);
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiBackback, new Vector2(backpackX, backpackY - 142*scale), new Rectangle(0, 0, 206, 164), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
 
                 void RenderTooltip(Item item)
                 {
@@ -978,13 +1042,13 @@ namespace FantasyVoxels.Entities
                 //hotbar
                 for (int i = 0; i < 9; i++)
                 {
-                    var slotbounds = new Rectangle(backpackX + 10 * scale + i * scale * 21, backpackY - 6 * scale - scale * 21, scale * 18, scale * 18);
+                    var slotbounds = new Rectangle(backpackX + 10 * scale + i * scale * 21, backpackY - 6 * scale, scale * 18, scale * 18);
                     bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
 
                     int id = hotbar.PeekItem(i).itemID;
                     if (id != -1)
                     {
-                        DrawItem(new Vector2(backpackX+8 * scale + i * scale * 21, backpackY-6 * scale), scale, id, hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
+                        DrawItem(new Vector2(backpackX+8 * scale + i * scale * 21, backpackY - 6 * scale + scale * 21), scale, id, hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
                     }
 
                     if (isSelected)
@@ -1018,10 +1082,11 @@ namespace FantasyVoxels.Entities
                 }
 
                 //crafting
-                for (int i = 0; i < 7; i++)
+                for (int i = 0; i < 10; i++)
                 {
-                    int x = backpackX + 134 * scale + (i < 6 ? i % 3 : 1) * scale * 21;
-                    int y = backpackY - 111 * scale + (i < 6 ? (i / 3) : 3) * scale * 21;
+                    const int backpackSize = 9;
+                    int x = backpackX + 134 * scale + (i < backpackSize ? i % 3 : 1) * scale * 21;
+                    int y = backpackY - 111 * scale + (i < backpackSize ? (i / 3) : 4) * scale * 21;
 
                     var slotbounds = new Rectangle(x + 2*scale, y - scale * 21, scale * 18, scale * 18);
                     bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
@@ -1036,7 +1101,7 @@ namespace FantasyVoxels.Entities
                     {
                         RenderTooltip(crafting.PeekItem(i));
 
-                        if (i < 6) TryTransferContainerToCursor(ref crafting, i);
+                        if (i < backpackSize) TryTransferContainerToCursor(ref crafting, i);
                         else
                         {
                             if (BetterMouse.WasLeftPressed())
@@ -1046,7 +1111,7 @@ namespace FantasyVoxels.Entities
                                 {
                                     cursor.AddItem(add, 0, out int remainder);
 
-                                    for(i = 0; i < 6; i++)
+                                    for(i = 0; i < backpackSize; i++)
                                     {
                                         crafting.TakeItem(i,1);
                                     }
@@ -1065,13 +1130,13 @@ namespace FantasyVoxels.Entities
                         MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
                     }
 
-                    if(i == 6)
+                    if(i == backpackSize)
                     {
                         crafting.SetItem(CraftingManager.TryCraft(crafting),i);
                     }
                 }
                 //clicked outside the window
-                if (BetterMouse.WasLeftPressed() && !new Rectangle(backpackX, backpackY - 142 * scale, 206*scale, 142*scale).Contains(Mouse.GetState().Position))
+                if (BetterMouse.WasLeftPressed() && !new Rectangle(backpackX, backpackY - 142 * scale, 206*scale, 164*scale).Contains(Mouse.GetState().Position))
                 {
                     SpitContents(ref cursor);
                 }
@@ -1245,6 +1310,7 @@ namespace FantasyVoxels.Entities
                 Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
 
                 SpitContents(ref cursor);
+                crafting.SetItem(new Item { itemID = -1, stack = 0},9);
                 SpitContents(ref crafting);
 
                 return true;

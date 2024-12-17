@@ -121,11 +121,11 @@ namespace FantasyVoxels.ItemManagement
         }
         public static Item TryCraft(ItemContainer input)
         {
-            if (input.GetAllItems().Length == 7)
+            if (input.GetAllItems().Length == 10)
             {
-                int[] itemIDs = new int[6];
+                int[] itemIDs = new int[9];
                 bool any = false;
-                for(int i = 0; i < 6; i++)
+                for(int i = 0; i < 9; i++)
                 {
                     var item = input.PeekItem(i);
                     itemIDs[i] = item.itemID;
@@ -164,7 +164,7 @@ namespace FantasyVoxels.ItemManagement
                     int headID = -1;
                     int handleID = -1;
 
-                    for (int i = 0; i < 6; i++)
+                    for (int i = 0; i < 9; i++)
                     {
                         var item = input.PeekItem(i);
                         if(item.itemID >= 0 && ItemManager.GetItemFromID(item.itemID).toolPiece)

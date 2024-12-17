@@ -37,6 +37,13 @@
 			"path": "Data/*.json",
 			"recursive": "True",
 			"action": "copy"
+		},
+		"models": {
+			"path": "Models/*.fbx",
+			"recursive": "True",
+			"action": "build",
+			"importer": "FbxImporter",
+			"processor": "ModelProcessor"
 		}
 	}
 }

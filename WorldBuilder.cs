@@ -24,9 +24,7 @@ namespace FantasyVoxels
             ContinentalnessCurve.Keys.Add(new CurveKey(0.1f, 90));
             ContinentalnessCurve.Keys.Add(new CurveKey(0.04f, 80));
             ContinentalnessCurve.Keys.Add(new CurveKey(-0.1f, 25));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.3f, 18));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.5f, -25));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.8f, -12));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.3f, -25));
             ContinentalnessCurve.Keys.Add(new CurveKey(-1.0f, 60));
 
             ErosionCurve.Keys.Add(new CurveKey(-1, 3));
@@ -35,15 +33,14 @@ namespace FantasyVoxels
             ErosionCurve.Keys.Add(new CurveKey(0.85f, 0.2f));
             ErosionCurve.Keys.Add(new CurveKey(1, 2f));
 
-            PVCurve.Keys.Add(new CurveKey(-1, -400));
-            PVCurve.Keys.Add(new CurveKey(-0.5f, -70));
-            PVCurve.Keys.Add(new CurveKey(0, 30));
-            PVCurve.Keys.Add(new CurveKey(1, 400));
+            PVCurve.Keys.Add(new CurveKey(-1, 500));
+            PVCurve.Keys.Add(new CurveKey(-0.5f, 0));
+            PVCurve.Keys.Add(new CurveKey(0, 60));
+            PVCurve.Keys.Add(new CurveKey(1, 900));
 
             DensityCurve.Keys.Add(new CurveKey(-30, 0.8f));
             DensityCurve.Keys.Add(new CurveKey(0, 0.7f));
             DensityCurve.Keys.Add(new CurveKey(30, 0.5f));
-            DensityCurve.Keys.Add(new CurveKey(100, 0.2f));
             DensityCurve.Keys.Add(new CurveKey(140, 0.0f));
 
             humid.SetNoiseType(FastNoiseLite.NoiseType.ValueCubic);

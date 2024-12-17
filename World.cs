@@ -557,11 +557,11 @@ namespace FantasyVoxels
                 for (int z = 0; z < Size; z++)
                 {
                     int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
-                    const float scalar = 0.6f;
+                    const float scalar = 0.45f;
 
                     BiomeProvider biome = BiomeTracker.GetBiome(WorldBuilder.GetHumidity(samplex,samplez), WorldBuilder.GetTemperature(samplex, samplez));
 
-                    float density = IcariaNoise.GradientNoise(samplex * 0.008f, samplez * 0.008f, 1 - MGame.Instance.seed)+1;
+                    float density = IcariaNoise.GradientNoise(samplex * 0.008f, samplez * 0.008f, 1 - MGame.Instance.seed)+1f;
                     //int terrainHeight = (int)(float.Lerp(biome1.GetTerrainHeight(samplex,samplez),biome2.GetTerrainHeight(samplex,samplez),biomeSelector%1));
 
                     int terrainHeight = 0;
@@ -569,7 +569,7 @@ namespace FantasyVoxels
                     {
                         float continentalness = GetOctaveNoise2D(samplex, samplez, 0.002f * scalar, 10, 0.7f, 1.45f, 1);
                         float erosion = GetOctaveNoise2D(samplex, samplez, 0.001f * scalar, 6, 0.8f, 1.4f, 10);
-                        float PV = GetOctaveNoise2D(samplex, samplez, 0.004f * scalar, 5, 0.6f, 1.7f, 25);
+                        float PV = GetOctaveNoise2D(samplex, samplez, 0.005f * scalar, 5, 0.6f, 1.7f, 25);
 
                         terrainHeight = (int)(WorldBuilder.ContinentalnessCurve.Evaluate(continentalness) + WorldBuilder.ErosionCurve.Evaluate(erosion) * WorldBuilder.PVCurve.Evaluate(PV));
                         tHeight[x, z] = terrainHeight;
@@ -591,24 +591,26 @@ namespace FantasyVoxels
 
                             float pY = WorldBuilder.DensityCurve.Evaluate(sy-terrainHeight) * density;
 
-                            if(pY>0.1f)
+                            if (pY > 0.1f)
                             {
                                 if (sy >= terrainHeight)
                                 {
-                                    float samx = sx * 0.005f;
-                                    float samy = sy * 0.005f;
-                                    float samz = sz * 0.005f;
+                                    float samx = sx * 0.0023f;
+                                    float samy = sy * 0.0023f;
+                                    float samz = sz * 0.0023f;
 
-                                    domainWarp.DomainWarp(ref samx,ref samy, ref samz);
+                                    domainWarp.DomainWarp(ref samx, ref samy, ref samz);
 
-                                    float perlin = GetOctaveNoise3D(samx,samy,samz, 1f, 6, 0.7f, 1.6f, MGame.Instance.seed + 504);
-                                    if (perlin * pY > 0.1f) vox = biome.GetSurfaceVoxel(sx,sy,sz);
+                                    float perlin = GetOctaveNoise3D(samx, samy, samz, 1f, 3, 0.7f, 1.6f, 504);
+                                    perlin += GetOctaveNoise3D(samx, samy, samz, 0.1f, 2, 0.7f, 1.6f, 501);
+
+                                    if (perlin * pY > 0.1f) vox = biome.GetSurfaceVoxel(sx, sy, sz);
                                 }
 
-                                //float perlincave = noise3d.GetNoise(sx * 0.01f, sy * 0.01f, sz * 0.01f);
-                                //float perlincaveB = IcariaNoise.BrokenGradientNoise3D(sx * 0.1f, sy * 0.1f, sz * 0.1f, MGame.Instance.seed + 604);
+                                float perlincave = noise3d.GetNoise(sx * 0.01f, sy * 0.01f, sz * 0.01f);
+                                float perlincaveB = IcariaNoise.BrokenGradientNoise3D(sx * 0.1f, sy * 0.1f, sz * 0.1f, MGame.Instance.seed + 604);
 
-                                //if (float.Abs(perlincave) > 0.85f+(perlincaveB*0.1f)) vox = 0;
+                                if (float.Abs(perlincave) > 0.85f + (perlincaveB * 0.1f)) vox = 0;
                             }
 
                             return vox;

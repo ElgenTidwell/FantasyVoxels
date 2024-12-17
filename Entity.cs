@@ -36,6 +36,7 @@ namespace FantasyVoxels
         public bool grounded;
         public bool swimming;
         public bool fly;
+        public bool disablePush;
         public byte health,maxHealth;
         protected bool disallowWalkingOffEdge;
 
@@ -248,11 +249,32 @@ namespace FantasyVoxels
 
             if (!loadedEntities.TryGetValue(chunk, out List<Entity> value)) return;
 
-            foreach(var entity in value)
+            for(int i = value.Count-1; i >= 0; i--)
             {
+                var entity = value[i];
+
                 long oldpos = entity.parentChunk;
 
+                if(!entity.disablePush)
+                {
+                    foreach (var other in value)
+                    {
+                        if (new BoundingBox(entity.bounds.Min + (Vector3)entity.position, entity.bounds.Max + (Vector3)entity.position)
+                            .Contains(new BoundingBox(other.bounds.Min + (Vector3)other.position, other.bounds.Max + (Vector3)other.position)) != ContainmentType.Disjoint && !other.disablePush)
+                        {
+                            other.velocity -= ((Vector3)entity.position - (Vector3)other.position) * MGame.dt * 50;
+                            entity.velocity += ((Vector3)entity.position - (Vector3)other.position) * MGame.dt * 50;
+                        }
+                    }
+                }
+
                 entity.Update();
+
+                int cx = (int)double.Floor(entity.position.X / Chunk.Size);
+                int cy = (int)double.Floor(entity.position.Y / Chunk.Size);
+                int cz = (int)double.Floor(entity.position.Z / Chunk.Size);
+
+                entity.parentChunk = MGame.CCPos((cx, cy, cz));
 
                 if (entity.parentChunk != oldpos)
                 {

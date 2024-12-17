@@ -54,7 +54,7 @@ namespace FantasyVoxels.Saves
             List<KeyValuePair<long,Chunk>> chunksToSave =
             [
                 .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk=>
-                chunk.Value.modified && !chunk.Value.CompletelyEmpty && chunk.Value.generated),
+                (chunk.Value.modified || int.Min(int.Abs(chunk.Value.chunkPos.x-cx),int.Abs(chunk.Value.chunkPos.z-cz)) < 2) && chunk.Value.generated),
             ];
 
             //Parallel.ForEach(chunks, (chunk)=>
@@ -91,7 +91,7 @@ namespace FantasyVoxels.Saves
             string playerJson = JsonConvert.SerializeObject(playerSaveData,jsonSerializerSettings);
             await File.WriteAllTextAsync($"{savename}/entity/player.json", playerJson);
 
-            await Task.Delay(1000);
+            await Task.Delay(4000);
         }
         public static string[] GetAllSavedWorlds()
         {
@@ -209,7 +209,7 @@ namespace FantasyVoxels.Saves
             };
             if (File.Exists($"{savename}/entity/chunkbound.json"))
             {
-                EntityManager.loadedEntities = JsonConvert.DeserializeObject<Dictionary<long,List<Entity>>>(await File.ReadAllTextAsync($"{savename}/entity/chunkbound.json"), jsonSerializerSettings);
+                EntityManager.loadedEntities = JsonConvert.DeserializeObject<Dictionary<long,List<Entity>>>(File.ReadAllText($"{savename}/entity/chunkbound.json"), jsonSerializerSettings);
                 foreach(var lst in EntityManager.loadedEntities)
                 {
                     foreach(var entity in lst.Value)

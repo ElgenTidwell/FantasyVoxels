@@ -27,6 +27,25 @@ namespace FantasyVoxels
             }
             return current + MathF.Sign(target - current) * maxDelta;
         }
+        public static float MoveTowardsAngle(float current, float target, float maxDelta)
+        {
+            float deltaAngle = DeltaAngle(current, target);
+            if (-maxDelta < deltaAngle && deltaAngle < maxDelta)
+                return target;
+            target = current + deltaAngle;
+            return MoveTowards(current, target, maxDelta);
+        }
+        public static float DeltaAngle(float current, float target)
+        {
+            float delta = Repeat((target - current), 360.0F);
+            if (delta > 180.0F)
+                delta -= 360.0F;
+            return delta;
+        }
+        public static float Repeat(float t, float length)
+        {
+            return float.Clamp(t - float.Floor(t / length) * length, 0.0f, length);
+        }
         public static Vector3 Project(Vector3 vector, Vector3 onNormal)
         {
             float sqrMag = Vector3.Dot(onNormal, onNormal);
@@ -52,6 +71,42 @@ namespace FantasyVoxels
                     vector.Y - planeNormal.Y * dot / sqrMag,
                     vector.Z - planeNormal.Z * dot / sqrMag);
             }
+        }
+        public static Entity RaycastEntities(Vector3 start, Vector3 direction, float distance, Entity ignore = null)
+        {
+            int cx = (int)float.Floor(start.X / Chunk.Size);
+            int cy = (int)float.Floor(start.Y / Chunk.Size);
+            int cz = (int)float.Floor(start.Z / Chunk.Size);
+            Ray ray = new Ray(start,direction);
+            Entity closest = null;
+            float closestDistance = float.MaxValue;
+            for(int x = cx-1; x <= cx+1; x++)
+            {
+                for (int y = cy - 1; y <= cy + 1; y++)
+                {
+                    for (int z = cz - 1; z <= cz + 1; z++)
+                    {
+                        long c = MGame.CCPos((x,y,z));
+
+                        if(EntityManager.loadedEntities.TryGetValue(c, out var ent))
+                        {
+                            foreach(var other in ent)
+                            {
+                                if (other == ignore) continue;
+
+                                float? rCast = ray.Intersects(new BoundingBox((Vector3)(other.bounds.Min+ other.position), (Vector3)(other.bounds.Max+other.position)));
+
+                                if (rCast.HasValue && rCast.Value < distance && rCast.Value < closestDistance)
+                                {
+                                    closestDistance = rCast.Value;
+                                    closest = other;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return closest;
         }
         public static bool Raycast(Vector3 start, Vector3 direction, float distance, out Vector3 prevHitTile, out Vector3 hitTile, out int voxel, out VoxelData data)
         {

@@ -139,21 +139,7 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
         finPos.z += sin2 * 0.1f;
     }
     
-    
-    /*
-    
-    float4 lightingPosition = mul(float4(output.WorldPos+normal.xyz*0.8f,1), LightViewProj);
-    
-    // Find the position in the shadow map for this pixel
-    float2 ShadowTexCoord = mad(0.5f, lightingPosition.xy / lightingPosition.w, float2(0.5f, 0.5f));
-    ShadowTexCoord.y = 1.0f - ShadowTexCoord.y;
-    
-	// Get the current depth stored in the shadow map
-    float ourdepth = (lightingPosition.z / lightingPosition.w);
-    
-    output.ShadowCoord = float4(ShadowTexCoord, (lightingPosition.z / lightingPosition.w), dot(float3(0, 1, 0), normal.xyz));
-    
-    */
+    output.ShadowCoord = float4(0,0,0, dot(-sunDir, normal.xyz));
     
     output.Color = float4(voxShadeEffect, color.g, color.b, voxAlphaEffect);
     
@@ -172,14 +158,15 @@ struct PSOut
 // Calculates the shadow term using PCF with edge tap smoothing
 float CalcShadowTermSoftPCF(float light_space_depth, float ndotl, float2 shadow_coord, int iSqrtSamples)
 {
-    float fShadowTerm = 0.0f;
-    
-    float variableBias = clamp(0.0001f * tan(acos(ndotl)), 0.0f, 0.0005f);
-    
+    float fShadowTerm = 0;
+
+       //float2 v_lerps = frac(ShadowMapSize * shadow_coord);
+
+    float variableBias = clamp(0.001 * tan(acos(ndotl)), 0.0012f, 0.003f);
     //safe to assume it's a square
     float shadowMapSize = 2048;
     	
-    float fRadius = (iSqrtSamples); //mad(iSqrtSamples, 0.5, -0.5);//(iSqrtSamples - 1.0f) / 2;
+    float fRadius = (iSqrtSamples-1); //mad(iSqrtSamples, 0.5, -0.5);//(iSqrtSamples - 1.0f) / 2;
 
     for (float y = -fRadius; y <= fRadius; y++)
     {
@@ -260,16 +247,26 @@ PSOut MainPS(VSOutput input)
     float3 normal = input.NormalPS;
     float realBump = 0;
     
-    //float4 shadowCoords = input.ShadowCoord;
-    //float shadowContributioncasc1 = CalcShadowTermSoftPCF(shadowCoords.z, shadowCoords.w, shadowCoords.xy, 2);
     
-    //float shadowdistance = pow(saturate(1 - (abs(depth.x) / (32 * ChunkSize))), 8);
+    float4 lightingPosition = mul(float4(floor((input.WorldPos + float3(0.001f,0.001f,0.001f)) * 16.0f) / 16.0f, 1), LightViewProj);
     
-    //shadowContributioncasc1 *= shadowdistance;
+    // Find the position in the shadow map for this pixel
+    float2 ShadowTexCoord = mad(0.5f, lightingPosition.xy / lightingPosition.w, float2(0.5f, 0.5f));
+    ShadowTexCoord.y = 1.0f - ShadowTexCoord.y;
+    
+	// Get the current depth stored in the shadow map
+    float ourdepth = (lightingPosition.z / lightingPosition.w);
+    
+    float4 shadowCoords = input.ShadowCoord;
+    float shadowContributioncasc1 = CalcShadowTermSoftPCF(ourdepth, shadowCoords.w, ShadowTexCoord, 2);
+    
+    float shadowdistance = pow(saturate(1 - (abs(depth.x) / (32 * ChunkSize))), 8);
+    
+    shadowContributioncasc1 *= shadowdistance;
     
     float3 lmp = tex2D(lightmapSampler, float2(pow(dat.b, 0.8f), (time%4) / 4));
     
-    float3 desCol = color.xyz * (lmp + saturate(dat.g-0.025f) * (realBump + 1) * sunColor);
+    float3 desCol = color.xyz * (lmp + saturate(dat.g * (1 - shadowContributioncasc1 * 0.8f * saturate(dot(input.NormalPS, sunDir)) * (1-pow(dat.b, 0.8f))) - 0.025f) * (realBump + 1) * sunColor);
 
     output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog),1.2f)), color.a * dat.a);
     
@@ -288,6 +285,9 @@ PSOut MainPS(VSOutput input)
 float4 ShadowPS(VSOutput input) : SV_Target0
 {
     float3 depth = input.Depth;
+    
+    float4 color = tex2Dlod(colorsSampler, float4(input.Coord, 0, 0));
+    clip(color.a - 0.02f);
     
     return float4(depth.z, 0, 0, 1);
 }

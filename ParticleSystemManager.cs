@@ -38,6 +38,7 @@ namespace FantasyVoxels
             {
                 this.particlePositions[i] = origin + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)*randomPosScalar;
                 this.particleVelocities[i] = velocity + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)* randomVelScalar;
+                this.particleRotations[i] = Random.Shared.NextSingle();
             }
             this.textureProvider = provider;
             this.textureIndex = texIndex;
@@ -87,6 +88,8 @@ namespace FantasyVoxels
                     system.particleVelocities[p].Z -= system.particleVelocities[p].Z * MGame.dt;
 
                     system.particleVelocities[p].Y -= system.gravity * MGame.dt;
+
+                    system.particleRotations[p] += system.particleVelocities[p].LengthSquared() * MGame.dt * ((p * 0.5f + 1)*(p%2==0?-1:1))*0.1f;
 
                     int x = (int)double.Floor(system.particlePositions[p].X) - cx * Chunk.Size;
                     int y = (int)double.Floor(system.particlePositions[p].Y) - cy * Chunk.Size;
