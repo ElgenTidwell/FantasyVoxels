@@ -226,8 +226,6 @@ namespace FantasyVoxels
         public static List<Bank> soundBanks = new List<Bank>();
         public static EventDescription[] placeBlockEvents = new EventDescription[(int)Enum.GetValues(typeof(Voxel.SurfaceType)).Length-1];
         public static EventDescription[] walkBlockEvents = new EventDescription[(int)Enum.GetValues(typeof(Voxel.SurfaceType)).Length-1];
-        public static EventDescription robotMoveEvent;
-        public static EventDescription robotServoEvent;
         public static EventDescription robotPainEvent;
         public static Listener3D listener;
         const int randSoundPoolSize = 10;
@@ -295,9 +293,8 @@ namespace FantasyVoxels
             _graphics.IsFullScreen = true;
             _graphics.HardwareModeSwitch = false;
             _graphics.SynchronizeWithVerticalRetrace = false;
-            _graphics.PreferMultiSampling = false;
 
-            _graphics.GraphicsProfile = GraphicsProfile.Reach;
+            _graphics.GraphicsProfile = GraphicsProfile.HiDef;
 
             _graphics.ApplyChanges();
 
@@ -308,12 +305,11 @@ namespace FantasyVoxels
             Window.AllowUserResizing = true;
             Window.ClientSizeChanged += Window_ClientSizeChanged;
         }
-
         private void Window_ClientSizeChanged(object sender, EventArgs e)
         {
             float minlength = float.Min(Window.ClientBounds.Width/1920f, Window.ClientBounds.Height/1080f);
 
-            UserInterface.Active.GlobalScale = float.Round(minlength*16)/16;
+            UserInterface.Active.GlobalScale = 1;
             projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(_fov), GraphicsDevice.Viewport.AspectRatio, 0.01f, 1000f);
         }
 
@@ -354,9 +350,7 @@ namespace FantasyVoxels
                 placeBlockEvents[i] = StudioSystem.GetEvent($"event:/Blocks/{((Voxel.SurfaceType)(i+1))}_place");
                 walkBlockEvents[i] = StudioSystem.GetEvent($"event:/Blocks/{((Voxel.SurfaceType)(i+1))}_walk");
             }
-            robotMoveEvent = StudioSystem.GetEvent("event:/RobotMove");
             robotPainEvent = StudioSystem.GetEvent("event:/RobotPain");
-            robotServoEvent = StudioSystem.GetEvent("event:/RobotServo");
 
             listener = new Listener3D();
 
@@ -474,7 +468,7 @@ namespace FantasyVoxels
             base.UnloadContent();
         }
 
-        public async Task LoadWorld(bool fromsave = false)
+        public void LoadWorld(bool fromsave = false)
         {
             VoxelStructurePlacer.Clear();
             toGenerate.Clear();
@@ -556,7 +550,7 @@ namespace FantasyVoxels
                 int genamount = generate.Count;
                 int genprog = 0;
 
-                await Parallel.ForEachAsync(generate, async (pos, token) =>
+                Parallel.ForEach(generate, (pos) =>
                 {
                     Chunk c = new Chunk();
 
@@ -1007,7 +1001,7 @@ namespace FantasyVoxels
 
             chunk.Parameters["sunColor"]?.SetValue(Color.White.ToVector3() * daylightPercentage);
             //Shadows
-            
+            /*
             chunk.Parameters["View"].SetValue(sunView);
             chunk.Parameters["Projection"].SetValue(sunProjection);
             
@@ -1053,7 +1047,7 @@ namespace FantasyVoxels
                     }
                 }
             }
-
+            */
             chunk.CurrentTechnique = chunk.Techniques["Terrain"];
             
             GraphicsDevice.SetRenderTargets(screenTexture, normalTexture);
@@ -1115,8 +1109,8 @@ namespace FantasyVoxels
             entity.Parameters["time"]?.SetValue(totalTime);
             entity.Parameters["sunDir"]?.SetValue(sunView.Forward);
 
-            chunk.Parameters["LightViewProj"]?.SetValue(lightWorld * sunView * sunProjection);
-            chunk.Parameters["shadowmap"]?.SetValue(shadowMap);
+            //chunk.Parameters["LightViewProj"]?.SetValue(lightWorld * sunView * sunProjection);
+            //chunk.Parameters["shadowmap"]?.SetValue(shadowMap);
 
             RenderChunks(false);
 
@@ -1409,6 +1403,8 @@ namespace FantasyVoxels
             curPoolIndex %= (randSoundPoolSize - 1);
 
             if (miscSoundPool[curPoolIndex] != null && miscSoundPool[curPoolIndex].PlaybackState != FMOD.Studio.PLAYBACK_STATE.STOPPED) miscSoundPool[curPoolIndex].Stop(true);
+
+            if (t.surfaceType == Voxel.SurfaceType.None) return;
 
             miscSoundPool[curPoolIndex] = placeBlockEvents[(int)t.surfaceType - 1].CreateInstance();
             miscSoundPool[curPoolIndex].Position3D = p;

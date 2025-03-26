@@ -139,8 +139,6 @@ namespace FantasyVoxels.Entities
         ];
         bool step = false;
 
-        EventInstance robotMoveNoise;
-        EventInstance robotServoNoise;
         EventInstance robotPainNoise;
 
         public Player()
@@ -185,10 +183,7 @@ namespace FantasyVoxels.Entities
             //hotbar.SetItem(new Item("grass",255),7);
             //hotbar.SetItem(new Item("lamp",255),8);
 
-            robotMoveNoise = MGame.robotMoveEvent.CreateInstance();
             robotPainNoise = MGame.robotPainEvent.CreateInstance();
-            robotServoNoise = MGame.robotServoEvent.CreateInstance();
-            robotServoNoise.Start();
         }
         public override void OnTakeDamage(DamageInfo info)
         {
@@ -511,8 +506,6 @@ namespace FantasyVoxels.Entities
                 {
                     step = true;
                     playstepsound();
-                    robotMoveNoise.Stop(true);
-                    robotMoveNoise.Start();
                 }
                 if(step && float.Abs(ysin) < 0.9f * bob)
                 {
@@ -530,16 +523,16 @@ namespace FantasyVoxels.Entities
                 painResponse = Maths.MoveTowards(painResponse, 0, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
 
 
-                //Water damage
-                if(swimming)
-                {
-                    waterDamageTimer -= MGame.dt;
-                    if(waterDamageTimer < 0)
-                    {
-                        waterDamageTimer = 1;
-                        OnTakeDamage(new DamageInfo { damage = 1 });
-                    }
-                }
+                //Water damage, really unfun. Probably gonna remove that
+                //if(swimming)
+                //{
+                //    waterDamageTimer -= MGame.dt;
+                //    if(waterDamageTimer < 0)
+                //    {
+                //        waterDamageTimer = 1;
+                //        OnTakeDamage(new DamageInfo { damage = 1 });
+                //    }
+                //}
             }
             else
             {
@@ -553,8 +546,6 @@ namespace FantasyVoxels.Entities
 
                 EntityManager.SpawnEntity(test);
             }
-
-            robotServoNoise.SetParameterValue("PlayerVelocityXZ",new Vector2(velocity.X,velocity.Z).Length()/run);
 
             vmswayX = Maths.MoveTowards(vmswayX, 0, MGame.dt * 15 * float.Abs(vmswayX));
             vmswayY = Maths.MoveTowards(vmswayY, 0, MGame.dt * 15 * float.Abs(vmswayY));
@@ -741,39 +732,39 @@ namespace FantasyVoxels.Entities
             verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+2]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
             verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+3]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
 
-            for(int x = 0; x < 16; x++)
-            {
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 0]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 0] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 1]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 1] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 2]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 2] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 0]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 0] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 2]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 2] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 3]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 3] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //for(int x = 0; x < 16; x++)
+            //{
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 0]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 0] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 1]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 1] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 2]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 2] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 0]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 0] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 2]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 2] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 3]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 3] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
 
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 1]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 1] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 3]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 3] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            }
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 1]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 1] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 3]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 3] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //}
 
-            for (int y = 0; y < 16; y++)
-            {
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+            //for (int y = 0; y < 16; y++)
+            //{
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
 
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            }
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            //}
 
             return verts.ToArray();
         }
@@ -879,14 +870,6 @@ namespace FantasyVoxels.Entities
         {
             if (!drawHand || heldBlockModel.Length < 3) return;
 
-            MGame.Instance.GrabVoxelData((Vector3)position, out var voxelData);
-
-            float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage;
-            MGame.Instance.GetEntityShader().Parameters["tint"].SetValue(ourLight);
-            MGame.Instance.GetEntityShader().Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
-
-            MGame.Instance.GetEntityShader().Parameters["mainTexture"].SetValue(handIsEmpty?MGame.Instance.handSpr: handFromBlockColors ? MGame.Instance.colors : MGame.Instance.items);
-
             Matrix animMatrix = Matrix.Identity;
 
             if (handIsSprite)
@@ -913,21 +896,32 @@ namespace FantasyVoxels.Entities
             vmoffsetSwayX = Maths.MoveTowards(vmoffsetSwayX, xtarg, MGame.dt*(float.Abs(vmoffsetSwayX-xtarg)+0.01f)*12);
 
             Matrix world = Matrix.CreateRotationZ(vmoffsetSwayX*0.1f) * 
-                           Matrix.CreateTranslation(Vector3.One*0.5f) *
-                           Matrix.CreateScale(handIsSprite? 0.8f: 0.6f) *
-                           Matrix.CreateRotationY(MathHelper.ToRadians(20))*
-                           Matrix.CreateRotationX(MathHelper.ToRadians(0))*
+                           Matrix.CreateTranslation(new Vector3(0, 0.1f,0)) *
+                           Matrix.CreateScale(handIsSprite? 1f: 0.6f) *
+                           Matrix.CreateRotationY(MathHelper.ToRadians(45))*
+                           Matrix.CreateRotationX(MathHelper.ToRadians(5))*
                            animMatrix *
-                           Matrix.CreateWorld(new Vector3(0.2f+ ysin * 0.15f*bob, -1.4f-(((float.Pow(float.Abs(xsin),0.8f) * 1.5f)) * bob) * 0.15f + vmoffsetY, -1.6f), Vector3.Forward, Vector3.Up)*
+                           Matrix.CreateWorld(new Vector3(0.2f+ ysin * 0.15f*bob, -1.2f-(((float.Abs(xsin) * 1.5f)) * bob) * 0.1f + vmoffsetY + bob*-0.16f, -1.2f), Vector3.Forward, Vector3.Up)*
                            Matrix.CreateTranslation(vmoffsetSwayX*0.1f, vmoffsetSwayY-vmoffsetSwayX*0.04f, 0) *
                            Matrix.CreateRotationX(MathHelper.ToRadians(velocity.Y * -0.2f)+ vmswayY) *
                            Matrix.CreateRotationY(vmswayX) *
                            Matrix.CreateRotationZ(painResponse*0.01f);
 
-            MGame.Instance.GetEntityShader().Parameters["World"].SetValue(world);
-            MGame.Instance.GetEntityShader().Parameters["View"].SetValue(Matrix.Identity);
 
-            foreach (var pass in MGame.Instance.GetEntityShader().CurrentTechnique.Passes)
+            MGame.Instance.GrabVoxelData((Vector3)position, out var voxelData);
+
+            float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage;
+            var effect = MGame.Instance.GetEntityShader();
+            effect.Parameters["tint"].SetValue(ourLight);
+            effect.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
+
+            effect.Parameters["mainTexture"].SetValue(handIsEmpty ? MGame.Instance.handSpr : handFromBlockColors ? MGame.Instance.colors : MGame.Instance.items);
+
+            effect.Parameters["World"].SetValue(world);
+            effect.Parameters["View"].SetValue(Matrix.Identity);
+            effect.Parameters["RotWorld"].SetValue(world);
+
+            foreach (var pass in effect.CurrentTechnique.Passes)
             {
                 pass.Apply();
                 MGame.Instance.GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, heldBlockModel, 0, heldBlockModel.Length / 3);
@@ -966,7 +960,7 @@ namespace FantasyVoxels.Entities
             float healthFloat = health / 4f;
             for (int h = 0; h < maxHealth/4; h++)
             {
-                float horizPos = leftmost + h * uiScale * 10;
+                float horizPos = 8 * uiScale + h * uiScale * 10;
 
                 int index = health - (h * 4+4);
 
@@ -974,7 +968,7 @@ namespace FantasyVoxels.Entities
 
                 int bounce = health == 0?0 : (int)(float.Max((float.Sin(MGame.totalTime * 16 + h * 1)), 0) * (maxHealth / health) * 0.5f);
 
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, UserInterface.Active.ScreenHeight - 34 * uiScale - bounce*uiScale), new Rectangle(59+ index*11, 0, 11, 10), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, 8 * uiScale - bounce*uiScale), new Rectangle(59+ index*11, 0, 11, 10), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
             }
             MGame.Instance.spriteBatch.End();
 
@@ -1329,7 +1323,6 @@ namespace FantasyVoxels.Entities
 
         public override void Destroyed()
         {
-            robotServoNoise.Stop();
         }
 
         public override object CaptureCustomSaveData()

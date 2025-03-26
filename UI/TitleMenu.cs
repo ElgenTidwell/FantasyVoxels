@@ -62,7 +62,7 @@ namespace FantasyVoxels.UI
 
         static TitleMenu()
         {
-            mainMenu = new Panel(new Vector2(1024, 1024), PanelSkin.None);
+            mainMenu = new Panel(new Vector2(1024, 800), PanelSkin.None);
 
             mainMenu.AddChild(new Header("UNNAMED FANTASY VOXEL GAME", Anchor.TopCenter));
 
@@ -71,10 +71,10 @@ namespace FantasyVoxels.UI
             mainMenu.AddChild(new Button("Quit Game", ButtonSkin.Alternative)).OnClick += QuitPressed;
 
 
-            worldBrowser = new Panel(new Vector2(1512, 1024), PanelSkin.Default, Anchor.Center);
+            worldBrowser = new Panel(new Vector2(1512, 800), PanelSkin.Default, Anchor.Center);
             worldBrowser.AddChild(new Label("Select World", Anchor.TopLeft));
 
-            worldBrowserWorlds = new SelectList(new Vector2(1400, 800), Anchor.Center, skin: PanelSkin.Simple);
+            worldBrowserWorlds = new SelectList(new Vector2(1400, 600), Anchor.Center, skin: PanelSkin.Simple);
             worldBrowser.AddChild(worldBrowserWorlds);
 
             worldBrowser.AddChild(new Button("New World", anchor: Anchor.BottomRight, skin: ButtonSkin.Alternative, size: new Vector2(300, 70))).OnClick += GoToWorldCreation;
@@ -82,7 +82,7 @@ namespace FantasyVoxels.UI
             worldBrowser.AddChild(new Button("Play World", anchor: Anchor.BottomRight, skin: ButtonSkin.Alternative, size: new Vector2(300, 70), offset: Vector2.UnitX * 316)).OnClick += TryPlayWorld;
             worldBrowser.AddChild(new Button("Cancel", anchor: Anchor.BottomLeft, skin: ButtonSkin.Alternative, size: new Vector2(300, 70))).OnClick += GoToTitle;
 
-            worldCreator = new Panel(new Vector2(1512, 1024), PanelSkin.Default);
+            worldCreator = new Panel(new Vector2(1512, 800), PanelSkin.Default);
             worldCreator.AddChild(new Label("Create World", Anchor.TopLeft));
 
             worldCreator.AddChild(new Label("World Name:", anchor: Anchor.AutoCenter, offset: Vector2.UnitY * 300));
@@ -195,7 +195,7 @@ namespace FantasyVoxels.UI
 
             worldBrowserWorlds.Items = l.ToArray();
         }
-        private static async void CreateNewWorld(GeonBit.UI.Entities.Entity entity)
+        private static void CreateNewWorld(GeonBit.UI.Entities.Entity entity)
         {
             if (string.IsNullOrEmpty(worldName.TextParagraph.Text)) return;
             WorldTimeManager.SetWorldTime(0f);
@@ -207,7 +207,7 @@ namespace FantasyVoxels.UI
             var label = new Label("Loading World...", Anchor.Center);
             UserInterface.Active.AddEntity(label);
 
-            await Instance.LoadWorld();
+            Instance.LoadWorld();
 
             UserInterface.Active.RemoveEntity(label);
             Instance.currentPlayState = PlayState.World;

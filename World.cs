@@ -544,12 +544,6 @@ namespace FantasyVoxels
                 tHeight = c0.tHeight;
                 noBelow = false;
             }
-            else
-            if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos((chunkPos.x, chunkPos.y + 1, chunkPos.z)), out c0) && c0.generated)
-            {
-                tHeight = c0.tHeight;
-                noBelow = false;
-            }
 
             int elementsCount = 0;
             for (int x = 0; x < Size; x++)
@@ -1140,32 +1134,81 @@ namespace FantasyVoxels
                             if (shouldMeshFace)
                             {
                                 sky /= 255;
-                                if (EnableSmoothLighting) GBL(vertsPerCheck[p * 4], out light, out sky);
+                                const float lightcoeff = 0.25f;
+                                if (EnableSmoothLighting)
+                                {
+                                    GBL(vertsPerCheck[p * 4], out light, out sky);
+                                    GBL(vertsPerCheck[p * 4]+ normal, out float _light, out float _sky);
+                                    bool shadow = _light < light;
+                                    light *= (shadow? lightcoeff : 1);
+                                    shadow = _sky < sky;
+                                    sky *= (shadow ? lightcoeff : 1);
+                                }
                                 color.G = (byte)(sky*255 * shade);
                                 color.B = (byte)(light*255 * shade);
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 0]/(MGame.AtlasSize / 16)));
 
-                                if (EnableSmoothLighting) GBL(vertsPerCheck[p * 4+1], out light, out sky);
+                                if (EnableSmoothLighting)
+                                {
+                                    GBL(vertsPerCheck[p * 4+1], out light, out sky);
+                                    GBL(vertsPerCheck[p * 4+1] + normal, out float _light, out float _sky);
+                                    bool shadow = _light < light;
+                                    light *= (shadow ? lightcoeff : 1);
+                                    shadow = _sky < sky;
+                                    sky *= (shadow ? lightcoeff : 1);
+                                }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 1]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 1]/(MGame.AtlasSize / 16)));
 
-                                if (EnableSmoothLighting) GBL(vertsPerCheck[p * 4+2], out light, out sky);
+                                if (EnableSmoothLighting)
+                                {
+                                    GBL(vertsPerCheck[p * 4+2], out light, out sky);
+                                    GBL(vertsPerCheck[p * 4+2] + normal, out float _light, out float _sky);
+                                    bool shadow = _light < light;
+                                    light *= (shadow ? lightcoeff : 1);
+                                    shadow = _sky < sky;
+                                    sky *= (shadow ? lightcoeff : 1);
+                                }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 2]/(MGame.AtlasSize / 16)));
 
-                                if (EnableSmoothLighting) GBL(vertsPerCheck[p * 4], out light, out sky);
+                                if (EnableSmoothLighting)
+                                {
+                                    GBL(vertsPerCheck[p * 4+0], out light, out sky);
+                                    GBL(vertsPerCheck[p * 4+0] + normal, out float _light, out float _sky);
+                                    bool shadow = _light < light;
+                                    light *= (shadow ? lightcoeff : 1);
+                                    shadow = _sky < sky;
+                                    sky *= (shadow ? lightcoeff : 1);
+                                }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 0]/(MGame.AtlasSize / 16)));
 
-                                if (EnableSmoothLighting) GBL(vertsPerCheck[p * 4+2], out light, out sky);
+                                if (EnableSmoothLighting)
+                                {
+                                    GBL(vertsPerCheck[p * 4+2], out light, out sky);
+                                    GBL(vertsPerCheck[p * 4+2] + normal, out float _light, out float _sky);
+                                    bool shadow = _light < light;
+                                    light *= (shadow ? lightcoeff : 1);
+                                    shadow = _sky < sky;
+                                    sky *= (shadow ? lightcoeff : 1);
+                                }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 2]/(MGame.AtlasSize / 16)));
 
-                                if (EnableSmoothLighting) GBL(vertsPerCheck[p * 4+3], out light, out sky);
+                                if (EnableSmoothLighting)
+                                {
+                                    GBL(vertsPerCheck[p * 4+3], out light, out sky);
+                                    GBL(vertsPerCheck[p * 4+3] + normal, out float _light, out float _sky);
+                                    bool shadow = _light < light;
+                                    light *= (shadow ? lightcoeff : 1);
+                                    shadow = _sky < sky;
+                                    sky *= (shadow ? lightcoeff : 1);
+                                }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
                                 verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 3]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 3]/(MGame.AtlasSize / 16)));

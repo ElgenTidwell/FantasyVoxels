@@ -29,7 +29,7 @@ namespace FantasyVoxels.Saves
         public static string savePath = $"{Environment.GetEnvironmentVariable("profilePath")}/user/saves/";
         public static string backupPath = $"{Environment.GetEnvironmentVariable("profilePath")}/user/backup_saves/";
 
-        public static async Task SaveToFile(string _savename)
+        public static void SaveToFile(string _savename)
         {
             string savename = $"{savePath}{_savename}";
 
@@ -45,7 +45,7 @@ namespace FantasyVoxels.Saves
             sb.AppendLine($"seed:{MGame.Instance.seed}");
             sb.AppendLine($"time:{(int)WorldTimeManager.WorldTime}");
 
-            await File.WriteAllTextAsync($"{savename}/overworld.txt", sb.ToString());
+            File.WriteAllText($"{savename}/overworld.txt", sb.ToString());
 
             int cx = (int)double.Floor(Instance.player.position.X / Chunk.Size);
             int cz = (int)double.Floor(Instance.player.position.Z / Chunk.Size);
@@ -54,7 +54,7 @@ namespace FantasyVoxels.Saves
             List<KeyValuePair<long,Chunk>> chunksToSave =
             [
                 .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk=>
-                (chunk.Value.modified || int.Min(int.Abs(chunk.Value.chunkPos.x-cx),int.Abs(chunk.Value.chunkPos.z-cz)) < 2) && chunk.Value.generated),
+                chunk.Value.modified && chunk.Value.generated),
             ];
 
             //Parallel.ForEach(chunks, (chunk)=>
@@ -68,7 +68,7 @@ namespace FantasyVoxels.Saves
             //writeTaskList.Add(File.WriteAllTextAsync($"{savename}/chunk/chunks.json", JsonConvert.SerializeObject(chunksToSave)));
 
             var data = MessagePackSerializer.Typeless.Serialize(chunksToSave);
-            await File.WriteAllBytesAsync($"{savename}/chunk/chunks.cnk",data);
+            File.WriteAllBytes($"{savename}/chunk/chunks.cnk",data);
 
             var jsonSerializerSettings = new JsonSerializerSettings()
             {
@@ -76,7 +76,7 @@ namespace FantasyVoxels.Saves
                 MaxDepth = null,
             };
 
-            await File.WriteAllTextAsync($"{savename}/entity/chunkbound.json", JsonConvert.SerializeObject(EntityManager.loadedEntities, jsonSerializerSettings));
+            File.WriteAllText($"{savename}/entity/chunkbound.json", JsonConvert.SerializeObject(EntityManager.loadedEntities, jsonSerializerSettings));
 
             EntitySaveData playerSaveData = new EntitySaveData
             {
@@ -89,9 +89,7 @@ namespace FantasyVoxels.Saves
             };
 
             string playerJson = JsonConvert.SerializeObject(playerSaveData,jsonSerializerSettings);
-            await File.WriteAllTextAsync($"{savename}/entity/player.json", playerJson);
-
-            await Task.Delay(4000);
+            File.WriteAllText($"{savename}/entity/player.json", playerJson);
         }
         public static string[] GetAllSavedWorlds()
         {
@@ -106,7 +104,7 @@ namespace FantasyVoxels.Saves
 
             return savenames.ToArray();
         }
-        public static async void LoadSave(string _savename)
+        public static void LoadSave(string _savename)
         {
             Instance.currentPlayState = PlayState.LoadingWorld;
 
@@ -125,7 +123,7 @@ namespace FantasyVoxels.Saves
 
             WorldName = _savename;
 
-            string overworlddata = await File.ReadAllTextAsync($"{savename}/overworld.txt");
+            string overworlddata = File.ReadAllText($"{savename}/overworld.txt");
             var lines = overworlddata.Split('\n');
             MGame.Instance.seed = int.Parse((Array.Find(lines, e => e.StartsWith("seed:")) ?? "seed:0").Split(':')[1]);
             WorldTimeManager.SetWorldTime(int.Parse((Array.Find(lines, e => e.StartsWith("time:")) ?? "time:0").Substring(5)));
@@ -134,7 +132,7 @@ namespace FantasyVoxels.Saves
 
             MGame.Instance.loadedChunks = new ConcurrentDictionary<long, Chunk>();
 
-            await MGame.Instance.LoadWorld(true);
+            MGame.Instance.LoadWorld(true);
 
             var files = Directory.GetFiles($"{savename}/chunk");
 
@@ -143,7 +141,7 @@ namespace FantasyVoxels.Saves
 
             if (!File.Exists($"{savename}/chunk/chunks.cnk"))
             {
-                await Parallel.ForEachAsync(files, async (string chunkfile, CancellationToken token) =>
+                foreach(var chunkfile in files)
                 {
                     string chunkfilename = Path.GetFileNameWithoutExtension(chunkfile);
 
@@ -152,7 +150,7 @@ namespace FantasyVoxels.Saves
                     int chunky = int.Parse(coords[1]);
                     int chunkz = int.Parse(coords[2]);
 
-                    Chunk chunk = JsonConvert.DeserializeObject<Chunk>(await File.ReadAllTextAsync(chunkfile, token));
+                    Chunk chunk = JsonConvert.DeserializeObject<Chunk>(File.ReadAllText(chunkfile));
 
                     chunk.chunkPos = (chunkx, chunky, chunkz);
 
@@ -163,6 +161,7 @@ namespace FantasyVoxels.Saves
                     }
 
                     chunk.generated = true;
+                    chunk.modified = true;
 
                     //chunk.modified = !chunkfilename.Contains("unmodified");
 
@@ -176,12 +175,12 @@ namespace FantasyVoxels.Saves
 
                     cur++;
                     prog.Value = (int)((cur / (float)max) * 100);
-                });
+                }
             }
             else
             {
-                List<KeyValuePair<long, Chunk>> chunks = MessagePackSerializer.Typeless.Deserialize(await File.ReadAllBytesAsync($"{savename}/chunk/chunks.cnk")) as List<KeyValuePair<long, Chunk>>;
-                max = chunks.Count;
+                KeyValuePair<long, Chunk>[] chunks = (MessagePackSerializer.Typeless.Deserialize(File.ReadAllBytes($"{savename}/chunk/chunks.cnk")) as List<KeyValuePair<long, Chunk>>).ToArray();
+                max = chunks.Length;
                 foreach(var chunk in chunks)
                 {
                     chunk.Value.generated = true;
