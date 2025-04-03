@@ -39,6 +39,7 @@ namespace FantasyVoxels.Biomes
             return totalNoise / maxAmplitude;
         }
         public abstract string Name { get; }
+        public abstract TerrainLode[] Lodes { get; }
         public abstract byte GetVoxel(float x, float y, float z, int terrainHeight, bool p3d);
         public abstract byte RequestFolliage(float samplex, float sampley, float samplez, Random tRandom);
         public abstract byte GetSurfaceVoxel(float samplex, float sampley, float samplez);
@@ -47,5 +48,11 @@ namespace FantasyVoxels.Biomes
         {
             return Name.CompareTo(other.Name);
         }
+    }
+    public struct TerrainLode(byte voxID, int minHeight, int maxHeight, float threshold)
+    {
+        public byte voxID = voxID;
+        public int minHeight = minHeight,maxHeight = maxHeight;
+        public float threshold = threshold;
     }
 }

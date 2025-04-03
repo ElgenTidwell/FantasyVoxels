@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{65f664df-494c-430f-86c7-00d7c726bd2e}">
+		<property name="assetPath">
+			<value>pain.wav</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>16</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>1.375875</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{133dc659-1481-4538-9aa7-86acd14a192a}</destination>
+		</relationship>
+	</object>
+</objects>

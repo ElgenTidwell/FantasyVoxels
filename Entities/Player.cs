@@ -18,6 +18,9 @@ using FantasyVoxels.UI;
 using FmodForFoxes;
 using FmodForFoxes.Studio;
 using static FantasyVoxels.Voxel;
+using FantasyVoxels.Blocks;
+using System.Reflection;
+using Solovox.Entities;
 
 namespace FantasyVoxels.Entities
 {
@@ -26,6 +29,8 @@ namespace FantasyVoxels.Entities
         static float walk = 4, run = 6.8f, sneak = 2f, swim = 0.5f;
         static BoundingBox standingBounds = new BoundingBox(new Vector3(-0.2f, -1.6f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
         static BoundingBox crouchedBounds = new BoundingBox(new Vector3(-0.2f, -1.5f, -0.2f), new Vector3(0.2f, 0.2f, 0.2f));
+		HashSet<int> learnedItemIDs = new HashSet<int>();
+        MultiValueDictionary<RecipeType, int> learnedRecipes = new MultiValueDictionary<RecipeType, int>();
 
         MouseState oldState;
 
@@ -38,6 +43,10 @@ namespace FantasyVoxels.Entities
         bool running,crouched;
         bool deathUIshown = false;
         bool accessingInventory;
+        bool accessingIdeasBook;
+		bool accessingBlockContainer;
+
+        ContainerBlockData blockContainer;
 
         bool wasGrounded = false;
 
@@ -123,9 +132,11 @@ namespace FantasyVoxels.Entities
 
         float diggingTimer;
         float waterDamageTimer;
+        float displayHealthBarPerc = 1;
 
         HandAnimation currentHandAnimation;
         float handAnimationTimer;
+        float swingAngle = 0;
 
         enum HandAnimation
         {
@@ -143,8 +154,48 @@ namespace FantasyVoxels.Entities
 
         public Player()
         {
-            maxHealth = 16;
+            maxHealth = 20;
             health = maxHealth;
+            //fly = true;
+        }
+
+        public void EducateOnItem(int id)
+        {
+            if (!learnedItemIDs.Contains(id))
+            {
+				learnedItemIDs.Add(id);
+                
+                var recipes = CraftingManager.GetRecipes(RecipeType.Crafting);
+                foreach(var recipe in recipes.FindAll(r => r.itemInput.Contains(id)))
+				{
+					int rid = recipes.FindIndex(r => r == recipe);
+
+					if (!learnedRecipes.ContainsKey(RecipeType.Crafting)) learnedRecipes.Add(RecipeType.Crafting, rid);
+                    else
+					if (!learnedRecipes[RecipeType.Crafting].Contains(rid)) learnedRecipes[RecipeType.Crafting].Add(rid);
+
+					learnedRecipes[RecipeType.Crafting] = learnedRecipes[RecipeType.Crafting].DistinctBy(e => recipes[e].itemOutput).ToList();
+					learnedRecipes[RecipeType.Crafting].Sort((a, b) =>
+                    {
+                        return string.Compare(ItemManager.GetItemFromID(recipes[a].itemOutput.itemID).name, ItemManager.GetItemFromID(recipes[b].itemOutput.itemID).name);
+                    });
+				}
+				recipes = CraftingManager.GetRecipes(RecipeType.Cooking);
+				foreach (var recipe in recipes.FindAll(r => r.itemInput.Contains(id)))
+				{
+                    int rid = recipes.FindIndex(r=> r == recipe);
+
+					if (!learnedRecipes.ContainsKey(RecipeType.Cooking)) learnedRecipes.Add(RecipeType.Cooking, rid);
+					else
+					if (!learnedRecipes[RecipeType.Cooking].Contains(rid)) learnedRecipes[RecipeType.Cooking].Add(rid);
+
+					learnedRecipes[RecipeType.Cooking] = learnedRecipes[RecipeType.Cooking].DistinctBy(e => recipes[e].itemOutput).ToList();
+					learnedRecipes[RecipeType.Cooking].Sort((a, b) =>
+					{
+						return string.Compare(ItemManager.GetItemFromID(recipes[a].itemOutput.itemID).name, ItemManager.GetItemFromID(recipes[b].itemOutput.itemID).name);
+					});
+				}
+			}
         }
 
         public override void Start()
@@ -184,12 +235,20 @@ namespace FantasyVoxels.Entities
             //hotbar.SetItem(new Item("lamp",255),8);
 
             robotPainNoise = MGame.robotPainEvent.CreateInstance();
-        }
+		}
         public override void OnTakeDamage(DamageInfo info)
         {
             painResponse = (info.damage-1)*0.5f+1;
             robotPainNoise.Stop();
             robotPainNoise.Start();
+
+			gravity = 5f;
+			grounded = false;
+
+			if (info.fromEntity is not null)
+			{
+				velocity -= Vector3.Normalize((Vector3)info.from - (Vector3)position)*4;
+			}
 
             base.OnTakeDamage(info);
         }
@@ -236,7 +295,8 @@ namespace FantasyVoxels.Entities
 
             if (Keyboard.GetState().IsKeyDown(Keys.Space) && (grounded || swimming||fly))
             {
-                gravity = swimming ? MathF.Min(gravity+28*MGame.dt, 4.5f) : (fly? 12f : 7f);
+                gravity = swimming ? (grounded? 4.5f : MathF.Min(gravity + 28 * MGame.dt, 4.5f)) : (fly? 12f : 7f);
+                velocity.Y = gravity;
                 grounded = false;
             }
             if (BetterKeyboard.HasBeenPressed(Keys.Q))
@@ -270,8 +330,13 @@ namespace FantasyVoxels.Entities
             hitEntity = Maths.RaycastEntities((Vector3)position, forward, 5, this);
             if (hitEntity is not null) voxelHit = false;
 
+            //if its not the same voxel, reset the timer
+            if (hitVoxel != oldHitVoxel)
+            {
+                diggingTimer = 0;
+            }
             autoDigTime -= MGame.dt;
-            if (Mouse.GetState().LeftButton == ButtonState.Released) diggingTimer = 0;
+            if (Mouse.GetState().LeftButton == ButtonState.Released) diggingTimer = Maths.MoveTowards(diggingTimer,0,MGame.dt*6);
             if (Mouse.GetState().LeftButton == ButtonState.Pressed && voxelHit && hitEntity is null)
             {
                 if (autoDigTime <= 0)
@@ -298,12 +363,6 @@ namespace FantasyVoxels.Entities
                     var tool = (ToolProperties)hotbar.PeekItem(activeHotbarSlot).properties;
                     toolHead = (ToolPieceProperties)ItemManager.GetItemFromID(tool.toolHead).properties;
                     toolHandle = (ToolPieceProperties)ItemManager.GetItemFromID(tool.toolHandle).properties;
-                }
-
-                //if its not the same voxel, reset the timer
-                if (hitVoxel != oldHitVoxel)
-                {
-                    diggingTimer = 0;
                 }
 
                 diggingTimer += MGame.dt * (Voxel.voxelTypes[hitVoxel.vox].materialType == toolHead.meantFor ? toolHead.diggingMultiplier+toolHandle.diggingMultiplier : 1);
@@ -333,17 +392,24 @@ namespace FantasyVoxels.Entities
                     hitEntity.OnTakeDamage(new DamageInfo { from = position, damage = 1 });
                 }
             }
-            if (Mouse.GetState().RightButton == ButtonState.Pressed && voxelHit && autoDigTime <= 0)
+            if (Mouse.GetState().RightButton == ButtonState.Pressed && autoDigTime <= 0)
             {
                 int id = hotbar.PeekItem(activeHotbarSlot).itemID;
 
+                bool TryInteractWithBlock()
+                {
+                    return voxelHit && MGame.Instance.UseVoxel(hitTile, this);
+                }
+
                 if (id != -1)
                 {
-                    void testitemtype(ItemType type)
+                    bool testitemtype(ItemType type)
                     {
                         switch (type)
                         {
                             case ItemType.Block:
+
+                                if (!voxelHit) return false;
 
                                 BoundingBox placeBox = new BoundingBox(prevHitTile - (Vector3)position + Vector3.One * 0.001f, prevHitTile + Vector3.One * 0.999f - (Vector3)position);
 
@@ -408,15 +474,47 @@ namespace FantasyVoxels.Entities
                                     SetAnimation(HandAnimation.Swing);
                                 }
 
-                                break;
+                                return true;
+                            case ItemType.Food:
+
+                                if(health < maxHealth)
+                                {
+                                    autoDigTime = 0.25f;
+
+                                    var foodprop = (FoodProperties)ItemManager.GetItemFromID(hotbar.TakeItem(activeHotbarSlot, 1).Value.itemID).properties;
+
+                                    health = (byte)(health + foodprop.saturation);
+                                    return true;
+                                }
+
+                                return false;
+
                             default:
 
-
-
-                                break;
+                                return false;
                         }
                     }
-                    if (id >= 0) testitemtype(ItemManager.GetItemFromID(id).type);
+                    if (id >= 0)
+                    {
+                        //testitemtype(ItemManager.GetItemFromID(id).type) 
+
+                        if(crouched)
+                        {
+                            if (!testitemtype(ItemManager.GetItemFromID(id).type)) TryInteractWithBlock();
+                        }
+                        else
+                        {
+                            if (!TryInteractWithBlock()) testitemtype(ItemManager.GetItemFromID(id).type);
+                        }
+                    }
+                    else
+                    {
+                        TryInteractWithBlock();
+                    }
+                }
+                else
+                {
+                    TryInteractWithBlock();
                 }
             }
             if (Mouse.GetState().RightButton == ButtonState.Released && Mouse.GetState().LeftButton == ButtonState.Released) autoDigTime = 0f;
@@ -428,6 +526,42 @@ namespace FantasyVoxels.Entities
 
             if (activeHotbarSlot >= 9) activeHotbarSlot -= 9;
             if (activeHotbarSlot < 0) activeHotbarSlot += 9;
+
+            if(Keyboard.GetState().GetPressedKeyCount() > 0)
+            {
+				switch (Keyboard.GetState().GetPressedKeys()[0])
+				{
+                    default:
+                        break;
+                    case Keys.D1:
+                        activeHotbarSlot = 0;
+                        break;
+					case Keys.D2:
+						activeHotbarSlot = 1;
+						break;
+					case Keys.D3:
+						activeHotbarSlot = 2;
+						break;
+					case Keys.D4:
+						activeHotbarSlot = 3;
+						break;
+					case Keys.D5:
+						activeHotbarSlot = 4;
+						break;
+					case Keys.D6:
+						activeHotbarSlot = 5;
+						break;
+					case Keys.D7:
+						activeHotbarSlot = 6;
+						break;
+					case Keys.D8:
+						activeHotbarSlot = 7;
+						break;
+					case Keys.D9:
+						activeHotbarSlot = 8;
+						break;
+				}
+			}
 
             oldScroll = Mouse.GetState().ScrollWheelValue;
 
@@ -519,7 +653,7 @@ namespace FantasyVoxels.Entities
                 HandleInventory();
 
                 wishDir = Vector3.Zero;
-                if (!accessingInventory) HandleInput();
+                if (!accessingInventory && !accessingIdeasBook) HandleInput();
                 painResponse = Maths.MoveTowards(painResponse, 0, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
 
 
@@ -539,13 +673,13 @@ namespace FantasyVoxels.Entities
                 painResponse = Maths.MoveTowards(painResponse, 4, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
             }
 
-            if(BetterKeyboard.HasBeenPressed(Keys.R))
-            {
-                WanderAITest test = new WanderAITest();
-                test.position = position + forward;
+            //if(BetterKeyboard.HasBeenPressed(Keys.R))
+            //{
+            //    Skeleton test = new Skeleton();
+            //    test.position = position + forward;
 
-                EntityManager.SpawnEntity(test);
-            }
+            //    EntityManager.SpawnEntity(test);
+            //}
 
             vmswayX = Maths.MoveTowards(vmswayX, 0, MGame.dt * 15 * float.Abs(vmswayX));
             vmswayY = Maths.MoveTowards(vmswayY, 0, MGame.dt * 15 * float.Abs(vmswayY));
@@ -625,12 +759,13 @@ namespace FantasyVoxels.Entities
 
                             if(!spr)
                             {
-                                heldBlockModel[i*6 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.AtlasSize);
-                                heldBlockModel[i*6 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.AtlasSize);
-                                heldBlockModel[i*6 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.AtlasSize);
-                                heldBlockModel[i*6 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.AtlasSize);
-                                heldBlockModel[i*6 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.AtlasSize);
-                                heldBlockModel[i*6 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.AtlasSize);
+                                float size = (MGame.AtlasSize / 16);
+                                heldBlockModel[i*6 + 0] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.AtlasSize);
+                                heldBlockModel[i*6 + 1] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 1], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 1] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.AtlasSize);
+                                heldBlockModel[i*6 + 2] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.AtlasSize);
+                                heldBlockModel[i*6 + 3] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 0], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 0] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.AtlasSize);
+                                heldBlockModel[i*6 + 4] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 2], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 2] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.AtlasSize);
+                                heldBlockModel[i*6 + 5] = new VertexPositionNormalTexture(Chunk.vertsPerCheck[i * 4 + 3], new Vector3(Chunk.positionChecks[i].x, Chunk.positionChecks[i].y, Chunk.positionChecks[i].z), (Chunk.uvs[i * 4 + 3] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.AtlasSize);
                             }
                             else
                             {
@@ -725,53 +860,55 @@ namespace FantasyVoxels.Entities
         {
             List<VertexPositionNormalTexture> verts = new List<VertexPositionNormalTexture>();
 
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+0]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+1]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+1] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+2]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+0]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+0] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+2]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+2] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+3]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+3] * 16 + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            float size = (MGame.ItemAtlasSize / 16);
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+0]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+0] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+1]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+1] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+2]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+2] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+0]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+0] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+2]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+2] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+            verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4+3]*scale + offset, -Vector3.UnitX, (Chunk.uvs[4+3] * 16 + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
 
-            //for(int x = 0; x < 16; x++)
-            //{
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 0]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 0] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 1]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 1] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 2]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 2] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 0]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 0] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 2]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 2] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4*4 + 3]*scale*new Vector3(1/16f,1,1) + offset - Vector3.UnitZ*x/16f, Vector3.UnitZ, (Chunk.uvs[4*4 + 3] * new Vector2(1,16) + new Vector2(15-x,0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
+            for (int x = 0; x < 16; x++)
+            {
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4 * 4 + 0] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, Vector3.UnitZ, (Chunk.uvs[4 * 4 + 0] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4 * 4 + 1] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, Vector3.UnitZ, (Chunk.uvs[4 * 4 + 1] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4 * 4 + 2] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, Vector3.UnitZ, (Chunk.uvs[4 * 4 + 2] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4 * 4 + 0] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, Vector3.UnitZ, (Chunk.uvs[4 * 4 + 0] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4 * 4 + 2] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, Vector3.UnitZ, (Chunk.uvs[4 * 4 + 2] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[4 * 4 + 3] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, Vector3.UnitZ, (Chunk.uvs[4 * 4 + 3] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
 
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 1]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 1] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 3]*scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 3] * new Vector2(1, 16) + new Vector2(15-x, 0) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //}
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 1] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 1] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 0] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 0] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 2] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 2] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[5 * 4 + 3] * scale * new Vector3(1 / 16f, 1, 1) + offset - Vector3.UnitZ * x / 16f, -Vector3.UnitZ, (Chunk.uvs[5 * 4 + 3] * new Vector2(1, 16) + new Vector2(15 - x, 0) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+            }
 
-            //for (int y = 0; y < 16; y++)
-            //{
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y-15)/ 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, (tex / 16))) / MGame.ItemAtlasSize));
+            for (int y = 0; y < 16; y++)
+            {
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y - 15) / 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X, Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y - 15) / 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 1].X, Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y - 15) / 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X, Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y - 15) / 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 0].X, Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y - 15) / 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 2].X, Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[2 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * (y - 15) / 16f, Vector3.UnitY, (new Vector2(Chunk.uvs[2 * 4 + 3].X, Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
 
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 1].X,Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 0].X,Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 2].X,Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //    verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y/ 16f, -Vector3.UnitY, (new Vector2(1-Chunk.uvs[2 * 4 + 3].X,Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15-y) + new Vector2((tex % 16.0f) * 16.0f, tex / 16)) / MGame.ItemAtlasSize));
-            //}
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y / 16f, -Vector3.UnitY, (new Vector2(1 - Chunk.uvs[2 * 4 + 0].X, Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 1] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y / 16f, -Vector3.UnitY, (new Vector2(1 - Chunk.uvs[2 * 4 + 1].X, Chunk.uvs[2 * 4 + 1].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y / 16f, -Vector3.UnitY, (new Vector2(1 - Chunk.uvs[2 * 4 + 2].X, Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 0] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y / 16f, -Vector3.UnitY, (new Vector2(1 - Chunk.uvs[2 * 4 + 0].X, Chunk.uvs[2 * 4 + 0].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 2] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y / 16f, -Vector3.UnitY, (new Vector2(1 - Chunk.uvs[2 * 4 + 2].X, Chunk.uvs[2 * 4 + 2].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+                verts.Add(new VertexPositionNormalTexture(Chunk.vertsPerCheck[3 * 4 + 3] * new Vector3(1 / 16f, 1, 1) + offset + Vector3.UnitY * y / 16f, -Vector3.UnitY, (new Vector2(1 - Chunk.uvs[2 * 4 + 3].X, Chunk.uvs[2 * 4 + 3].Y) * new Vector2(16, 1) + new Vector2(0, 15 - y) + new Vector2((tex % size) * 16.0f, (int)(tex / size)*16)) / MGame.ItemAtlasSize));
+            }
 
             return verts.ToArray();
         }
 
         private void SetAnimation(HandAnimation handAnimation)
         {
-            currentHandAnimation = handAnimation;
+            swingAngle = Random.Shared.NextSingle() * 2 - 1;
+			currentHandAnimation = handAnimation;
             handAnimationTimer = 0;
         }
         private void HandleInventory()
@@ -781,20 +918,29 @@ namespace FantasyVoxels.Entities
                 if (!ExitOtherMenus()) { accessingInventory = true; MGame.Instance.IsMouseVisible = true; }
             }
 
-            if (!accessingInventory) return;
+			if (BetterKeyboard.HasBeenPressed(Keys.R))
+			{
+				if (!ExitOtherMenus()) { accessingIdeasBook = true; MGame.Instance.IsMouseVisible = true; }
+			}
+
+			if (!accessingInventory) return;
         }
         public bool PickupItem(Item item)
         {
             if (health <= 0) return false;
 
+            // See if we already have this item in our inventory, even if there's no stack available
+            // that this will fit in, if we already have one of these in our inventory we probably want them all in there.
+            if(Array.FindIndex(inventory.items,i => i.itemID > - 1 && i.itemID == item.itemID) != -1)
+            {
+                return inventory.AddItem(item, out int l) || hotbar.AddItem(item, out l);
+            }
+
             if(!hotbar.AddItem(item, out int leftover))
             {
                 return inventory.AddItem(item, out leftover);
             }
-            else
-            {
-                return true;
-            }
+            return true;
         }
         void applyVelocity(Vector3 wishDir)
         {
@@ -884,9 +1030,10 @@ namespace FantasyVoxels.Entities
             {
                 case HandAnimation.Swing:
 
-                    animMatrix *= Matrix.CreateTranslation(0, 0, -float.Pow(handAnimationTimer,2f)*2-0.1f)*
+                    animMatrix *= Matrix.CreateTranslation(0, float.Pow(handAnimationTimer, 2f)+0.2f, -float.Pow(handAnimationTimer,2f)*2-0.1f)*
                                  Matrix.CreateRotationX(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * -125 + 15))*
-                                 Matrix.CreateRotationY(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * 25));
+                                 Matrix.CreateRotationY(MathHelper.ToRadians(float.Pow(handAnimationTimer, 0.8f) * 25)) *
+                                 Matrix.CreateRotationZ(swingAngle*0.8f);
 
                     break;
             }
@@ -899,9 +1046,9 @@ namespace FantasyVoxels.Entities
                            Matrix.CreateTranslation(new Vector3(0, 0.1f,0)) *
                            Matrix.CreateScale(handIsSprite? 1f: 0.6f) *
                            Matrix.CreateRotationY(MathHelper.ToRadians(45))*
-                           Matrix.CreateRotationX(MathHelper.ToRadians(5))*
+                           Matrix.CreateRotationX(MathHelper.ToRadians(8))*
                            animMatrix *
-                           Matrix.CreateWorld(new Vector3(0.2f+ ysin * 0.15f*bob, -1.2f-(((float.Abs(xsin) * 1.5f)) * bob) * 0.1f + vmoffsetY + bob*-0.16f, -1.2f), Vector3.Forward, Vector3.Up)*
+                           Matrix.CreateWorld(new Vector3(0.2f+ ysin * 0.15f*bob, -1.2f-(((float.Abs(xsin) * 1.0f)) * bob) * 0.1f + vmoffsetY + bob*-0.16f, -1.2f), Vector3.Forward, Vector3.Up)*
                            Matrix.CreateTranslation(vmoffsetSwayX*0.1f, vmoffsetSwayY-vmoffsetSwayX*0.04f, 0) *
                            Matrix.CreateRotationX(MathHelper.ToRadians(velocity.Y * -0.2f)+ vmswayY) *
                            Matrix.CreateRotationY(vmswayX) *
@@ -914,12 +1061,13 @@ namespace FantasyVoxels.Entities
             var effect = MGame.Instance.GetEntityShader();
             effect.Parameters["tint"].SetValue(ourLight);
             effect.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
+            effect.Parameters["colorTint"].SetValue(Vector3.One);
 
             effect.Parameters["mainTexture"].SetValue(handIsEmpty ? MGame.Instance.handSpr : handFromBlockColors ? MGame.Instance.colors : MGame.Instance.items);
 
             effect.Parameters["World"].SetValue(world);
             effect.Parameters["View"].SetValue(Matrix.Identity);
-            effect.Parameters["RotWorld"].SetValue(world);
+            effect.Parameters["RotWorld"].SetValue(Matrix.Transpose(Matrix.Invert(world)));
 
             foreach (var pass in effect.CurrentTechnique.Passes)
             {
@@ -954,25 +1102,44 @@ namespace FantasyVoxels.Entities
                 int id = hotbar.PeekItem(i).itemID;
                 if (id != -1)
                 {
-                    DrawItem(new Vector2(horizPos,UserInterface.Active.ScreenHeight),uiScale,id,hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
+                    UIUtils.DrawItem(new Vector2(horizPos,UserInterface.Active.ScreenHeight),uiScale,id,hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
                 }
             }
-            float healthFloat = health / 4f;
-            for (int h = 0; h < maxHealth/4; h++)
-            {
-                float horizPos = 8 * uiScale + h * uiScale * 10;
+            float healthFloat = (float)health / maxHealth;
+            displayHealthBarPerc = Maths.MoveTowards(displayHealthBarPerc,healthFloat,MGame.dt*float.Abs(displayHealthBarPerc-healthFloat)*32);
 
-                int index = health - (h * 4+4);
+            MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, 
+                                            new Vector2(14 * uiScale, UserInterface.Active.ScreenHeight - 24 * uiScale), 
+                                            new Rectangle(59, 0, 68, 12), 
+                                            Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
+            MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures,
+                                            new Vector2(16 * uiScale, UserInterface.Active.ScreenHeight - 22 * uiScale),
+                                            new Rectangle(59, 12, (int)(65* displayHealthBarPerc), 8),
+                                            Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0.01f);
 
-                index = -int.Clamp(index,-4,0);
+            //string healthStr = $"{health}/{maxHealth}";
 
-                int bounce = health == 0?0 : (int)(float.Max((float.Sin(MGame.totalTime * 16 + h * 1)), 0) * (maxHealth / health) * 0.5f);
+            //float xOffset = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(healthStr).X;
 
-                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, new Vector2(horizPos, 8 * uiScale - bounce*uiScale), new Rectangle(59+ index*11, 0, 11, 10), Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
-            }
+            //MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular],
+            //                                      healthStr,
+            //                                      new Vector2(48 * uiScale - (xOffset / 2) * (uiScale*0.5f), UserInterface.Active.ScreenHeight - 22 * uiScale),
+            //                                      Color.White, 0f, Vector2.Zero, Vector2.One * (uiScale * 0.5f), SpriteEffects.None, 0.02f);
+            //Use this layout if you add a second bar!
+            //MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures,
+            //                                new Vector2(14 * uiScale, UserInterface.Active.ScreenHeight - 13 * uiScale),
+            //                                new Rectangle(59, 0, 68, 12),
+            //                                Color.White, 0, Vector2.Zero, uiScale, SpriteEffects.None, 0f);
+
             MGame.Instance.spriteBatch.End();
 
-            if (accessingInventory)
+			if (accessingIdeasBook)
+			{
+				int scale = (int)float.Floor(4 * UserInterface.Active.GlobalScale);
+				DrawIdeasBook(scale);
+			}
+
+			if (accessingInventory)
             {
                 MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp, sortMode: SpriteSortMode.FrontToBack);
 
@@ -981,57 +1148,12 @@ namespace FantasyVoxels.Entities
 
                 int scale = (int)(uiScale * 1);
                 int backpackX = (int)(-103 * scale + UserInterface.Active.ScreenWidth / 2f);
+
+                //Make room!!
+                if (accessingBlockContainer) backpackX = 0;
+
                 int backpackY = (int)(50 * scale + UserInterface.Active.ScreenHeight / 2f);
                 MGame.Instance.spriteBatch.Draw(MGame.Instance.uiBackback, new Vector2(backpackX, backpackY - 142*scale), new Rectangle(0, 0, 206, 164), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
-
-                void RenderTooltip(Item item)
-                {
-                    if (item.itemID != -1)
-                    {
-                        string displayname = item.itemID >= 0 ? ItemManager.GetItemFromID(item.itemID).displayName :
-                                                                ItemManager.GetItemFromID(((ToolProperties)item.properties).toolHead).displayName.TrimEnd("Tool-Head".ToCharArray()).Trim();
-
-                        StringBuilder extras = new StringBuilder();
-
-                        if(item.itemID == -2)
-                        {
-                            if (item.properties is ToolProperties prop)
-                            {
-                                extras.AppendLine($"Fabricated with:");
-                                extras.AppendLine($"{ItemManager.GetItemFromID(prop.toolHead).displayName} + {ItemManager.GetItemFromID(prop.toolHandle).displayName}");
-                                extras.AppendLine($"Tool level: {((ToolPieceProperties)ItemManager.GetItemFromID(prop.toolHead).properties).toolPieceLevel}");
-                                extras.AppendLine($"Breaks: {((ToolPieceProperties)ItemManager.GetItemFromID(prop.toolHead).properties).meantFor}");
-                                extras.AppendLine($"Durability: {prop.durability}/{prop.maxDurability}");
-                            }
-                        }
-                        else
-                        {
-                            if (!string.IsNullOrWhiteSpace(ItemManager.GetItemFromID(item.itemID).description)) extras.AppendLine(ItemManager.GetItemFromID(item.itemID).description);
-
-                            if (ItemManager.GetItemFromID(item.itemID).properties is ToolPieceProperties prop)
-                            {
-                                if(prop.slot == ToolPieceSlot.Head)
-                                {
-                                    extras.AppendLine($"Tool level: {prop.toolPieceLevel}");
-                                    extras.AppendLine($"Breaks: {prop.meantFor}");
-                                }
-                                extras.AppendLine($"Speculative Durability: {prop.durability}");
-                            }
-                        }
-
-                        string extraInfo = UIUtils.WrapText(Resources.Instance.Fonts[(int)FontStyle.Regular], extras.ToString(), 200);
-
-                        Vector2 size = (Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(displayname) + Vector2.One * 2) * scale;
-
-                        if(!string.IsNullOrWhiteSpace(extraInfo)) size = Vector2.Max((Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(extraInfo) + new Vector2(2,32)) * (scale/2f),size);
-
-                        Vector2 pos = (Vector2.Floor((Mouse.GetState().Position.ToVector2()) / scale)) * scale + new Vector2(8, 8)*scale;
-
-                        MGame.Instance.spriteBatch.Draw(MGame.Instance.white, new Rectangle((int)pos.X, (int)pos.Y, (int)size.X + scale * 5, (int)size.Y), null, Color.Black, 0f, Vector2.Zero, SpriteEffects.None, 0.99f);
-                        MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], displayname, pos + Vector2.UnitX * scale * 4, Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
-                        if (!string.IsNullOrWhiteSpace(extraInfo)) MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], extraInfo, pos + Vector2.UnitX * scale * 4 + Vector2.UnitY * scale * 16, Color.Yellow, 0f, Vector2.Zero, scale/2, SpriteEffects.None, 1f);
-                    }
-                }
 
                 //hotbar
                 for (int i = 0; i < 9; i++)
@@ -1042,12 +1164,12 @@ namespace FantasyVoxels.Entities
                     int id = hotbar.PeekItem(i).itemID;
                     if (id != -1)
                     {
-                        DrawItem(new Vector2(backpackX+8 * scale + i * scale * 21, backpackY - 6 * scale + scale * 21), scale, id, hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
+                        UIUtils.DrawItem(new Vector2(backpackX+8 * scale + i * scale * 21, backpackY - 6 * scale + scale * 21), scale, id, hotbar.PeekItem(i).stack, hotbar.PeekItem(i));
                     }
 
                     if (isSelected)
                     {
-                        RenderTooltip(hotbar.PeekItem(i));
+                        UIUtils.RenderTooltip(hotbar.PeekItem(i),scale);
 
                         MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
                         TryTransferContainerToCursor(ref hotbar, i);
@@ -1063,12 +1185,12 @@ namespace FantasyVoxels.Entities
                     int id = inventory.PeekItem(i).itemID;
                     if (id != -1)
                     {
-                        DrawItem(new Vector2(backpackX + 8 * scale + (i%5) * scale * 21, backpackY - 111 * scale + (i/5)*scale*21), scale, id, inventory.PeekItem(i).stack, inventory.PeekItem(i));
+                        UIUtils.DrawItem(new Vector2(backpackX + 8 * scale + (i%5) * scale * 21, backpackY - 111 * scale + (i/5)*scale*21), scale, id, inventory.PeekItem(i).stack, inventory.PeekItem(i));
                     }
 
                     if (isSelected)
                     {
-                        RenderTooltip(inventory.PeekItem(i));
+                        UIUtils.RenderTooltip(inventory.PeekItem(i), scale);
 
                         MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
                         TryTransferContainerToCursor(ref inventory, i);
@@ -1088,12 +1210,12 @@ namespace FantasyVoxels.Entities
                     int id = crafting.PeekItem(i).itemID;
                     if (id != -1)
                     {
-                        DrawItem(new Vector2(x, y), scale, id, crafting.PeekItem(i).stack, crafting.PeekItem(i));
+                        UIUtils.DrawItem(new Vector2(x, y), scale, id, crafting.PeekItem(i).stack, crafting.PeekItem(i));
                     }
 
                     if (isSelected)
                     {
-                        RenderTooltip(crafting.PeekItem(i));
+                        UIUtils.RenderTooltip(crafting.PeekItem(i), scale);
 
                         if (i < backpackSize) TryTransferContainerToCursor(ref crafting, i);
                         else
@@ -1116,8 +1238,9 @@ namespace FantasyVoxels.Entities
                                     else
                                     {
                                         crafting.TakeItemStack(i);
-                                    }
-                                }
+									}
+									EducateOnItem(add.itemID);
+								}
                             }
                         }
 
@@ -1129,21 +1252,424 @@ namespace FantasyVoxels.Entities
                         crafting.SetItem(CraftingManager.TryCraft(crafting),i);
                     }
                 }
-                //clicked outside the window
-                if (BetterMouse.WasLeftPressed() && !new Rectangle(backpackX, backpackY - 142 * scale, 206*scale, 164*scale).Contains(Mouse.GetState().Position))
+                
+                if(accessingBlockContainer)
+                {
+                    DrawBlockContainer(scale);
+                }
+
+				//clicked outside the window
+				if (BetterMouse.WasLeftPressed() && !new Rectangle(backpackX, backpackY - 142 * scale, 206*scale, 164*scale).Contains(Mouse.GetState().Position) && !accessingBlockContainer)
                 {
                     SpitContents(ref cursor);
                 }
 
                 if (cursor.PeekItem(0).itemID != -1)
                 {
-                    DrawItem(Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale) * scale + new Vector2(-12,12) * scale, scale, cursor.PeekItem(0).itemID, cursor.PeekItem(0).stack,cursor.PeekItem(0),0.9f);
+                    UIUtils.DrawItem(Vector2.Floor(Mouse.GetState().Position.ToVector2() / scale) * scale + new Vector2(-12,12) * scale, scale, cursor.PeekItem(0).itemID, cursor.PeekItem(0).stack,cursor.PeekItem(0),0.9f);
                 }
 
                 MGame.Instance.spriteBatch.End();
             }
         }
-        void TryTransferContainerToCursor(ref ItemContainer container, int i, bool noplace = false)
+        void DrawBlockContainer(int scale)
+        {
+            int containerX = (int)(-122 * scale + UserInterface.Active.ScreenWidth);
+            int containerY = (int)(50 * scale + UserInterface.Active.ScreenHeight / 2f);
+
+            switch (blockContainer.displayMode)
+            {
+                case ContainerBlockData.ContainerDisplay.Basket:
+
+                    MGame.Instance.spriteBatch.Draw(MGame.Instance.uiBasket, new Vector2(containerX, containerY - 142 * scale), new Rectangle(0, 0, 101, 100), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
+
+                    for(int i = 0; i < blockContainer.items.GetAllItems().Length; i++)
+                    {
+                        int x = containerX + 8 * scale + (i % 4) * scale * 21;
+                        int y = containerY - 111 * scale + (i / 4) * scale * 21;
+
+                        var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+                        bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+
+                        int id = blockContainer.items.PeekItem(i).itemID;
+                        if (id != -1)
+                        {
+                            UIUtils.DrawItem(new Vector2(x, y), scale, id, blockContainer.items.PeekItem(i).stack, blockContainer.items.PeekItem(i));
+                        }
+
+                        if (isSelected)
+                        {
+                            UIUtils.RenderTooltip(blockContainer.items.PeekItem(i), scale);
+
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                            TryTransferContainerToCursor(ref blockContainer.items, i);
+                        }
+                    }
+
+                    break;
+                case ContainerBlockData.ContainerDisplay.Forge:
+
+                    containerX = (int)(-142 * scale + UserInterface.Active.ScreenWidth);
+                    MGame.Instance.spriteBatch.Draw(MGame.Instance.uiForge, new Vector2(containerX, containerY - 142 * scale), new Rectangle(0, 0, 121, 100), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
+
+                    //Fuel
+                    for (int i = 0; i < 2; i++)
+                    {
+                        int x = containerX + 8 * scale + (i % 4) * scale * 21;
+                        int y = containerY - 48 * scale + (i / 4) * scale * 21;
+
+                        var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+                        bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+
+                        int id = blockContainer.items.PeekItem(i).itemID;
+                        if (id != -1)
+                        {
+                            UIUtils.DrawItem(new Vector2(x, y), scale, id, blockContainer.items.PeekItem(i).stack, blockContainer.items.PeekItem(i));
+                        }
+
+                        if (isSelected)
+                        {
+                            UIUtils.RenderTooltip(blockContainer.items.PeekItem(i), scale);
+
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                            TryTransferContainerToCursor(ref blockContainer.items, i);
+                        }
+                    }
+
+                    int barFuel = (int)(((blockContainer as ForgeBlock.ForgeCustomData).fuelTimeRemaining/ForgeBlock.ForgeCustomData.FUEL_DURATION) *16);
+
+                    if(barFuel > 0)
+                    {
+						MGame.Instance.spriteBatch.Draw(MGame.Instance.white,
+														new Rectangle(containerX + 29 * scale, containerY - 99 * scale + (16-barFuel)*scale, 3 * scale, barFuel * scale),
+														null,
+														new Color(255, 69, 20, 10), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+					}
+
+					//Input
+					for (int i = 0; i < 2; i++)
+                    {
+                        int x = containerX + 8 * scale + i * scale * 21;
+                        int y = containerY - 111 * scale;
+
+                        var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+                        bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+
+                        int id = blockContainer.items.PeekItem(2+i).itemID;
+                        if (id != -1)
+                        {
+                            UIUtils.DrawItem(new Vector2(x, y), scale, id, blockContainer.items.PeekItem(2 + i).stack, blockContainer.items.PeekItem(2 + i));
+                        }
+
+                        if (isSelected)
+                        {
+                            UIUtils.RenderTooltip(blockContainer.items.PeekItem(2 + i), scale);
+
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                            TryTransferContainerToCursor(ref blockContainer.items, 2 + i);
+                        }
+                    }
+
+                    //Output
+                    {
+                        int x = containerX + 7 * scale + 4 * scale * 21;
+                        int y = containerY - 111 * scale;
+
+                        var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+                        bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+
+                        int id = blockContainer.items.PeekItem(4).itemID;
+                        if (id != -1)
+                        {
+                            UIUtils.DrawItem(new Vector2(x, y), scale, id, blockContainer.items.PeekItem(4).stack, blockContainer.items.PeekItem(3));
+                        }
+
+                        if (isSelected)
+                        {
+                            UIUtils.RenderTooltip(blockContainer.items.PeekItem(4), scale);
+
+                            MGame.Instance.spriteBatch.Draw(MGame.Instance.white, slotbounds, null, new Color(Color.Black, 80), 0f, Vector2.Zero, SpriteEffects.None, 0.8f);
+                            TryTransferContainerToCursor(ref blockContainer.items, 4,true);
+
+                            if(BetterMouse.WasLeftPressed())
+								EducateOnItem(blockContainer.items.PeekItem(4).itemID);
+						}
+                    }
+
+                    break;
+            }
+        }
+
+        int curIdeaPage = 0;
+        RecipeType curIdeaTab = RecipeType.Crafting;
+        void DrawIdeasBook(int scale)
+        {
+			MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp, sortMode: SpriteSortMode.FrontToBack, blendState:BlendState.NonPremultiplied);
+
+			//black background
+			MGame.Instance.spriteBatch.Draw(MGame.Instance.white, MGame.Instance.GraphicsDevice.Viewport.Bounds, null, new Color(Color.Black, 200), 0f, Vector2.Zero, SpriteEffects.None, 0.05f);
+
+			int backpackX = (int)(-(301/2) * scale + UserInterface.Active.ScreenWidth / 2f);
+
+			int backpackY = (int)(UserInterface.Active.ScreenHeight / 2f);
+			MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, new Vector2(backpackX, backpackY - (184/2) * scale), new Rectangle(0, 0, 301, 184), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.1f);
+
+			var craftTab = new Rectangle(backpackX-7*scale, backpackY - (184 / 2) * scale, 24 * scale, 24 * scale);
+			var cookTab = new Rectangle(backpackX-7* scale, backpackY - (184 / 2) * scale + 24*scale, 24 * scale, 24 * scale);
+
+            if (craftTab.Contains(Mouse.GetState().Position))
+            {
+				craftTab.X -= 16 * scale;
+				if (BetterMouse.WasLeftPressed())
+                {
+					curIdeaTab = RecipeType.Crafting;
+					curIdeaPage = 0;
+				}
+			}
+            if (cookTab.Contains(Mouse.GetState().Position))
+            {
+				cookTab.X -= 16 * scale;
+                if (BetterMouse.WasLeftPressed())
+                {
+					curIdeaTab = RecipeType.Cooking;
+					curIdeaPage = 0;
+				}
+			}
+
+			MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, craftTab, new Rectangle(383, 0, 24, 24), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.06f);
+			MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, new Rectangle(craftTab.X+6*scale, craftTab.Y + 3 * scale, 16*scale,16 * scale), new Rectangle(364, 24, 16, 16), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.07f);
+            MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, cookTab, new Rectangle(383, 0, 24, 24), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.06f);
+			MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, new Rectangle(cookTab.X + 6 * scale, cookTab.Y + 3 * scale, 16 * scale, 16 * scale), new Rectangle(380, 24, 16, 16), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.07f);
+
+			string tabname = "";
+
+			int end = 0;
+
+			switch (curIdeaTab)
+			{
+				case RecipeType.Crafting:
+
+                    tabname = "Crafting";
+
+                    if (!learnedRecipes.ContainsKey(RecipeType.Crafting)) break;
+
+					end = learnedRecipes[RecipeType.Crafting].Count / 4;
+
+					//Draw learned crafting recipes, if they exist.
+					for (int i = 0; i < 4; i++)
+			        {
+                        int recipeIndex = curIdeaPage * 4 + i;
+
+                        if (recipeIndex >= learnedRecipes[RecipeType.Crafting].Count) continue;
+
+                        int templateX = backpackX + scale * 7 + i * scale * 74;
+                        int templateY = backpackY - (184 / 2) * scale + scale * 52;
+				        MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, 
+                                                        new Vector2(templateX, templateY), 
+                                                        new Rectangle(301, 0, 64, 104), 
+                                                        Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.2f);
+
+						var recipe = learnedRecipes[RecipeType.Crafting][recipeIndex];
+                        var recipesTotal = CraftingManager.GetRecipes(RecipeType.Crafting);
+						//Normal crafting recipe
+						if (recipesTotal[recipe].itemInput.Length == 9)
+						{
+							for (int j = 0; j < 9; j++)
+							{
+								const int backpackSize = 9;
+								int x = templateX + (j < backpackSize ? j % 3 : 1) * scale * 21;
+								int y = templateY + (j < backpackSize ? (j / 3) : 4) * scale * 21 + scale * 21;
+
+								var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+
+								int id = recipesTotal[recipe].itemInput[j];
+								var item = new Item { itemID = id };
+
+								if (id != -1)
+								{
+									if (learnedItemIDs.Contains(id)) UIUtils.DrawItem(new Vector2(x, y), scale, id, 1, item);
+									else
+									{
+										MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas,
+																		new Vector2(x, y - scale * 21),
+																		new Rectangle(364, 1, 19, 19),
+																		Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.3f);
+									}
+									bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+									if (isSelected)
+									{
+										if (learnedItemIDs.Contains(id)) UIUtils.RenderTooltip(item, scale);
+										else UIUtils.RenderTooltip("Unknown", "I'm unsure what might complete this...", scale);
+									}
+								}
+							}
+							{
+								int x = templateX + (1) * scale * 21;
+								int y = templateY + (4) * scale * 21 + scale * 21;
+
+								var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+
+								var item = recipesTotal[recipe].itemOutput;
+								int id = recipesTotal[recipe].itemOutput.itemID;
+
+								if (id != -1)
+								{
+									if (learnedItemIDs.Contains(id)) UIUtils.DrawItem(new Vector2(x, y), scale, id, 1, item);
+									else
+									{
+										MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas,
+																		new Vector2(x, y - scale * 21),
+																		new Rectangle(364, 1, 19, 19),
+																		Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.3f);
+									}
+									bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+									if (isSelected)
+									{
+										if (learnedItemIDs.Contains(id)) UIUtils.RenderTooltip(item, scale);
+										else UIUtils.RenderTooltip("Unknown", "I'm unsure what this might produce...", scale);
+									}
+								}
+							}
+						}
+				    }
+
+				break;
+
+				case RecipeType.Cooking:
+
+					tabname = "Cooking";
+
+					if (!learnedRecipes.ContainsKey(RecipeType.Cooking)) break;
+
+					end = learnedRecipes[RecipeType.Cooking].Count / 4;
+					//Draw learned crafting recipes, if they exist.
+					for (int i = 0; i < 4; i++)
+					{
+						int recipeIndex = curIdeaPage * 4 + i;
+
+						if (recipeIndex >= learnedRecipes[RecipeType.Cooking].Count) continue;
+
+						int templateX = backpackX + scale * 7 + i * scale * 74;
+						int templateY = backpackY - (184 / 2) * scale + scale * 52;
+						MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas,
+														new Vector2(templateX, templateY),
+														new Rectangle(407, 0, 42, 63),
+														Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.2f);
+
+						var recipe = learnedRecipes[RecipeType.Cooking][recipeIndex];
+						var recipesTotal = CraftingManager.GetRecipes(RecipeType.Cooking);
+						{
+							for (int j = 0; j < 2; j++)
+							{
+                                if (j >= recipesTotal[recipe].itemInput.Length) continue;
+
+								const int backpackSize = 9;
+								int x = templateX + (j < backpackSize ? j % 3 : 1) * scale * 21;
+								int y = templateY + (j < backpackSize ? (j / 3) : 4) * scale * 21 + scale * 21;
+
+								var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+
+								int id = recipesTotal[recipe].itemInput[j];
+								var item = new Item { itemID = id };
+
+								if (id != -1)
+								{
+									if (learnedItemIDs.Contains(id)) UIUtils.DrawItem(new Vector2(x, y), scale, id, 1, item);
+									else
+									{
+										MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas,
+																		new Vector2(x, y - scale * 21),
+																		new Rectangle(364, 1, 19, 19),
+																		Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.3f);
+									}
+									bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+									if (isSelected)
+									{
+										if (learnedItemIDs.Contains(id)) UIUtils.RenderTooltip(item, scale);
+										else UIUtils.RenderTooltip("Unknown", "I'm unsure what might complete this...", scale);
+									}
+								}
+							}
+							{
+								int x = (int)(templateX + (0.5f) * scale * 21);
+								int y = templateY + (2) * scale * 21 + scale * 21;
+
+								var slotbounds = new Rectangle(x + 2 * scale, y - scale * 21, scale * 18, scale * 18);
+
+								var item = recipesTotal[recipe].itemOutput;
+								int id = recipesTotal[recipe].itemOutput.itemID;
+
+								if (id != -1)
+								{
+									if (learnedItemIDs.Contains(id)) UIUtils.DrawItem(new Vector2(x, y), scale, id, 1, item);
+									else
+									{
+										MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas,
+																		new Vector2(x, y - scale * 21),
+																		new Rectangle(364, 1, 19, 19),
+																		Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.3f);
+									}
+									bool isSelected = slotbounds.Contains(Mouse.GetState().Position);
+									if (isSelected)
+									{
+										if (learnedItemIDs.Contains(id)) UIUtils.RenderTooltip(item, scale);
+										else UIUtils.RenderTooltip("Unknown", "I'm unsure what this might produce...", scale);
+									}
+								}
+							}
+						}
+					}
+
+					break;
+			}
+			MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], tabname, new Vector2(backpackX + 100 * scale, backpackY - (184 / 2) * scale + scale*5), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 1f);
+			MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], tabname, new Vector2(backpackX + 101 * scale, backpackY - (184 / 2) * scale + scale*6), new Color(Color.Black,0.5f), 0f, Vector2.Zero, scale, SpriteEffects.None, 0.8f);
+
+            string pageindex = $"{curIdeaPage+1}/{end+1}";
+            float xoff = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(pageindex).X;
+
+			MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], pageindex, new Vector2(backpackX + 128 * scale + (xoff*0.5f*scale), backpackY + (184 / 2) * scale - scale * 22), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.7f);
+			MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], pageindex, new Vector2(backpackX + 129 * scale + (xoff*0.5f*scale), backpackY + (184 / 2) * scale - scale * 21), new Color(Color.Black, 0.5f), 0f, Vector2.Zero, scale, SpriteEffects.None, 0.6f);
+
+			var backButton = new Rectangle(backpackX + scale * 6, backpackY + scale*70, 15 * scale, 15 * scale);
+            var forwardButton = new Rectangle(backpackX + scale * 280, backpackY + scale*70, 15 * scale, 15 * scale);
+
+            var backSelected = backButton.Contains(Mouse.GetState().Position);
+            var forwardSelected = forwardButton.Contains(Mouse.GetState().Position);
+
+            if(backSelected)
+            {
+				MGame.Instance.spriteBatch.Draw(MGame.Instance.white, backButton, null, new Color(Color.Black, 100), 0f, Vector2.Zero, SpriteEffects.None, 0.15f);
+                
+                if(Mouse.GetState().LeftButton == ButtonState.Pressed)
+                {
+					MGame.Instance.spriteBatch.Draw(MGame.Instance.white, backButton, null, new Color(Color.Black, 100), 0f, Vector2.Zero, SpriteEffects.None, 0.15f);
+					if (BetterMouse.WasLeftPressed()) curIdeaPage--;
+				}
+			}
+            if (forwardSelected)
+            {
+				MGame.Instance.spriteBatch.Draw(MGame.Instance.white, forwardButton, null, new Color(Color.Black, 100), 0f, Vector2.Zero, SpriteEffects.None, 0.15f);
+                
+                if (Mouse.GetState().LeftButton == ButtonState.Pressed)
+				{
+					MGame.Instance.spriteBatch.Draw(MGame.Instance.white, forwardButton, null, new Color(Color.Black, 100), 0f, Vector2.Zero, SpriteEffects.None, 0.15f);
+					if (BetterMouse.WasLeftPressed()) curIdeaPage++;
+				}
+			}
+            if(curIdeaPage < 0)
+            {
+                curIdeaPage = end;
+			}
+            if(curIdeaPage > end)
+            {
+                curIdeaPage = 0;
+            }
+
+			MGame.Instance.spriteBatch.End();
+		}
+
+		void TryTransferContainerToCursor(ref ItemContainer container, int i, bool noplace = false)
         {
             if (BetterMouse.WasLeftPressed())
             {
@@ -1174,102 +1700,13 @@ namespace FantasyVoxels.Entities
                 {
                     container.AddItem(cursor.TakeItem(0, 1).Value, i, out int leftover);
                 }
-                else if (container.PeekItem(i).itemID != -1 && (cursor.PeekItem(0).itemID == container.PeekItem(i).itemID || cursor.PeekItem(0).itemID != -1))
+                else if (container.PeekItem(i).itemID != -1 && (cursor.PeekItem(0).itemID == container.PeekItem(i).itemID || cursor.PeekItem(0).itemID == -1))
                 {
                     cursor.SetItem(container.TakeItem(i, (byte)float.Ceiling(container.PeekItem(i).stack / 2f)).Value, 0);
                 }
             }
         }
 
-        private void DrawItem(Vector2 pos, float uiScale, int id, int stack, Item bitem, float depth = 0.5f)
-        {
-            //Compound item
-            if(id == -2)
-            {
-                if(bitem.properties is ToolProperties)
-                {
-                    var item = ItemManager.GetItemFromID(((ToolProperties)bitem.properties).toolHandle);
-                    if (item.type == ItemType.Block)
-                    {
-                        int tex = Voxel.voxelTypes[item.placement].frontTexture;
-
-                        MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
-                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                        Vector2.One * uiScale,
-                                                        SpriteEffects.None,
-                                                        depth);
-                    }
-                    else
-                    {
-                        int tex = item.texture;
-
-                        MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
-                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                        Vector2.One * uiScale,
-                                                        SpriteEffects.None,
-                                                        depth);
-                    }
-                    item = ItemManager.GetItemFromID(((ToolProperties)bitem.properties).toolHead);
-                    if (item.type == ItemType.Block)
-                    {
-                        int tex = Voxel.voxelTypes[item.placement].frontTexture;
-
-                        MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
-                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                        Vector2.One * uiScale,
-                                                        SpriteEffects.None,
-                                                        depth + 0.001f);
-                    }
-                    else
-                    {
-                        int tex = item.texture;
-
-                        MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
-                                                        new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                        new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                        Vector2.One * uiScale,
-                                                        SpriteEffects.None,
-                                                        depth+0.001f);
-                    }
-                }
-            }
-            else
-            {
-                var item = ItemManager.GetItemFromID(id);
-                if (item.type == ItemType.Block)
-                {
-                    int tex = Voxel.voxelTypes[item.placement].frontTexture;
-
-                    MGame.Instance.spriteBatch.Draw(MGame.Instance.colors,
-                                                    new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                    new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                    Vector2.One * uiScale,
-                                                    SpriteEffects.None,
-                                                    depth);
-                }
-                else
-                {
-                    int tex = item.texture;
-
-                    MGame.Instance.spriteBatch.Draw(MGame.Instance.items,
-                                                    new Vector2(pos.X + 3 * uiScale, pos.Y - 20 * uiScale),
-                                                    new Rectangle((tex % 16) * 16, (tex / 16) * 16, 16, 16), Color.White, 0, Vector2.Zero,
-                                                    Vector2.One * uiScale,
-                                                    SpriteEffects.None,
-                                                    depth);
-                }
-
-                if (stack <= 1) return;
-
-                Vector2 shift = Resources.Instance.Fonts[(int)FontStyle.Regular].MeasureString(stack.ToString()) * uiScale;
-
-                MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 21 * uiScale, pos.Y - 0 * uiScale) - shift, Color.Black, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.01f);
-                MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], stack.ToString(), new Vector2(pos.X + 20 * uiScale, pos.Y - 1 * uiScale) - shift, Color.White, 0f, Vector2.Zero, Vector2.One * (uiScale), SpriteEffects.None, depth + 0.02f);
-            }
-        }
         void SpitContents(ref ItemContainer container, bool random = false)
         {
             for(int j = 0; j < container.GetAllItems().Length; j++)
@@ -1298,6 +1735,8 @@ namespace FantasyVoxels.Entities
         {
             if(accessingInventory)
             {
+                if(accessingBlockContainer) accessingBlockContainer = false;
+
                 accessingInventory = false;
 
                 MGame.Instance.IsMouseVisible = false;
@@ -1310,15 +1749,32 @@ namespace FantasyVoxels.Entities
                 return true;
             }
 
-            //on death screen
-            if (health <= 0) return true;
+            if(accessingIdeasBook)
+            {
+                accessingIdeasBook = false;
+
+				MGame.Instance.IsMouseVisible = false;
+				Mouse.SetPosition(MGame.Instance.GraphicsDevice.Viewport.Width / 2, MGame.Instance.GraphicsDevice.Viewport.Height / 2);
+
+                return true;
+			}
+
+			//on death screen
+			if (health <= 0) return true;
 
             //not in any menus
             return false;
         }
+        public void OpenBlockContainer(ContainerBlockData container)
+        {
+            accessingInventory = true;
+            accessingBlockContainer = true;
+            blockContainer = container;
+            MGame.Instance.IsMouseVisible = true;
+        }
         public bool OtherMenusActive()
         {
-            return accessingInventory;
+            return accessingInventory || accessingIdeasBook;
         }
 
         public override void Destroyed()
@@ -1327,11 +1783,20 @@ namespace FantasyVoxels.Entities
 
         public override object CaptureCustomSaveData()
         {
-            return new PlayerSaveData
+            List<int> crafting = new List<int>();
+            List<int> cooking = new List<int>();
+            if(learnedRecipes.ContainsKey(RecipeType.Crafting)) learnedRecipes.TryGetValue(RecipeType.Crafting, out crafting);
+            if(learnedRecipes.ContainsKey(RecipeType.Cooking)) learnedRecipes.TryGetValue(RecipeType.Cooking, out cooking);
+
+			return new PlayerSaveData
             {
                 hotbar = hotbar.GetAllItems(),
                 inventory = inventory.GetAllItems(),
-            };
+                hotbarindex = activeHotbarSlot,
+                learnedItems = learnedItemIDs.ToArray(),
+                learnedCraftingRecipes = crafting.ToArray(),
+				learnedCookingRecipes = cooking.ToArray(),
+			};
         }
 
         public override void RestoreCustomSaveData(object data)
@@ -1340,11 +1805,20 @@ namespace FantasyVoxels.Entities
 
             hotbar.SetAllItems(pData.hotbar);
             inventory.SetAllItems(pData.inventory);
-        }
+            activeHotbarSlot = pData.hotbarindex;
+
+            if(pData.learnedItems != null) learnedItemIDs = new HashSet<int>(pData.learnedItems);
+            if(pData.learnedCraftingRecipes != null) learnedRecipes[RecipeType.Crafting] = new List<int>(pData.learnedCraftingRecipes.DistinctBy(e => CraftingManager.GetRecipes(RecipeType.Crafting)[e].itemOutput));
+            if(pData.learnedCookingRecipes != null) learnedRecipes[RecipeType.Cooking] = new List<int>(pData.learnedCookingRecipes.DistinctBy(e=> CraftingManager.GetRecipes(RecipeType.Cooking)[e].itemOutput));
+		}
     }
     public struct PlayerSaveData
     {
         public Item[] hotbar;
         public Item[] inventory;
-    }
+        public int hotbarindex;
+        public int[] learnedItems;
+        public int[] learnedCraftingRecipes;
+        public int[] learnedCookingRecipes;
+	}
 }

@@ -142,12 +142,12 @@
     "alwaysRenderAsSprite": false,
     "toolPiece": true,
     "properties": {
-      "$type": "ToolPieceProperties, FantasyVoxels",
+      "$type": "ToolPieceProperties, Solovox",
       "slot": 0,
       "meantFor": 1,
       "diggingMultiplier": 0.0,
       "toolPieceLevel": 1,
-      "durability": 100
+      "durability": 50
     }
   },
   {
@@ -197,7 +197,7 @@
     "alwaysRenderAsSprite": false,
     "toolPiece": true,
     "properties": {
-      "$type": "ToolPieceProperties, FantasyVoxels",
+      "$type": "ToolPieceProperties, Solovox",
       "slot": 1,
       "meantFor": 1,
       "diggingMultiplier": 1.5,
@@ -211,7 +211,7 @@
     "maxStackSize": 32,
     "name": "plank",
     "displayName": "Plank",
-    "description": "Stury and reliable, as it should be.",
+    "description": "Sturdy and reliable, as it should be.",
     "texture": 5,
     "alwaysRenderAsSprite": false,
     "toolPiece": false,
@@ -240,7 +240,7 @@
     "alwaysRenderAsSprite": false,
     "toolPiece": true,
     "properties": {
-      "$type": "ToolPieceProperties, FantasyVoxels",
+      "$type": "ToolPieceProperties, Solovox",
       "slot": 1,
       "meantFor": 2,
       "diggingMultiplier": 1.5,
@@ -271,7 +271,7 @@
     "alwaysRenderAsSprite": false,
     "toolPiece": true,
     "properties": {
-      "$type": "ToolPieceProperties, FantasyVoxels",
+      "$type": "ToolPieceProperties, Solovox",
       "slot": 0,
       "meantFor": 1,
       "diggingMultiplier": 0.6,
@@ -286,9 +286,266 @@
     "name": "basket",
     "displayName": "Basket",
     "description": "Basic container for items.",
+    "texture": 17,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "woodshovelhead",
+    "displayName": "Wooden Shovel Head",
+    "description": null,
+    "texture": 10,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "woodshoveltoolhead",
+    "displayName": "Wooden Shovel Tool-Head",
+    "description": null,
+    "texture": 11,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": true,
+    "properties": {
+      "$type": "ToolPieceProperties, Solovox",
+      "slot": 1,
+      "meantFor": 0,
+      "diggingMultiplier": 1.5,
+      "toolPieceLevel": 1,
+      "durability": 120
+    }
+  },
+  {
+    "type": 0,
+    "placement": 19,
+    "maxStackSize": 32,
+    "name": "copper",
+    "displayName": "Copper",
+    "description": null,
     "texture": 0,
     "alwaysRenderAsSprite": false,
     "toolPiece": false,
     "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "copperchunk",
+    "displayName": "Small Chunk of Copper",
+    "description": "Very small piece of copper, not nearly enough to be useful.",
+    "texture": 12,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 0,
+    "placement": 20,
+    "maxStackSize": 32,
+    "name": "forge",
+    "displayName": "Forge",
+    "description": "Hollow stone chamber for liquifying metals with heat.",
+    "texture": 0,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 0,
+    "placement": 21,
+    "maxStackSize": 32,
+    "name": "coal",
+    "displayName": "Coal",
+    "description": null,
+    "texture": 12,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "coallump",
+    "displayName": "Lump of Coal",
+    "description": null,
+    "texture": 13,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 2,
+    "placement": 0,
+    "maxStackSize": 8,
+    "name": "rawbeef",
+    "displayName": "Raw Beef",
+    "description": "Soft but tender, but will probably sustain better if cooked.",
+    "texture": 14,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": {
+      "$type": "FoodProperties, Solovox",
+      "saturation" : 1
+    }
+  },
+  {
+    "type": 2,
+    "placement": 0,
+    "maxStackSize": 8,
+    "name": "cookedbeef",
+    "displayName": "Cooked Beef",
+    "description": "Perfectly cooked, the smell makes me hungry.",
+    "texture": 15,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": {
+      "$type": "FoodProperties, Solovox",
+      "saturation" : 4
+    }
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "claypickcast",
+    "displayName": "Crude Clay Pickaxe Mold",
+    "description": "Very brittle tool mold, probably only strong enough to cast soft metals.",
+    "texture": 16,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "clayaxecast",
+    "displayName": "Crude Clay Axe Mold",
+    "description": "Very brittle tool mold, probably only strong enough to cast soft metals.",
+    "texture": 17,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "clayshovelcast",
+    "displayName": "Crude Clay Shovel Mold",
+    "description": "Very brittle tool mold, probably only strong enough to cast soft metals.",
+    "texture": 18,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "copperpicktoolhead",
+    "displayName": "Copper Pickaxe Tool-Head",
+    "description": null,
+    "texture": 19,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": true,
+    "properties": {
+      "$type": "ToolPieceProperties, Solovox",
+      "slot": 1,
+      "meantFor": 2,
+      "diggingMultiplier": 2.5,
+      "toolPieceLevel": 2,
+      "durability": 150
+    }
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "copperlump",
+    "displayName": "Lump of Copper",
+    "description": "Just enough soft metal to fill a mold.",
+    "texture": 20,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "coppershoveltoolhead",
+    "displayName": "Copper Shovel Tool-Head",
+    "description": null,
+    "texture": 21,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": true,
+    "properties": {
+      "$type": "ToolPieceProperties, Solovox",
+      "slot": 1,
+      "meantFor": 0,
+      "diggingMultiplier": 2.5,
+      "toolPieceLevel": 2,
+      "durability": 175
+    }
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "copperaxetoolhead",
+    "displayName": "Copper Axe Tool-Head",
+    "description": null,
+    "texture": 22,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": true,
+    "properties": {
+      "$type": "ToolPieceProperties, Solovox",
+      "slot": 1,
+      "meantFor": 1,
+      "diggingMultiplier": 2.5,
+      "toolPieceLevel": 2,
+      "durability": 175
+    }
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "clayrodcast",
+    "displayName": "Crude Clay Rod Mold",
+    "description": "Very brittle tool mold, probably only strong enough to cast soft metals.",
+    "texture": 23,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 1,
+    "placement": 0,
+    "maxStackSize": 32,
+    "name": "copperstick",
+    "displayName": "Copper Rod",
+    "description": "Much more sturdy tool handle.",
+    "texture": 24,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": true,
+    "properties": {
+      "$type": "ToolPieceProperties, Solovox",
+      "slot": 0,
+      "meantFor": 1,
+      "diggingMultiplier": 1.2,
+      "toolPieceLevel": 2,
+      "durability": 220
+    }
   }
 ]

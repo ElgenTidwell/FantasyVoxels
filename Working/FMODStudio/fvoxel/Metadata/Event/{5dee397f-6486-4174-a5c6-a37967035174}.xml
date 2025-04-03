@@ -84,7 +84,7 @@
 	</object>
 	<object class="MultiSound" id="{af7dccdb-d51b-4218-9cae-88cf7caa85fe}">
 		<relationship name="sounds">
-			<destination>{2e4b1878-505f-429b-8806-ca11720e1abd}</destination>
+			<destination>{2a41789c-113c-4560-a177-ff05eb6bb5b7}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusEffectChain" id="{5e72de39-31af-4e77-98f5-780caa762e5c}">
@@ -100,22 +100,16 @@
 		</relationship>
 	</object>
 	<object class="MixerBusPanner" id="{442ce6bf-1bd5-4b0b-941e-212848dddb6e}" />
-	<object class="SingleSound" id="{2e4b1878-505f-429b-8806-ca11720e1abd}">
-		<property name="startOffset">
-			<value>22</value>
-		</property>
-		<relationship name="modulators">
-			<destination>{47e4181f-9413-4c00-9748-707c527016b4}</destination>
-		</relationship>
-		<relationship name="audioFile">
-			<destination>{53100508-5df9-4406-9d87-cbd554c93424}</destination>
+	<object class="EventSound" id="{2a41789c-113c-4560-a177-ff05eb6bb5b7}">
+		<relationship name="event">
+			<destination>{56da75c5-f75b-416b-9982-3e6b5473d89e}</destination>
 		</relationship>
 	</object>
 	<object class="MixerBusFader" id="{3b5317eb-c86a-4887-9cb0-0496505e6ab5}" />
 	<object class="MixerBusFader" id="{7d01ecd0-7789-4345-a6fc-74314f1e8dd6}" />
 	<object class="TremoloEffect" id="{d4322b12-ab44-4fd6-b9d5-7b98a70aeacb}">
 		<property name="frequency">
-			<value>20</value>
+			<value>1.70000005</value>
 		</property>
 		<property name="depth">
 			<value>0.439999998</value>
@@ -131,14 +125,6 @@
 		</property>
 		<property name="spread">
 			<value>0.439999998</value>
-		</property>
-	</object>
-	<object class="RandomizerModulator" id="{47e4181f-9413-4c00-9748-707c527016b4}">
-		<property name="nameOfPropertyBeingModulated">
-			<value>pitch</value>
-		</property>
-		<property name="amount">
-			<value>10</value>
 		</property>
 	</object>
 </objects>

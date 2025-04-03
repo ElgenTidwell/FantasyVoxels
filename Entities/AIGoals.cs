@@ -43,7 +43,71 @@ namespace FantasyVoxels.Entities
         {
         }
     }
-    public class AutoSwimGoal : AIGoal
+    public class FleeWhenAttacked : AIGoal
+    {
+        private float waitTime = 0f;
+        private float walkSpeed;
+        Vector3Double curTargDir;
+        public bool flee;
+        public FleeWhenAttacked(float walkSpeed)        {
+            this.walkSpeed = walkSpeed;
+        }
+        public void SetInitTargDir(Vector3Double dir)
+        {
+            curTargDir = dir;
+        }
+        public override bool GetTargetPoint(out Vector3Double targetPos, out float speed, Entity from)
+        {
+            targetPos = from.position;
+            speed = 0;
+
+            if (!flee) return false;
+
+            waitTime -= MGame.dt;
+
+            targetPos = from.position + curTargDir;
+            speed = walkSpeed;
+
+            if (waitTime <= 0f)
+            {
+                waitTime = Random.Shared.NextSingle() + 0.25f;
+
+                curTargDir = new Vector3Double(((Random.Shared.NextSingle() * 2) - 1) * 7, 0, ((Random.Shared.NextSingle() * 2) - 1) * 7);
+            }
+
+            return true;
+        }
+
+        public override void UpdateEntity(Entity self)
+        {
+        }
+	}
+	public class ChaseGoal : AIGoal
+	{
+		private float walkSpeed;
+        public Entity target;
+		public ChaseGoal(float walkSpeed)
+		{
+			this.walkSpeed = walkSpeed;
+		}
+		public override bool GetTargetPoint(out Vector3Double targetPos, out float speed, Entity from)
+		{
+			targetPos = from.position;
+			speed = 0;
+
+			if (target is null) return false;
+
+			targetPos = target.position;
+			speed = walkSpeed;
+
+			return true;
+		}
+
+		public override void UpdateEntity(Entity self)
+		{
+		}
+	}
+	public class AutoSwimGoal : AIGoal
     {
         public override bool GetTargetPoint(out Vector3Double targetPos, out float speed, Entity from)
         {
@@ -56,7 +120,7 @@ namespace FantasyVoxels.Entities
         {
             if (self.swimming)
             {
-                self.gravity = MathF.Min(self.gravity + 28 * MGame.dt, 4.5f);
+                self.gravity = MathF.Min(self.gravity + 24 * MGame.dt, 2.5f);
                 self.grounded = false;
             }
         }

@@ -7,16 +7,22 @@ namespace FantasyVoxels.Biomes
     public class GlowForest : BiomeProvider
     {
         public override string Name => "Glow Forest";
+        private static TerrainLode[] lodes =
+        [
+            new TerrainLode(19,-50,60, 0.35f),
+            new TerrainLode(21,-180,30, 0.3f)
+        ];
+        public override TerrainLode[] Lodes => lodes;
 
         public override byte GetVoxel(float x, float y, float z, int terrainHeight, bool p3d)
         {
-            // Main terrain voxel assignment with 3D noise layers
-            byte voxel = (byte)(y <= terrainHeight ? y < 15 ? 4 : 2 : 0);
+            if (p3d) return (byte)(y < 15 ? 4 : 2);
 
-            if (p3d) voxel = 2;
+            // Main terrain voxel assignment with 3D noise layers
+            byte voxel = (byte)(y <= terrainHeight ? y < 15 && terrainHeight < 15 ? 4 : 2 : 0);
 
             // Water voxel assignment for regions below sea level
-            if (y < 12 && y >= terrainHeight)
+            if (y <= 13 && y >= terrainHeight && voxel == 0)
                 voxel = 3;
 
             return voxel;
@@ -27,7 +33,7 @@ namespace FantasyVoxels.Biomes
             float r = IcariaNoise.GradientNoise(samplex * 0.01f, samplez * 0.01f, MGame.Instance.seed - 10);
             byte voxel = 0;
 
-            if ((int)(r * 35) == tRandom.Next(-35, 35))
+            if ((int)(r * 35) == tRandom.Next(-35, 35) && IcariaNoise.CellularNoise(samplex*0.1f,sampley * 0.1f, MGame.Instance.seed).r >= 0.5f)
             {
                 VoxelStructurePlacer.Place((int)samplex, (int)sampley + 1, (int)samplez, new Tree());
             }
@@ -38,6 +44,10 @@ namespace FantasyVoxels.Biomes
             if ((int)(r * 200) == tRandom.Next(-150, 150))
             {
                 voxel = 15;
+            }
+            if ((int)(r * 40) == tRandom.Next(0,80))
+            {
+                voxel = 18;
             }
             return voxel;
         }

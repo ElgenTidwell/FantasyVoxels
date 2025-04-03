@@ -110,7 +110,7 @@ namespace Icaria.Engine.Procedural
             ulHash = (p1 + Const.YPlusZPrime1) * (p2 + Const.YPlusZPrime2);
             urHash = (p1 + Const.XPlusYPlusZPrime1) * (p2 + Const.XPlusYPlusZPrime2);
             float zHighBlend = InterpolateGradients3D(llHash, lrHash, ulHash, urHash, fx, fy, fz - 1);
-            float sz = fz * fz * (3 - 2 * fz);
+            float sz = fz;
             return zLowBlend + (zHighBlend - zLowBlend) * sz;
         }
 

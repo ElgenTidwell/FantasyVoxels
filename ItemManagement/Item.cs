@@ -7,11 +7,13 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics.CodeAnalysis;
 
 public enum ItemType
 {
     Block,
     Misc,
+    Food
 }
 public enum MaterialType
 {
@@ -26,6 +28,16 @@ public struct ToolPieceProperties
     public float diggingMultiplier;
     public int toolPieceLevel;
     public int durability;
+}
+public enum FoodStatusEffect
+{
+    Strength,
+    Speed,
+}
+public struct FoodProperties
+{
+    public int saturation;
+    public int spoilageTimer;
 }
 public enum ToolPieceSlot
 {
@@ -83,6 +95,25 @@ public struct Item
         }
         return false;
     }
+
+	public override bool Equals([NotNullWhen(true)] object obj)
+	{
+        if(obj is Item i)
+        {
+            return itemID == i.itemID && stack == i.stack;
+        }
+		return base.Equals(obj);
+	}
+
+	public static bool operator ==(Item left, Item right)
+	{
+		return left.Equals(right);
+	}
+
+	public static bool operator !=(Item left, Item right)
+	{
+		return !(left == right);
+	}
 }
 public static class ItemManager
 {

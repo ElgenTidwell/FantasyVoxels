@@ -10,6 +10,7 @@
 
 #-------------------------------- References --------------------------------#
 
+/reference:../Working/ContentExtension/SolvoxContentExtension.dll
 
 #---------------------------------- Content ---------------------------------#
 
@@ -25,10 +26,20 @@
 #begin ../Working/FMODStudio/fvoxel/Build/Desktop/Master.strings.bank
 /copy:../Working/FMODStudio/fvoxel/Build/Desktop/Master.strings.bank;Master.strings.bank
 
+#begin ../Working/Models/roboPlayer.fbx
+/importer:FbxImporter
+/processor:ModelProcessor
+/build:../Working/Models/roboPlayer.fbx;Models/roboPlayer.fbx
+
 #begin ../Working/Models/roboPlayer.glb
-/importer:OpenAssetImporter
+/importer:FbxImporter
 /processor:ModelProcessor
 /build:../Working/Models/roboPlayer.glb;Models/roboPlayer.glb
+
+#begin ../Working/Models/roboPlayer.obj
+/importer:FbxImporter
+/processor:ModelProcessor
+/build:../Working/Models/roboPlayer.obj;Models/roboPlayer.obj
 
 #begin ../Working/Shaders/breakingVoxel.fx
 /importer:EffectImporter
@@ -39,11 +50,6 @@
 /importer:EffectImporter
 /processor:EffectProcessor
 /build:../Working/Shaders/chunk.fx;Shaders/chunk.fx
-
-#begin ../Working/Shaders/chunkbuilder.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/build:../Working/Shaders/chunkbuilder.fx;Shaders/chunkbuilder.fx
 
 #begin ../Working/Shaders/cloud.fx
 /importer:EffectImporter
@@ -64,11 +70,6 @@
 /importer:EffectImporter
 /processor:EffectProcessor
 /build:../Working/Shaders/pscreen.fx;Shaders/pscreen.fx
-
-#begin ../Working/Shaders/screencomp.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/build:../Working/Shaders/screencomp.fx;Shaders/screencomp.fx
 
 #begin ../Working/Shaders/skybox.fx
 /importer:EffectImporter
@@ -106,6 +107,18 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/backpack.png;Textures/backpack.png
+
+#begin ../Working/Textures/basket.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/basket.png;Textures/basket.png
 
 #begin ../Working/Textures/black.png
 /importer:TextureImporter
@@ -179,6 +192,42 @@
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/colors.png;Textures/colors.png
 
+#begin ../Working/Textures/cow_var1.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/cow_var1.png;Textures/cow_var1.png
+
+#begin ../Working/Textures/cow.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/cow.png;Textures/cow.png
+
+#begin ../Working/Textures/forge.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/forge.png;Textures/forge.png
+
 #begin ../Working/Textures/items.png
 /importer:TextureImporter
 /processor:TextureProcessor
@@ -250,6 +299,18 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/normals.png;Textures/normals.png
+
+#begin ../Working/Textures/RBBody.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/RBBody.png;Textures/RBBody.png
 
 #begin ../Working/Textures/rbhand.png
 /importer:TextureImporter
@@ -4804,7 +4865,20 @@
 
 #begin GeonBit.UI/Themes/lowres/ThemeData.xml
 /copy:GeonBit.UI/Themes/lowres/ThemeData.xml
-#begin ../Working/Textures/RBBody.png
+#begin ../Working/Models/cow.glb
+/importer:FbxImporter
+/processor:ModelProcessor
+/build:../Working/Models/cow.glb;Models/cow.glb
+#begin ../Working/Models/cow.obj
+/importer:FbxImporter
+/processor:ModelProcessor
+/build:../Working/Models/cow.obj;Models/cow.obj
+#begin ../Working/Models/cow.fbx
+/importer:FbxImporter
+/processor:ModelProcessor
+/build:../Working/Models/cow.fbx;Models/cow.fbx
+
+#begin ../Working/Textures/logo.png
 /importer:TextureImporter
 /processor:TextureProcessor
 /processorParam:ColorKeyColor=255,0,255,255
@@ -4814,13 +4888,45 @@
 /processorParam:ResizeToPowerOfTwo=False
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
-/build:../Working/Textures/RBBody.png;Textures/RBBody.png
+/build:../Working/Textures/logo.png;Textures/logo.png
 
-#begin ../Working/Models/roboPlayer.obj
-/importer:OpenAssetImporter
-/processor:ModelProcessor
-/build:../Working/Models/roboPlayer.obj;Models/roboPlayer.obj
-#begin ../Working/Models/roboPlayer.fbx
+#begin ../Working/Textures/particles.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/particles.png;Textures/particles.png
+
+#begin ../Working/Textures/ideabook.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/ideabook.png;Textures/ideabook.png
+
+#begin ../Working/Models/skeleton.fbx
 /importer:FbxImporter
 /processor:ModelProcessor
-/build:../Working/Models/roboPlayer.fbx;Models/roboPlayer.fbx
+/build:../Working/Models/skeleton.fbx;Models/skeleton.fbx
+
+#begin ../Working/Textures/skeleton.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/skeleton.png;Textures/skeleton.png

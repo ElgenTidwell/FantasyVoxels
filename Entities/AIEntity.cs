@@ -14,10 +14,13 @@ namespace FantasyVoxels.Entities
         protected Vector3Double moveTo;
         protected float curSpeed;
         protected bool onPath;
+        protected float pathTolerance = 3;
         float pathTime = 0;
 
         public override void Update()
         {
+            if(health <= 0) { base.Update(); return; }
+
             foreach (var goal in aiGoals)
             {
                 goal.UpdateEntity(this);
@@ -46,16 +49,18 @@ namespace FantasyVoxels.Entities
             pathTime += MGame.dt;
 
             float targdist = Vector3.Distance(targPos, targFlat);
-            if (targdist < 3 || pathTime > 5)
+            if (targdist < pathTolerance || pathTime > 5)
             {
                 pathTime = 0f;
                 wishDir = Vector3.Zero;
                 onPath = false;
             }
 
-            velocity = Maths.MoveTowards(velocity, wishDir * curSpeed, MGame.dt * 10);
+            velocity = Maths.MoveTowards(velocity, wishDir * (swimming ? curSpeed*0.5f : curSpeed), MGame.dt * (swimming?4f:10));
 
-            if (Vector3.Distance(wishDir * 2, velocity) > 0.8f && grounded && targdist > 3.5f)
+            Vector3 minPos = (Vector3)position + bounds.Min.Y*Vector3.Up;
+
+            if (velocity.LengthSquared() > 0 && MGame.Instance.GrabVoxel(minPos+wishDir) != 0 && grounded)
             {
                 gravity = 7f;
                 grounded = false;

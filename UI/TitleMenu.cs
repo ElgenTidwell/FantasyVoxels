@@ -64,7 +64,7 @@ namespace FantasyVoxels.UI
         {
             mainMenu = new Panel(new Vector2(1024, 800), PanelSkin.None);
 
-            mainMenu.AddChild(new Header("UNNAMED FANTASY VOXEL GAME", Anchor.TopCenter));
+            mainMenu.AddChild(new Image(MGame.Instance.titleTexture, new Vector2(560,128)*2, ImageDrawMode.Stretch, Anchor.TopCenter));
 
             mainMenu.AddChild(new Button("Singleplayer", ButtonSkin.Alternative, Anchor.Center)).OnClick += GoToWorldBrowser;
             mainMenu.AddChild(new Button("Options", ButtonSkin.Alternative)).OnClick += GoToOptions;
@@ -85,12 +85,12 @@ namespace FantasyVoxels.UI
             worldCreator = new Panel(new Vector2(1512, 800), PanelSkin.Default);
             worldCreator.AddChild(new Label("Create World", Anchor.TopLeft));
 
-            worldCreator.AddChild(new Label("World Name:", anchor: Anchor.AutoCenter, offset: Vector2.UnitY * 300));
+            worldCreator.AddChild(new Label("World Name:", anchor: Anchor.AutoCenter));
             worldName = new TextInput(false, new Vector2(512, 70), Anchor.AutoCenter, skin: PanelSkin.Default);
             worldName.PlaceholderText = "New World";
             worldCreator.AddChild(worldName);
 
-            worldCreator.AddChild(new Label("World Seed (Leave Empty for Random):", anchor: Anchor.AutoCenter, offset: Vector2.UnitY * 100));
+            worldCreator.AddChild(new Label("World Seed (Required):", anchor: Anchor.AutoCenter, offset: Vector2.UnitY * 200));
             worldSeed = new TextInput(false, new Vector2(512, 70), Anchor.AutoCenter, skin: PanelSkin.Default);
             worldCreator.AddChild(worldSeed);
 
@@ -195,19 +195,20 @@ namespace FantasyVoxels.UI
 
             worldBrowserWorlds.Items = l.ToArray();
         }
-        private static void CreateNewWorld(GeonBit.UI.Entities.Entity entity)
+        private static async void CreateNewWorld(GeonBit.UI.Entities.Entity entity)
         {
             if (string.IsNullOrEmpty(worldName.TextParagraph.Text)) return;
-            WorldTimeManager.SetWorldTime(0f);
+            if (string.IsNullOrEmpty(worldSeed.TextParagraph.Text)) return;
+			WorldTimeManager.SetWorldTime(0f);
             Save.WorldName = worldName.TextParagraph.Text;
-            Instance.seed = string.IsNullOrEmpty(worldSeed.TextParagraph.Text) ? Random.Shared.Next() : (int.TryParse(worldSeed.TextParagraph.Text, out int seed) ? seed : worldSeed.TextParagraph.Text.GetHashCode());
+            Instance.seed = (int.TryParse(worldSeed.TextParagraph.Text, out int seed) ? seed : worldSeed.TextParagraph.Text.GetHashCode());
 
             Mouse.SetPosition(200, 200);
 
             var label = new Label("Loading World...", Anchor.Center);
             UserInterface.Active.AddEntity(label);
 
-            Instance.LoadWorld();
+            await Instance.LoadWorld();
 
             UserInterface.Active.RemoveEntity(label);
             Instance.currentPlayState = PlayState.World;

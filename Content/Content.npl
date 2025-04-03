@@ -2,7 +2,7 @@
 	"root": "../Working",
 	"references":
 	[
-
+		"../Working/ContentExtension/SolvoxContentExtension.dll"
 	],
 	"content": {
 		"textures": {

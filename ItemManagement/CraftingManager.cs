@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -9,28 +10,68 @@ using System.Threading.Tasks;
 
 namespace FantasyVoxels.ItemManagement
 {
+    public enum RecipeType
+    {
+        Crafting,
+        Cooking
+    }
     public struct Recipe
     {
         public int[] itemInput;
         public Item itemOutput;
+        public RecipeType type;
 
         public bool noOrder;
-    }
+
+		public override bool Equals([NotNullWhen(true)] object obj)
+		{
+            if(obj is Recipe b)
+            {
+                return itemInput == b.itemInput && itemOutput == b.itemOutput && type == b.type;
+            }
+
+			return base.Equals(obj);
+		}
+
+		public static bool operator ==(Recipe left, Recipe right)
+		{
+			return left.Equals(right);
+		}
+
+		public static bool operator !=(Recipe left, Recipe right)
+		{
+			return !(left == right);
+		}
+	}
     public struct TemplateRecipe
     {
         public string[] itemInput;
         public string itemOutput;
         public byte outputStack;
+        public RecipeType type;
 
         public bool noOrder;
     }
     public static class CraftingManager
     {
-        private static List<Recipe> recipes = new List<Recipe>();
+        private static MultiValueDictionary<RecipeType,Recipe> recipes = new MultiValueDictionary<RecipeType, Recipe>();
+
+        public static Dictionary<int, float> registeredFuelSources = new Dictionary<int, float>();
+        private static (string, float)[] fuelNames = new []
+        {
+            ("coallump", 1f),
+            ("plank", 0.75f),
+            ("stick", 0.5f),
+		};
+
+        public static List<Recipe> GetRecipes(RecipeType type)
+        {
+            return recipes[type];
+        }
 
         public static void Register(Recipe r)
         {
-            recipes.Add(r);
+            recipes.Add(r.type,r);
         }
         public static void Register(TemplateRecipe r)
         {
@@ -39,6 +80,7 @@ namespace FantasyVoxels.ItemManagement
             recipe.noOrder = r.noOrder;
             recipe.itemOutput = new Item { itemID= Get(r.itemOutput), stack = r.outputStack};
             recipe.itemInput = new int[r.itemInput.Length];
+            recipe.type = r.type;
             for (int i = 0; i < r.itemInput.Length; i++)
             {
                 if (string.IsNullOrEmpty(r.itemInput[i])) { recipe.itemInput[i] = -1; continue; }
@@ -46,7 +88,7 @@ namespace FantasyVoxels.ItemManagement
                 recipe.itemInput[i] = Get(r.itemInput[i]);
             }
 
-            recipes.Add(recipe);
+            recipes.Add(recipe.type, recipe);
         }
 
         static int Get(string name) => ItemManager.GetItemID(name);
@@ -118,6 +160,39 @@ namespace FantasyVoxels.ItemManagement
             {
                 Register(templateRecipes[i]);
             }
+
+            for(int i = 0; i < fuelNames.Length; i++)
+            {
+                registeredFuelSources.Add(ItemManager.GetItemID(fuelNames[i].Item1), fuelNames[i].Item2);
+            }
+        }
+        public static Item TryCook(Item fromItem)
+        {
+            if(fromItem.itemID >= 0)
+            {
+                int index = recipes[RecipeType.Cooking].FindIndex(0, r => r.itemInput.Length == 1 && r.itemInput[0] == fromItem.itemID);
+
+                if(index != -1)
+                {
+                    return recipes[RecipeType.Cooking][index].itemOutput;
+                }
+            }
+
+            return new Item { itemID = -1, stack = 0 };
+        }
+        public static Item TryCook(Item fromItem, Item mold)
+        {
+            if (fromItem.itemID >= 0)
+            {
+                int index = recipes[RecipeType.Cooking].FindIndex(0, r => r.itemInput.Length == 2 && r.itemInput[0] == fromItem.itemID && r.itemInput[1] == mold.itemID);
+
+                if (index != -1)
+                {
+                    return recipes[RecipeType.Cooking][index].itemOutput;
+                }
+            }
+
+            return new Item { itemID = -1, stack = 0 };
         }
         public static Item TryCraft(ItemContainer input)
         {
@@ -135,21 +210,21 @@ namespace FantasyVoxels.ItemManagement
                 if (!any) return new Item { itemID = -1, stack = 0 };
 
                 Recipe recipe = new Recipe();
-                for(int i = 0; i < recipes.Count; i++)
+                for(int i = 0; i < recipes[RecipeType.Crafting].Count; i++)
                 {
-                    if (!recipes[i].noOrder)
+                    if (!recipes[RecipeType.Crafting][i].noOrder)
                     {
-                        if (itemIDs.SequenceEqual(recipes[i].itemInput))
+                        if (itemIDs.SequenceEqual(recipes[RecipeType.Crafting][i].itemInput))
                         {
-                            recipe = recipes[i];
+                            recipe = recipes[RecipeType.Crafting][i];
                             break;
                         }
                     }
                     else
                     {
-                        if(recipes[i].itemInput.OrderBy(x=>x).SequenceEqual(itemIDs.OrderBy(x=>x)))
+                        if(recipes[RecipeType.Crafting][i].itemInput.OrderBy(x=>x).SequenceEqual(itemIDs.OrderBy(x=>x)))
                         {
-                            recipe = recipes[i];
+                            recipe = recipes[RecipeType.Crafting][i];
                             break;
                         }
                     }

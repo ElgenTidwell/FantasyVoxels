@@ -78,7 +78,7 @@ namespace FantasyVoxels.Blocks
             {
                 verts[i] = new VertexPositionNormalTexture(Vector3.Transform(verts[i].Position, translate)+new Vector3(x,y,z), verts[i].Normal, verts[i].TextureCoordinate);
             }
-            translate = Matrix.CreateRotationY(MathHelper.ToRadians(-45)) * Matrix.CreateTranslation(0.5f,0.5f, 0.5f);
+            translate = Matrix.CreateScale(-1,1,1)*Matrix.CreateRotationY(MathHelper.ToRadians(45+90)) * Matrix.CreateTranslation(0.5f,0.5f, 0.5f);
             for (int i = 12; i < 24; i++)
             {
                 verts[i] = new VertexPositionNormalTexture(Vector3.Transform(verts[i].Position, translate) + new Vector3(x, y, z), verts[i].Normal, verts[i].TextureCoordinate);

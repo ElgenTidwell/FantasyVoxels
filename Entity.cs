@@ -1,4 +1,5 @@
-﻿using GeonBit.UI.Entities;
+﻿using FantasyVoxels.Entities;
+using GeonBit.UI.Entities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Newtonsoft.Json.Linq;
@@ -51,6 +52,7 @@ namespace FantasyVoxels
         {
             public int damage;
             public Vector3Double from;
+            public Entity fromEntity;
         }
 
         public virtual void Die() { }
@@ -90,6 +92,8 @@ namespace FantasyVoxels
         public abstract object CaptureCustomSaveData();
         public abstract void RestoreCustomSaveData(object data);
 
+        public virtual void OnChunkChanged() { }
+
         public void HandleCollisions()
         {
             Vector3Double min = bounds.Min + position;
@@ -99,15 +103,15 @@ namespace FantasyVoxels
             int cy = (int)Math.Floor(min.Y / Chunk.Size);
             int cz = (int)Math.Floor(min.Z / Chunk.Size);
 
-            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
-            if (!MGame.Instance.loadedChunks[MGame.CCPos((cx, cy, cz))].generated) return;
+            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) { velocity = Vector3.Zero; gravity = 0; return; }
+            if (!MGame.Instance.loadedChunks[MGame.CCPos((cx, cy, cz))].generated) { velocity = Vector3.Zero; gravity = 0; return; }
 
             cx = (int)Math.Floor(max.X / Chunk.Size);
             cy = (int)Math.Floor(max.Y / Chunk.Size);
             cz = (int)Math.Floor(max.Z / Chunk.Size);
 
-            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) return;
-            if (!MGame.Instance.loadedChunks[MGame.CCPos((cx, cy, cz))].generated) return;
+            if (!MGame.Instance.loadedChunks.ContainsKey(MGame.CCPos((cx, cy, cz)))) { velocity = Vector3.Zero; gravity = 0; return; }
+            if (!MGame.Instance.loadedChunks[MGame.CCPos((cx, cy, cz))].generated) { velocity = Vector3.Zero; gravity = 0; return; }
 
             min.X = bounds.Min.X * 0.9f + position.X;
             min.Z = bounds.Min.Z * 0.9f + position.Z;
@@ -200,16 +204,17 @@ namespace FantasyVoxels
                 velocity.Y = gravity;
             }
 
-            if (grounded && !wasGrounded && oldGrav < -12)
+            if (grounded && !wasGrounded && oldGrav < -13 && !swimming)
             {
                 ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, Voxel.voxelTypes[MGame.Instance.GrabVoxel(new Vector3((float)position.X, (float)(min.Y), (float)position.Z))].topTexture, new Vector3Double(position.X, min.Y, position.Z), Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
 
-                OnTakeDamage(new DamageInfo { damage = (int)float.Ceiling((-oldGrav-12) / 1.5f) });
+                OnTakeDamage(new DamageInfo { damage = (int)float.Ceiling((-oldGrav-13) / 2) });
             }
 
             if(swimming && !wasSwimming)
             {
-                ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.BlockAtlas, 2, new Vector3Double(position.X,min.Y,position.Z), Vector3.Up, 2f, 12f, Vector3.One * 0.25f, Vector3.One * 2));
+                MGame.PlaySplashSound((Vector3)position, float.Abs(oldGrav / 32f));
+                ParticleSystemManager.AddSystem(new ParticleSystem(25, ParticleSystem.TextureProvider.ParticleAtlas, 0, new Vector3Double(position.X,min.Y,position.Z), Vector3.Up, 0.25f, 12f, Vector3.One * 0.25f, Vector3.One * 2,3,0.5f));
             }
         }
     }
@@ -217,7 +222,8 @@ namespace FantasyVoxels
     {
         public static Dictionary<long, List<Entity>> loadedEntities = new Dictionary<long, List<Entity>>();
         private static Queue<Entity> delete = new Queue<Entity>();
-
+        private static Queue<Entity> spawn = new Queue<Entity>();
+        static Object threadLock;
         public static void Clear()
         {
             loadedEntities.Clear();
@@ -234,6 +240,21 @@ namespace FantasyVoxels
 
             Add(entity);
         }
+        public static void SpawnEntityThreaded(Entity entity)
+        {
+            lock(threadLock)
+            {
+                int cx = (int)double.Floor(entity.position.X / Chunk.Size);
+                int cy = (int)double.Floor(entity.position.Y / Chunk.Size);
+                int cz = (int)double.Floor(entity.position.Z / Chunk.Size);
+
+                entity.parentChunk = MGame.CCPos((cx, cy, cz));
+
+                entity.Start();
+
+                Add(entity);
+            }
+        }
         public static void DeleteEntity(Entity entity)
         {
             delete.Enqueue(entity);
@@ -246,7 +267,6 @@ namespace FantasyVoxels
                 Remove(entity, entity.parentChunk);
                 entity.Destroyed();
             }
-
             if (!loadedEntities.TryGetValue(chunk, out List<Entity> value)) return;
 
             for(int i = value.Count-1; i >= 0; i--)
@@ -255,18 +275,18 @@ namespace FantasyVoxels
 
                 long oldpos = entity.parentChunk;
 
-                if(!entity.disablePush)
-                {
-                    foreach (var other in value)
-                    {
-                        if (new BoundingBox(entity.bounds.Min + (Vector3)entity.position, entity.bounds.Max + (Vector3)entity.position)
-                            .Contains(new BoundingBox(other.bounds.Min + (Vector3)other.position, other.bounds.Max + (Vector3)other.position)) != ContainmentType.Disjoint && !other.disablePush)
-                        {
-                            other.velocity -= ((Vector3)entity.position - (Vector3)other.position) * MGame.dt * 50;
-                            entity.velocity += ((Vector3)entity.position - (Vector3)other.position) * MGame.dt * 50;
-                        }
-                    }
-                }
+                //if(!entity.disablePush)
+                //{
+                //    foreach (var other in value)
+                //    {
+                //        if (new BoundingBox(entity.bounds.Min + (Vector3)entity.position, entity.bounds.Max + (Vector3)entity.position)
+                //            .Contains(new BoundingBox(other.bounds.Min + (Vector3)other.position, other.bounds.Max + (Vector3)other.position)) != ContainmentType.Disjoint && !other.disablePush)
+                //        {
+                //            other.velocity -= ((Vector3)entity.position - (Vector3)other.position) * MGame.dt * 50;
+                //            entity.velocity += ((Vector3)entity.position - (Vector3)other.position) * MGame.dt * 50;
+                //        }
+                //    }
+                //}
 
                 entity.Update();
 
@@ -280,6 +300,7 @@ namespace FantasyVoxels
                 {
                     Remove(entity, oldpos);
                     Add(entity);
+                    entity.OnChunkChanged();
                 }
             }
         }
@@ -287,20 +308,28 @@ namespace FantasyVoxels
         {
             if (!loadedEntities.TryGetValue(chunk, out List<Entity> value)) return;
 
-            foreach (var entity in value)
+            for (int i = value.Count - 1; i >= 0; i--)
             {
-                entity.Render();
+                value[i].Render();
             }
         }
         private static void Add(Entity entity)
         {
-            List<Entity> list;
-            if(!loadedEntities.TryGetValue(entity.parentChunk,out list))
+            spawn.Enqueue(entity);
+        }
+        public static void SpawnAll()
+        {
+            while(spawn.Count > 0)
             {
-                list = new List<Entity>();
-                loadedEntities.Add(entity.parentChunk,list);
+                var entity = spawn.Dequeue();
+                List<Entity> list;
+                if (!loadedEntities.TryGetValue(entity.parentChunk, out list))
+                {
+                    list = new List<Entity>();
+                    loadedEntities.Add(entity.parentChunk, list);
+                }
+                list.Add(entity);
             }
-            list.Add(entity);
         }
         private static void Remove(Entity entity, long pos)
         {
@@ -311,5 +340,30 @@ namespace FantasyVoxels
                 if(list.Count == 0) loadedEntities.Remove(pos);
             }
         }
-    }
+        public static List<Entity> Get(long id)
+        {
+            if (loadedEntities.TryGetValue(id, out var list)) return list;
+            return null;
+		}
+		public static List<Entity> Get(Vector3Double p)
+		{
+			int cx = (int)Math.Floor(p.X / Chunk.Size);
+			int cy = (int)Math.Floor(p.Y / Chunk.Size);
+			int cz = (int)Math.Floor(p.Z / Chunk.Size);
+
+            long id = MGame.CCPos((cx,cy,cz));
+
+			return Get(id);
+		}
+		public static long GetChunk(Vector3Double p)
+		{
+			int cx = (int)Math.Floor(p.X / Chunk.Size);
+			int cy = (int)Math.Floor(p.Y / Chunk.Size);
+			int cz = (int)Math.Floor(p.Z / Chunk.Size);
+
+			long id = MGame.CCPos((cx, cy, cz));
+
+			return id;
+		}
+	}
 }

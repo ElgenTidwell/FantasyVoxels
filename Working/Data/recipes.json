@@ -76,7 +76,7 @@
       ""
     ],
     "itemOutput": "plank",
-    "outputStack": 12,
+    "outputStack": 16,
     "noOrder": true
   },
   {
@@ -151,13 +151,13 @@
       "clay",
       "stonechunk",
       "clay",
-      "",
-      "",
-      ""
+      "stonechunk",
+      "clay",
+      "stonechunk"
     ],
     "itemOutput": "cobblestone",
-    "outputStack": 4,
-    "noOrder": true
+    "outputStack": 1,
+    "noOrder": false
   },
   {
     "itemInput": [
@@ -206,5 +206,198 @@
     "itemOutput": "basket",
     "outputStack": 1,
     "noOrder": false
+  },
+  {
+    "itemInput": [
+      "stick",
+      "stick",
+      "stick",
+      "stick",
+      "",
+      "stick",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "woodshovelhead",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "stick",
+      "stick",
+      "stick",
+      "stick",
+      "clay",
+      "stick",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "woodshoveltoolhead",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "woodshovelhead",
+      "clay",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ],
+    "itemOutput": "woodshoveltoolhead",
+    "outputStack": 1,
+    "noOrder": true
+  },
+  {
+    "itemInput": [
+      "stonechunk",
+      "stonechunk",
+      "stonechunk",
+      "cobblestone",
+      "",
+      "cobblestone",
+      "cobblestone",
+      "cobblestone",
+      "cobblestone"
+    ],
+    "itemOutput": "forge",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "clay",
+      "clay",
+      "clay",
+      "clay",
+      "woodpickhead",
+      "clay",
+      "clay",
+      "clay",
+      "clay"
+    ],
+    "itemOutput": "claypickcast",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "clay",
+      "clay",
+      "clay",
+      "clay",
+      "woodaxehead",
+      "clay",
+      "clay",
+      "clay",
+      "clay"
+    ],
+    "itemOutput": "clayaxecast",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "clay",
+      "clay",
+      "clay",
+      "clay",
+      "woodshovelhead",
+      "clay",
+      "clay",
+      "clay",
+      "clay"
+    ],
+    "itemOutput": "clayshovelcast",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "clay",
+      "clay",
+      "clay",
+      "clay",
+      "stick",
+      "clay",
+      "clay",
+      "clay",
+      "clay"
+    ],
+    "itemOutput": "clayrodcast",
+    "outputStack": 1,
+    "noOrder": false
+  },
+  {
+    "itemInput": [
+      "",
+      "",
+      "",
+      "copperchunk",
+      "copperchunk",
+      "",
+      "copperchunk",
+      "copperchunk",
+      ""
+    ],
+    "itemOutput": "copperlump",
+    "outputStack": 1,
+    "noOrder": true
+  },
+  {
+    "itemInput": [
+      "rawbeef"
+    ],
+    "itemOutput": "cookedbeef",
+    "outputStack": 1,
+    "noOrder": false,
+    "type":1
+  },
+  {
+    "itemInput": [
+      "copperlump",
+      "claypickcast"
+    ],
+    "itemOutput": "copperpicktoolhead",
+    "outputStack": 1,
+    "noOrder": false,
+    "type":1
+  },
+  {
+    "itemInput": [
+      "copperlump",
+      "clayshovelcast"
+    ],
+    "itemOutput": "coppershoveltoolhead",
+    "outputStack": 1,
+    "noOrder": false,
+    "type":1
+  },
+  {
+    "itemInput": [
+      "copperlump",
+      "clayaxecast"
+    ],
+    "itemOutput": "copperaxetoolhead",
+    "outputStack": 1,
+    "noOrder": false,
+    "type":1
+  },
+  {
+    "itemInput": [
+      "copperlump",
+      "clayrodcast"
+    ],
+    "itemOutput": "copperstick",
+    "outputStack": 1,
+    "noOrder": false,
+    "type":1
   }
 ]

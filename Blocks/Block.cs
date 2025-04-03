@@ -11,13 +11,51 @@ using static FantasyVoxels.Voxel;
 
 namespace FantasyVoxels.Blocks
 {
-    public abstract class Block
+    [System.Serializable]
+    public struct CompactBlockPos
+    {
+        public int x; 
+        public int y; 
+        public int z; 
+        public long chunkID;
+    }
+    public interface TickingCustomDataBlock
+    {
+        public void tick(CompactBlockPos pos);
+    }
+    public interface TextureOverrideCustomDataBlock
+    {
+		public short topTexture { get; }
+		public short bottomTexture { get; }
+		public short leftTexture { get; }
+		public short rightTexture { get; }
+		public short frontTexture { get; }
+		public short backTexture { get; }
+	}
+	public interface BlockLightOverrideCustomDataBlock
+	{
+		public byte light { get; }
+	}
+	public abstract class Block
     {
         protected int myVoxelID;
         public bool supportsCustomMeshing;
         public bool smoothLightingEnable;
         public bool customDrops;
         public bool customBounds;
+        public static Dictionary<CompactBlockPos, object> blockCustomData = new Dictionary<CompactBlockPos, object>();
+
+        public static void TickBlockTickers()
+        {
+            foreach(var block in blockCustomData)
+            {
+                if(block.Value is TickingCustomDataBlock)
+                {
+                    (block.Value as TickingCustomDataBlock).tick(block.Key);
+                }
+            }
+        }
+
         public Block SetTextureData(TextureSetSettings settings, short texture)
         {
             if (settings.HasFlag(TextureSetSettings.RIGHT)) voxelTypes[myVoxelID].rightTexture = texture;
@@ -41,6 +79,9 @@ namespace FantasyVoxels.Blocks
         /// <param name="chunk">The parent chunk</param>
         /// <returns>Whether to instantly propogate to the surrounding voxels. For things like water, this would instantly fill an area, so it should be false in that case.</returns>
         protected abstract bool BlockUpdate((int x, int y, int z) posInChunk, Chunk chunk);
+        public virtual bool UseBlock((int x, int y, int z) posInChunk, Chunk chunk, Entity from) { return false; }
+        public virtual void PlaceBlock((int x, int y, int z) posInChunk, Chunk chunk) { }
+        public virtual void BreakBlock((int x, int y, int z) posInChunk, Chunk chunk) { }
         public virtual List<VertexPositionNormalTexture> CustomMesh(int x, int y, int z, int checkFace, int otherVoxel, Vector2 baseUVOffset, Vector3 chunkPos)
         {
             return null;
@@ -82,6 +123,14 @@ namespace FantasyVoxels.Blocks
                     }
                 }
             }
+        }
+        public static CompactBlockPos GetPos(int x, int y, int z, long chunkID)
+        {
+            return new CompactBlockPos { x = x, y = y, z = z, chunkID = chunkID };
+        }
+        public static void MarkChunkDirty(long id)
+        {
+            MGame.Instance.loadedChunks[id].Remesh();
         }
     }
 }

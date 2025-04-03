@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 
 namespace FantasyVoxels.ItemManagement
 {
+    [System.Serializable]
     public class ItemContainer
     {
-        protected Item[] items;
-        public EventHandler onItemsChanged; //TODO
+        public Item[] items;
 
         public ItemContainer(int itemCount)
         {

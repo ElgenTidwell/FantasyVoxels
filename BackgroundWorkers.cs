@@ -1,4 +1,5 @@
-﻿using Microsoft.Xna.Framework;
+﻿using FantasyVoxels.Entities;
+using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,19 +19,19 @@ namespace FantasyVoxels
                 while (!cancel.IsCancellationRequested)
                 {
 
-                    var span = MGame.Instance.loadedChunks.ToArray().AsSpan();
-                    span.Sort((KeyValuePair<long, Chunk> a, KeyValuePair<long, Chunk> b) =>
-                    {
-                        var apos = a.Value.chunkPos;
-                        var bpos = b.Value.chunkPos;
+                    //var span = MGame.Instance.loadedChunks.ToArray().AsSpan();
+                    //span.Sort((KeyValuePair<long, Chunk> a, KeyValuePair<long, Chunk> b) =>
+                    //{
+                    //    var apos = a.Value.chunkPos;
+                    //    var bpos = b.Value.chunkPos;
 
-                        float aDist = Vector3.DistanceSquared(new Vector3(apos.x, apos.y, apos.z), new Vector3(MGame.Instance.playerChunkPos.x, MGame.Instance.playerChunkPos.y, MGame.Instance.playerChunkPos.z));
-                        float bDist = Vector3.DistanceSquared(new Vector3(bpos.x, bpos.y, bpos.z), new Vector3(MGame.Instance.playerChunkPos.x, MGame.Instance.playerChunkPos.y, MGame.Instance.playerChunkPos.z));
+                    //    float aDist = Vector3.DistanceSquared(new Vector3(apos.x, apos.y, apos.z), new Vector3(MGame.Instance.playerChunkPos.x, MGame.Instance.playerChunkPos.y, MGame.Instance.playerChunkPos.z));
+                    //    float bDist = Vector3.DistanceSquared(new Vector3(bpos.x, bpos.y, bpos.z), new Vector3(MGame.Instance.playerChunkPos.x, MGame.Instance.playerChunkPos.y, MGame.Instance.playerChunkPos.z));
 
-                        return aDist.CompareTo(bDist);
-                    });
+                    //    return aDist.CompareTo(bDist);
+                    //});
 
-                    foreach (var c in span)
+                    foreach (var c in MGame.Instance.loadedChunks)
                     {
                         Chunk currentChunk = c.Value;
                         BoundingBox chunkbounds = new BoundingBox(new Vector3(currentChunk.chunkPos.x, currentChunk.chunkPos.y, currentChunk.chunkPos.z) * Chunk.Size,
@@ -64,13 +65,14 @@ namespace FantasyVoxels
                                 currentChunk.ReLight(false);
                             else
                                 currentChunk.Remesh();
-                            continue;
                         }
 
                         if (!currentChunk.meshUpdated[currentChunk.GetLOD()])
                         {
                             currentChunk.Remesh();
                         }
+
+                        WorldPopulator.CheckChunk(c.Key);
                     }
 
                     if (deleteChunks.Count == 0) continue;
@@ -94,7 +96,7 @@ namespace FantasyVoxels
             {
                 while (!cancel.IsCancellationRequested)
                 {
-                    while(!MGame.Instance.toGenerate.IsEmpty)
+                    if(!MGame.Instance.toGenerate.IsEmpty)
                     {
                         MGame.Instance.ProcessGeneration();
                     }

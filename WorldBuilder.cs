@@ -19,8 +19,8 @@ namespace FantasyVoxels
 
         static WorldBuilder()
         {
-            ContinentalnessCurve.Keys.Add(new CurveKey(1, 350));
-            ContinentalnessCurve.Keys.Add(new CurveKey(0.2f, 178));
+            ContinentalnessCurve.Keys.Add(new CurveKey(1, 60));
+            ContinentalnessCurve.Keys.Add(new CurveKey(0.2f, 16));
             ContinentalnessCurve.Keys.Add(new CurveKey(0.1f, 90));
             ContinentalnessCurve.Keys.Add(new CurveKey(0.04f, 80));
             ContinentalnessCurve.Keys.Add(new CurveKey(-0.1f, 25));
@@ -33,10 +33,10 @@ namespace FantasyVoxels
             ErosionCurve.Keys.Add(new CurveKey(0.85f, 0.2f));
             ErosionCurve.Keys.Add(new CurveKey(1, 2f));
 
-            PVCurve.Keys.Add(new CurveKey(-1, 500));
+            PVCurve.Keys.Add(new CurveKey(-1, 20));
             PVCurve.Keys.Add(new CurveKey(-0.5f, 0));
             PVCurve.Keys.Add(new CurveKey(0, 60));
-            PVCurve.Keys.Add(new CurveKey(1, 900));
+            PVCurve.Keys.Add(new CurveKey(1, 30));
 
             DensityCurve.Keys.Add(new CurveKey(-30, 0.8f));
             DensityCurve.Keys.Add(new CurveKey(0, 0.7f));

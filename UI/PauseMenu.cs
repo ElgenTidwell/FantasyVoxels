@@ -37,14 +37,14 @@ namespace FantasyVoxels.UI
             Hide();
             QuitWorld();
         }
-        public static void QuitWorld()
+        public static async void QuitWorld()
         {
             var label = new Label("Saving World...", Anchor.Center);
             UserInterface.Active.AddEntity(label);
 
             MGame.Instance.currentPlayState = MGame.PlayState.SavingWorld;
 
-            Save.SaveToFile(Save.WorldName);
+            await Task.Run(()=>Save.SaveToFile(Save.WorldName));
 
             Instance.QuitWorld();
             UserInterface.Active.RemoveEntity(label);
@@ -53,7 +53,7 @@ namespace FantasyVoxels.UI
         {
 
         }
-        public static async void Show()
+        public static void Show()
         {
             Instance.IsMouseVisible = true;
             Instance.gamePaused = true;

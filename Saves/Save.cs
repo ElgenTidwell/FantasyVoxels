@@ -14,6 +14,7 @@ using Newtonsoft.Json.Linq;
 using System.Threading;
 using Newtonsoft.Json.Bson;
 using MessagePack;
+using FantasyVoxels.Blocks;
 
 namespace FantasyVoxels.Saves
 {
@@ -39,6 +40,7 @@ namespace FantasyVoxels.Saves
 
             Directory.CreateDirectory(savename);
             Directory.CreateDirectory($"{savename}/chunk");
+            Directory.CreateDirectory($"{savename}/block");
             Directory.CreateDirectory($"{savename}/entity");
 
             StringBuilder sb = new StringBuilder();
@@ -53,8 +55,7 @@ namespace FantasyVoxels.Saves
             IList<Task> writeTaskList = new List<Task>();
             List<KeyValuePair<long,Chunk>> chunksToSave =
             [
-                .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk=>
-                chunk.Value.modified && chunk.Value.generated),
+                .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk => chunk.Value.modified)
             ];
 
             //Parallel.ForEach(chunks, (chunk)=>
@@ -75,6 +76,8 @@ namespace FantasyVoxels.Saves
                 TypeNameHandling = TypeNameHandling.All,
                 MaxDepth = null,
             };
+
+            File.WriteAllText($"{savename}/block/blockdata.json", JsonConvert.SerializeObject(Block.blockCustomData.ToArray(), jsonSerializerSettings));
 
             File.WriteAllText($"{savename}/entity/chunkbound.json", JsonConvert.SerializeObject(EntityManager.loadedEntities, jsonSerializerSettings));
 
@@ -104,7 +107,7 @@ namespace FantasyVoxels.Saves
 
             return savenames.ToArray();
         }
-        public static void LoadSave(string _savename)
+        public static async void LoadSave(string _savename)
         {
             Instance.currentPlayState = PlayState.LoadingWorld;
 
@@ -132,7 +135,7 @@ namespace FantasyVoxels.Saves
 
             MGame.Instance.loadedChunks = new ConcurrentDictionary<long, Chunk>();
 
-            MGame.Instance.LoadWorld(true);
+            await Task.Run(() => MGame.Instance.LoadWorld(true));
 
             var files = Directory.GetFiles($"{savename}/chunk");
 
@@ -183,11 +186,12 @@ namespace FantasyVoxels.Saves
                 max = chunks.Length;
                 foreach(var chunk in chunks)
                 {
-                    chunk.Value.generated = true;
-                    Array.Fill(chunk.Value.meshLayer, true);
+                    if (chunk.Value.CompletelyEmpty) continue;
+                    if (!chunk.Value.generated) continue;
+
+					Array.Fill(chunk.Value.meshLayer, true);
                     chunk.Value.GenerateVisibility();
                     chunk.Value.meshUpdated = [false, false, false, false];
-                    chunk.Value.Remesh(useOldLight:true,disableIteration:true);
 
                     //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
                     if (!MGame.Instance.loadedChunks.TryAdd(chunk.Key, chunk.Value))
@@ -208,15 +212,17 @@ namespace FantasyVoxels.Saves
             };
             if (File.Exists($"{savename}/entity/chunkbound.json"))
             {
-                EntityManager.loadedEntities = JsonConvert.DeserializeObject<Dictionary<long,List<Entity>>>(File.ReadAllText($"{savename}/entity/chunkbound.json"), jsonSerializerSettings);
-                foreach(var lst in EntityManager.loadedEntities)
+                var ent = JsonConvert.DeserializeObject<Dictionary<long,List<Entity>>>(File.ReadAllText($"{savename}/entity/chunkbound.json"), jsonSerializerSettings);
+                foreach(var lst in ent)
                 {
                     foreach(var entity in lst.Value)
                     {
                         entity.Start();
                     }
                 }
+                EntityManager.loadedEntities = ent;
             }
+            Block.blockCustomData = JsonConvert.DeserializeObject<KeyValuePair<CompactBlockPos, object>[]>(File.ReadAllText($"{savename}/block/blockdata.json"), jsonSerializerSettings).ToDictionary();
 
             EntitySaveData playerData = JsonConvert.DeserializeObject<EntitySaveData>(File.ReadAllText($"{savename}/entity/player.json"),jsonSerializerSettings);
 

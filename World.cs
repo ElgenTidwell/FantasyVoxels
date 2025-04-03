@@ -11,9 +11,11 @@ using Microsoft.Xna.Framework.Media;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading;
+using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace FantasyVoxels
@@ -22,8 +24,8 @@ namespace FantasyVoxels
     {
         const float LEAVESDIG = 0.25f;
         const float DIRTDIG = 0.8f;
-        const float LOGDIG = 6.5f;
-        const float STONEDIG = 6.5f;
+        const float LOGDIG = 5.5f;
+        const float STONEDIG = 5.5f;
 
         public static Voxel[] voxelTypes =
         [
@@ -133,7 +135,7 @@ namespace FantasyVoxels
             .SetItem("lamp"),
 
             //GlowleafTorch
-            new Voxel(blocklight: 80, lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
+            new Voxel(blocklight: 110, lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
             .SetTextureData(TextureSetSettings.ALLSIDES, 14)
             .SetSurfaceType(SurfaceType.Wood)
             .SetMaterialType(MaterialType.Wood)
@@ -164,10 +166,53 @@ namespace FantasyVoxels
             .SetTextureData(TextureSetSettings.ALLSIDES, 17)
             .SetTextureData(TextureSetSettings.TOP, 18)
             .SetTextureData(TextureSetSettings.BOTTOM, 19)
+            .SetClass(new BasketBlock())
             .SetMaterialType(MaterialType.Wood)
             .SetBaseDigTime(DIRTDIG)
             .SetSurfaceType(SurfaceType.Wood)
             .SetItem("basket"),
+
+            //Bush
+            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
+            .SetTextureData(TextureSetSettings.ALLSIDES, 20)
+            .SetClass(new BushBlock())
+            .SetSurfaceType(SurfaceType.Grass)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(0.0f)
+            .DisallowPlacement(PlacementSettings.HORIZONTAL | PlacementSettings.TOP)
+            .SetItem("stick"),
+
+            //Copper (19)
+            new Voxel()
+            .SetTextureData(TextureSetSettings.ALLSIDES, 21)
+            .SetClass(new CopperBlock())
+            .SetSurfaceType(SurfaceType.Stone)
+            .SetMaterialType(MaterialType.Stone)
+            .SetBaseDigTime(STONEDIG)
+            .RequireLevel(1)
+            .SetItem("copper"),
+
+            //Forge (20)
+            new Voxel()
+            .SetTextureData(TextureSetSettings.ALLHORIZONTAL, 22)
+            .SetTextureData(TextureSetSettings.TOP, 23)
+            .SetTextureData(TextureSetSettings.BOTTOM, 24)
+            .SetClass(new ForgeBlock())
+            .SetSurfaceType(SurfaceType.Stone)
+            .SetMaterialType(MaterialType.Stone)
+            .SetBaseDigTime(STONEDIG)
+            .RequireLevel(1)
+            .SetItem("forge"),
+
+            //Coal (21)
+            new Voxel()
+            .SetTextureData(TextureSetSettings.ALLSIDES, 25)
+            .SetClass(new CoalBlock())
+            .SetSurfaceType(SurfaceType.Stone)
+            .SetMaterialType(MaterialType.Stone)
+            .SetBaseDigTime(STONEDIG)
+            .RequireLevel(1)
+            .SetItem("coal"),
         ];
 
         public Block myClass;
@@ -324,7 +369,9 @@ namespace FantasyVoxels
         public Voxel.PlacementSettings placement;
         [Key(4)]
         public object otherData;
-    }
+        [Key(5)]
+        public (int x, int y, int z, bool pos) spawnCandidate;
+	}
     [MessagePackObject]
     public class Chunk
     {
@@ -462,8 +509,6 @@ namespace FantasyVoxels
         public static VertexBuffer chunkBuffer;
         [IgnoreMember]
         public VertexBuffer[] chunkVertexBuffers;
-        [IgnoreMember]
-        public ushort[,] vSidesStart = new ushort[5,6];
 
         [Key(3)]
         public int[,] skylightAbove = null;
@@ -499,6 +544,15 @@ namespace FantasyVoxels
         [IgnoreMember]
         public static FastNoiseLite noise3d;
 
+        [IgnoreMember]
+        public long ID
+        {
+            get
+            {
+                return MGame.CCPos(chunkPos);
+            }
+        }
+
         public Chunk()
         {
             chunkVertexBuffers = new VertexBuffer[5];
@@ -509,15 +563,13 @@ namespace FantasyVoxels
         {
             float totalNoise = 0;
             float amplitude = 1;
-            float maxAmplitude = 0; // Used to normalize the result
             for (int i = 0; i < octaveCount; i++)
             {
                 totalNoise += IcariaNoise.GradientNoise(x * frequency, z * frequency, MGame.Instance.seed - 10) * amplitude;
-                maxAmplitude += amplitude;
                 amplitude *= persistence;    // Decrease amplitude for each octave
                 frequency *= lacunarity;     // Increase frequency for each octave
             }
-            return totalNoise / maxAmplitude;
+            return totalNoise;
         }
         public static float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
@@ -527,6 +579,20 @@ namespace FantasyVoxels
             for (int i = 0; i < octaveCount; i++)
             {
                 totalNoise += IcariaNoise.GradientNoise3D(x * frequency, y * frequency, z * frequency, MGame.Instance.seed - seedOffset) * amplitude;
+                maxAmplitude += amplitude;
+                amplitude *= persistence;    // Decrease amplitude for each octave
+                frequency *= lacunarity;     // Increase frequency for each octave
+            }
+            return totalNoise / maxAmplitude;
+        }
+        public static float GetBrokenOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
+        {
+            float totalNoise = 0;
+            float amplitude = 1;
+            float maxAmplitude = 0; // Used to normalize the result
+            for (int i = 0; i < octaveCount; i++)
+            {
+                totalNoise += (float)BrokenPerlin3D.Noise(x * frequency, y * frequency, z * frequency,MGame.Instance.seed+seedOffset) * amplitude;
                 maxAmplitude += amplitude;
                 amplitude *= persistence;    // Decrease amplitude for each octave
                 frequency *= lacunarity;     // Increase frequency for each octave
@@ -551,7 +617,7 @@ namespace FantasyVoxels
                 for (int z = 0; z < Size; z++)
                 {
                     int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
-                    const float scalar = 0.45f;
+                    const float scalar = 0.2f;
 
                     BiomeProvider biome = BiomeTracker.GetBiome(WorldBuilder.GetHumidity(samplex,samplez), WorldBuilder.GetTemperature(samplex, samplez));
 
@@ -561,11 +627,9 @@ namespace FantasyVoxels
                     int terrainHeight = 0;
                     if(noBelow)
                     {
-                        float continentalness = GetOctaveNoise2D(samplex, samplez, 0.002f * scalar, 10, 0.7f, 1.45f, 1);
-                        float erosion = GetOctaveNoise2D(samplex, samplez, 0.001f * scalar, 6, 0.8f, 1.4f, 10);
-                        float PV = GetOctaveNoise2D(samplex, samplez, 0.005f * scalar, 5, 0.6f, 1.7f, 25);
+                        float continentalness = GetOctaveNoise2D(samplex, samplez, 0.02f * scalar, 10, 0.7f, 1.45f, 1)*40+20;
 
-                        terrainHeight = (int)(WorldBuilder.ContinentalnessCurve.Evaluate(continentalness) + WorldBuilder.ErosionCurve.Evaluate(erosion) * WorldBuilder.PVCurve.Evaluate(PV));
+                        terrainHeight = (int)(continentalness);
                         tHeight[x, z] = terrainHeight;
                     }
                     else
@@ -573,42 +637,43 @@ namespace FantasyVoxels
                         terrainHeight = tHeight[x, z];
                     }
 
-                    bool grassed = false;
+                    bool grassed = MGame.Instance.GrabVoxel(new Vector3(samplex+chunkPos.x*Size, Size + chunkPos.y * Size, samplez + chunkPos.x * Size)) != 0;
+
+
+                    byte GetVoxel(int sx, int sy, int sz, int th)
+                    {
+                        byte vox = biome.GetVoxel(sx, sy, sz, th, false);
+
+                        float pY = WorldBuilder.DensityCurve.Evaluate(sy - terrainHeight) * density;
+
+                        //3D stuff
+                        if (sy >= terrainHeight)
+                        {
+                            float samx = sx * 0.01f;
+                            float samy = sy * 0.01f;
+                            float samz = sz * 0.01f;
+
+                            //domainWarp.DomainWarp(ref samx, ref samy, ref samz);
+
+                            float perlin = GetBrokenOctaveNoise3D(samx, samy, samz, 0.26f, 8, 0.8f, 1.6f, 504);
+                            float perlin_thresh = GetBrokenOctaveNoise3D(samx, samy, samz, 0.1f, 2, 0.7f, 1.6f, 504);
+
+                            if (float.Lerp(perlin, perlin_thresh, 0.5f + perlin_thresh) > (0.02f) * (sy * 0.1f)) vox = biome.GetVoxel(sx, sy, sz, th, true);
+                        }
+                        if (pY > 0.1f)
+                        {
+                            float perlincave = noise3d.GetNoise(sx * 0.01f, sy * 0.01f, sz * 0.01f);
+                            float perlincaveB = IcariaNoise.BrokenGradientNoise3D(sx * 0.1f, sy * 0.1f, sz * 0.1f, MGame.Instance.seed + 604);
+
+                            if (float.Abs(perlincave) > 0.85f + (perlincaveB * 0.1f) && vox != 3) vox = 0;
+                        }
+
+                        return vox;
+                    }
 
                     for (int y = Size-1; y >= 0; y--)
                     {
                         int sampley = y + chunkPos.y * Size;
-
-                        byte GetVoxel(int sx, int sy, int sz, int th)
-                        {
-                            byte vox = biome.GetVoxel(sx,sy,sz,th,false);
-
-                            float pY = WorldBuilder.DensityCurve.Evaluate(sy-terrainHeight) * density;
-
-                            if (pY > 0.1f)
-                            {
-                                if (sy >= terrainHeight)
-                                {
-                                    float samx = sx * 0.0023f;
-                                    float samy = sy * 0.0023f;
-                                    float samz = sz * 0.0023f;
-
-                                    domainWarp.DomainWarp(ref samx, ref samy, ref samz);
-
-                                    float perlin = GetOctaveNoise3D(samx, samy, samz, 1f, 3, 0.7f, 1.6f, 504);
-                                    perlin += GetOctaveNoise3D(samx, samy, samz, 0.1f, 2, 0.7f, 1.6f, 501);
-
-                                    if (perlin * pY > 0.1f) vox = biome.GetSurfaceVoxel(sx, sy, sz);
-                                }
-
-                                float perlincave = noise3d.GetNoise(sx * 0.01f, sy * 0.01f, sz * 0.01f);
-                                float perlincaveB = IcariaNoise.BrokenGradientNoise3D(sx * 0.1f, sy * 0.1f, sz * 0.1f, MGame.Instance.seed + 604);
-
-                                if (float.Abs(perlincave) > 0.85f + (perlincaveB * 0.1f)) vox = 0;
-                            }
-
-                            return vox;
-                        }
 
                         // Main terrain voxel assignment with 3D noise layers
                         voxels[x + Size * (y + Size * z)] = GetVoxel(samplex,sampley,samplez,terrainHeight);
@@ -625,17 +690,39 @@ namespace FantasyVoxels
                         }
 
                         float patchyRandom = IcariaNoise.GradientNoise(samplex * 0.1f, sampley * 0.1f, MGame.Instance.seed - 10);
-                        grassed = GetVoxel(samplex, sampley + 1, samplez, terrainHeight) == 2 || sampley < terrainHeight - 1 || sampley > (patchyRandom * 100 + 410);
+                        grassed = GetVoxel(samplex, sampley + 1, samplez, terrainHeight) != 0;
                         if (voxels[x + Size * (y + Size * z)] == 2 && !grassed && sampley > 4)
                         {
                             grassed = true;
 
-                            voxels[x + Size * (y + Size * z)] = (byte)(sampley < patchyRandom*10 ? 4 : 1);
-                        }
+                            voxels[x + Size * (y + Size * z)] = 1;
+                            voxeldata[x + Size * (y + Size * z)].spawnCandidate = (samplex,sampley+1,samplez,true);
+							//if(Random.Shared.Next(-2048, 2048) == 4)
+							//{
+							//    var wander = new Cow();
+							//    wander.position = new Vector3Double(x+chunkPos.x*Size,y + chunkPos.y * Size+1, z + chunkPos.z * Size) + MGame.Instance.cameraForward * 0.6f;
+
+							//    EntityManager.SpawnEntity(wander);
+							//}
+						}
                         bool stone = GetVoxel(samplex, sampley + 4, samplez, terrainHeight) == 2;
                         if (voxels[x + Size * (y + Size * z)] == 2 && stone)
                         {
                             voxels[x + Size * (y + Size * z)] = 9;
+
+                            int seed = 0;
+                            foreach(var lode in biome.Lodes)
+                            {
+                                seed++;
+
+                                if (sampley < lode.minHeight || sampley > lode.maxHeight) continue;
+
+                                float perlin = GetOctaveNoise3D(samplex, sampley, samplez, 0.24f, 4, 0.6f, 1.4f, 50+seed);
+
+                                if (float.Abs(perlin) < lode.threshold) continue;
+
+                                voxels[x + Size * (y + Size * z)] = lode.voxID;
+                            }
                         }
 
                         if (voxels[x + Size * (y + Size * z)] == 4 && sampley < patchyRandom * 40 - 45)
@@ -643,7 +730,7 @@ namespace FantasyVoxels
                             voxels[x + Size * (y + Size * z)] = 2;
                         }
 
-                        if (voxels[x + Size * (y + Size * z)] == 1 && y < Size-1)
+                        if (voxels[x + Size * (y + Size * z)] == 1 && y < Size - 1)
                         {
                             byte v = biome.RequestFolliage(samplex, sampley, samplez, tRandom);
                             if (v > 0) voxels[x + Size * ((y + 1) + Size * z)] = v;
@@ -672,6 +759,7 @@ namespace FantasyVoxels
         /// Recomputes the lighting texture
         /// </summary>
         /// <param name="disableIteration">Disable the iterative fix to chunk edges</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReLight(bool disableIteration)
         {
             if (MGame.Instance.GraphicsDevice == null) return;
@@ -814,12 +902,17 @@ namespace FantasyVoxels
             {
                 Queue<(int tx, int ty, int tz, int x, int y, int z)> prop = new Queue<(int tx, int ty, int tz, int x, int y, int z)>();
 
+                int getlight(int x, int y, int z)
+                {
+                    return voxeldata[x + Size * (y + Size * z)].blockLight;
+				}
+
                 void grabandqueue(int x, int y, int z, int dx, int dy, int dz, int light)
                 {
                     if (!IsOutOfBounds((x + dx, y + dy, z + dz)))
                     {
-                        if (voxeldata[(x + dx) + Size * ((y + dy) + Size * (z + dz))].blockLight < light &&
-                            light - voxeldata[(x + dx) + Size * ((y + dy) + Size * (z + dz))].blockLight > 25) prop.Enqueue((x, y, z, x + dx, y + dy, z + dz));
+                        if (getlight(x+dx,y+dy,z+dz) < light &&
+                            light - getlight(x + dx, y + dy, z + dz) > 25) prop.Enqueue((x, y, z, x + dx, y + dy, z + dz));
                     }
                 }
 
@@ -834,7 +927,12 @@ namespace FantasyVoxels
 
                             voxeldata[x + Size * (y + Size * z)].blockLight = Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].blocklight;
 
-                            int ourLight = voxeldata[x + Size * (y + Size * z)].blockLight;
+							if (Block.blockCustomData.TryGetValue(Block.GetPos(x, y, z, ID), out object data) && data is BlockLightOverrideCustomDataBlock over)
+							{
+								voxeldata[x + Size * (y + Size * z)].blockLight = over.light;
+							}
+
+							int ourLight = voxeldata[x + Size * (y + Size * z)].blockLight;
                             grabandqueue(x, y, z, -1, 0, 0, ourLight);
                             grabandqueue(x, y, z, 1, 0, 0, ourLight);
                             grabandqueue(x, y, z, 0, -1, 0, ourLight);
@@ -883,36 +981,33 @@ namespace FantasyVoxels
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void MeshLOD(int lod)
         {
             if (MGame.Instance.GraphicsDevice == null) return;
 
             List<VertexPositionColorNormalTexture> verts = new List<VertexPositionColorNormalTexture>();
             int numVerts = 0;
-            int scale = lod!=4? (int)MathF.Pow(2, lod) :1;
-
-            for (int p = 0; p < positionChecks.Length; p++)
+            for (int y = 0; y <= MaxY; y++)
             {
-                vSidesStart[lod,p] = (ushort)numVerts; 
-                for (int y = 0; y <= MaxY; y += scale)
+                if (!meshLayer[y]) continue;
+                int sampley = y + chunkPos.y * Size;
+
+                for (int x = 0; x < Size; x++)
                 {
-                    int sampley = y + chunkPos.y * Size;
-
-                    if (!meshLayer[y]) continue;
-
-                    for (int x = 0; x < Size; x += scale)
+                    for (int z = 0; z < Size; z++)
                     {
-                        for (int z = 0; z < Size; z += scale)
+                        int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
+
+                        //if (IsOutOfBounds((x, y, z))) continue;
+
+                        if (voxels[x + Size * (y + Size * z)] == 0) continue;
+                        if (Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod != 4) continue;
+                        if (!Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod == 4) continue;
+
+                        for (int p = 0; p < positionChecks.Length; p++)
                         {
-                            int samplex = x + chunkPos.x * Size, samplez = z + chunkPos.z * Size;
-
-                            if (IsOutOfBounds((x, y, z))) continue;
-
-                            if (voxels[x + Size * (y + Size * z)] == 0) continue;
-                            if (Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod != 4) continue;
-                            if (!Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].isTransparent && lod == 4) continue;
-
-                            (int x, int y, int z) checkPos = (positionChecks[p].x * scale + x, positionChecks[p].y * scale + y, positionChecks[p].z * scale + z);
+                            (int x, int y, int z) checkPos = (positionChecks[p].x + x, positionChecks[p].y + y, positionChecks[p].z + z);
                             bool placeFace = false;
 
                             Vector3 normal = new Vector3(positionChecks[p].x, positionChecks[p].y, positionChecks[p].z);
@@ -934,6 +1029,18 @@ namespace FantasyVoxels
                                 case 4: tex = Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].frontTexture; break;
                                 case 5: tex = Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].backTexture; break;
                             }
+                            if (Block.blockCustomData.TryGetValue(Block.GetPos(x, y, z, ID),out object data) && data is TextureOverrideCustomDataBlock over)
+							{
+								switch (p)
+								{
+									case 0: if(over.rightTexture != -1) tex = over.rightTexture; break;
+									case 1: if(over.leftTexture != -1) tex = over.leftTexture; break;
+									case 2: if(over.topTexture != -1) tex = over.topTexture; break;
+									case 3: if(over.bottomTexture != -1) tex = over.bottomTexture; break;
+									case 4: if(over.frontTexture != -1) tex = over.frontTexture; break;
+									case 5: if(over.backTexture != -1) tex = over.backTexture; break;
+								}
+							}
 
                             UVCoords += new Vector2(tex % (MGame.AtlasSize/16), tex / (MGame.AtlasSize / 16)) * 16;
 
@@ -945,8 +1052,8 @@ namespace FantasyVoxels
 
                             if (IsOutOfBounds(checkPos))
                             {
-                                int grabbed = MGame.Instance.GrabVoxel(new Vector3(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale)));
-                                bool success = MGame.Instance.GrabVoxelData(new Vector3(samplex + positionChecks[p].x * (scale), sampley + positionChecks[p].y * (scale), samplez + positionChecks[p].z * (scale)), out VoxelData dat);
+                                int grabbed = MGame.Instance.GrabVoxel(new Vector3(samplex + positionChecks[p].x, sampley + positionChecks[p].y, samplez + positionChecks[p].z));
+                                bool success = MGame.Instance.GrabVoxelData(new Vector3(samplex + positionChecks[p].x, sampley + positionChecks[p].y, samplez + positionChecks[p].z), out VoxelData dat);
 
                                 if (grabbed == -1)
                                 {
@@ -1134,7 +1241,7 @@ namespace FantasyVoxels
                             if (shouldMeshFace)
                             {
                                 sky /= 255;
-                                const float lightcoeff = 0.25f;
+                                const float lightcoeff = 0.1f;
                                 if (EnableSmoothLighting)
                                 {
                                     GBL(vertsPerCheck[p * 4], out light, out sky);
@@ -1146,7 +1253,7 @@ namespace FantasyVoxels
                                 }
                                 color.G = (byte)(sky*255 * shade);
                                 color.B = (byte)(light*255 * shade);
-                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 0]/(MGame.AtlasSize / 16)));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0] + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 0]/(MGame.AtlasSize / 16)));
 
                                 if (EnableSmoothLighting)
                                 {
@@ -1159,7 +1266,7 @@ namespace FantasyVoxels
                                 }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
-                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 1]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 1]/(MGame.AtlasSize / 16)));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 1] + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 1]/(MGame.AtlasSize / 16)));
 
                                 if (EnableSmoothLighting)
                                 {
@@ -1172,7 +1279,7 @@ namespace FantasyVoxels
                                 }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
-                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 2]/(MGame.AtlasSize / 16)));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2] + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 2]/(MGame.AtlasSize / 16)));
 
                                 if (EnableSmoothLighting)
                                 {
@@ -1185,7 +1292,7 @@ namespace FantasyVoxels
                                 }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
-                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 0]/(MGame.AtlasSize / 16)));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 0] + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 0]/(MGame.AtlasSize / 16)));
 
                                 if (EnableSmoothLighting)
                                 {
@@ -1198,7 +1305,7 @@ namespace FantasyVoxels
                                 }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
-                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 2]/(MGame.AtlasSize / 16)));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 2] + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 2]/(MGame.AtlasSize / 16)));
 
                                 if (EnableSmoothLighting)
                                 {
@@ -1211,7 +1318,7 @@ namespace FantasyVoxels
                                 }
                                 color.G = (byte)(sky * 255 * shade);
                                 color.B = (byte)(light * 255 * shade);
-                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 3]*(scale) + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 3]/(MGame.AtlasSize / 16)));
+                                verts.Add(new VertexPositionColorNormalTexture(vertsPerCheck[p * 4 + 3] + new Vector3(x, y, z), color, normal, UVCoords+uvs[p * 4 + 3]/(MGame.AtlasSize / 16)));
                                 numVerts++;
                             }
                         }
@@ -1342,8 +1449,20 @@ namespace FantasyVoxels
 
             modified = true;
 
+            //Call BreakBlock on the old one
+            if (voxels[x + Size * (y + Size * z)] != 0 && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass != null)
+            {
+                Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.BreakBlock((x,y,z),this);
+            }
+
             voxels[x + Size * (y + Size * z)] = (byte)newVoxel;
             voxeldata[x + Size * (y + Size * z)].placement = placement;
+
+            //Call PlaceBlock on the new one
+            if (voxels[x + Size * (y + Size * z)] != 0 && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass != null)
+            {
+                Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.PlaceBlock((x, y, z), this);
+            }
 
             for (int p = 0; p < 6; p++)
             {
@@ -1357,7 +1476,7 @@ namespace FantasyVoxels
             visOutOfDate = true;
 
             meshUpdated = new bool[4] { false, false, false, false };
-            Remesh(disableIteration:true);
+            new Task(() => Remesh(disableIteration:true)).Start();
 
             Chunk neighbor;
 
@@ -1406,6 +1525,18 @@ namespace FantasyVoxels
 
             voxeldata[x + Size * (y + Size * z)] = newVoxel;
         }
+        public bool UseVoxel(int x, int y, int z, Entity from)
+        {
+            if (x < 0 || y < 0 || z < 0 || x >= Size || y >= Size || z >= Size) return false;
+
+            if (MGame.Instance.GraphicsDevice == null) return false;
+
+            if (voxels[x + Size * (y + Size * z)] != 0 && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass != null)
+            {
+                return Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.UseBlock((x, y, z), this, from);
+            }
+            return false;
+        }
         public void ModifyQueue(int x, int y, int z, int newVoxel)
         {
             modified = true;
@@ -1431,7 +1562,7 @@ namespace FantasyVoxels
 
             Queue<(int x, int y, int z)> internalProp = new Queue<(int x, int y, int z)>();
 
-            bool[,,] visited = new bool[Size, Size, Size];
+            bool[] visited = new bool[Size * Size * Size];
 
             // Initialize visibility array
             for (int i = 0; i < 6; i++)
@@ -1441,11 +1572,11 @@ namespace FantasyVoxels
                     sidesVisible[i, j] = false;
             }
 
-            for (int x = 0; x < Size; x++)
+            for (int z = 0; z < Size; z++)
             {
-                for (int z = 0; z < Size; z++)
+                for (int y = 0; y < Size; y++)
                 {
-                    for (int y = 0; y < Size; y++)
+                    for (int x = 0; x < Size; x++)
                     {
                         if (!alreadyPopulatedPropogation)
                         {
@@ -1456,7 +1587,7 @@ namespace FantasyVoxels
 
                         bool[] touchedByFlood = new bool[6];
 
-                        visited[x,y,z] = true;
+                        visited[x + Size * (y + Size * z)] = true;
 
                         internalProp.Clear();
                         // Check neighboring positions and queue valid ones
@@ -1484,9 +1615,9 @@ namespace FantasyVoxels
                         {
                             (int x, int y, int z) pos = internalProp.Dequeue();
 
-                            if (visited[pos.x,pos.y,pos.z]) continue;
+                            if (visited[pos.x + Size * (pos.y + Size * pos.z)]) continue;
 
-                            visited[pos.x, pos.y, pos.z] = true;
+                            visited[pos.x + Size * (pos.y + Size * pos.z)] = true;
 
                             for (int i = 0; i < 6; i++)
                             {

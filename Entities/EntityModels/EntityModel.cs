@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static FantasyVoxels.Saves.Options;
 
 namespace FantasyVoxels.Entities.EntityModels
 {
@@ -14,6 +15,7 @@ namespace FantasyVoxels.Entities.EntityModels
     {
         string mpath, tpath;
         float scale;
+        public Vector3 tint = Vector3.One;
         Model model;
         Texture2D texture;
         Dictionary<string, Matrix> partMatrixLookup = new Dictionary<string, Matrix>();
@@ -30,6 +32,15 @@ namespace FantasyVoxels.Entities.EntityModels
             {
                 partMatrixLookup.Add(mesh.Name,Matrix.Identity);
             }
+            foreach (var mesh in model.Meshes)
+            {
+                var partmat = partMatrixLookup[mesh.Name];
+                foreach (var part in mesh.MeshParts)
+                {
+                    part.Effect = MGame.Instance.GetEntityShader();
+                    part.Effect.Parameters["mainTexture"].SetValue(texture);
+                }
+            }
         }
         public Matrix GetPartMatrix(string name)
         {
@@ -45,22 +56,20 @@ namespace FantasyVoxels.Entities.EntityModels
 
             float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage;
 
+            var effect = MGame.Instance.GetEntityShader();
+            effect.Parameters["mainTexture"].SetValue(texture);
+            effect.Parameters["colorTint"].SetValue(tint);
+            effect.Parameters["tint"].SetValue(ourLight);
+            effect.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
+
             foreach (var mesh in model.Meshes)
             {
                 var partmat = partMatrixLookup[mesh.Name];
                 foreach (var part in mesh.MeshParts)
                 {
-                    part.Effect = MGame.Instance.GetEntityShader();
-                    part.Effect.Parameters["mainTexture"].SetValue(texture);
                     Matrix world = partmat * mesh.ParentBone.ModelTransform * Matrix.CreateScale(scale) * entityMatrix * MGame.Instance.world;
                     part.Effect.Parameters["World"].SetValue(world);
-                    world.Translation = Vector3.Zero;
-                    part.Effect.Parameters["RotWorld"].SetValue(world);
-                    part.Effect.Parameters["View"].SetValue(MGame.Instance.view);
-                    part.Effect.Parameters["Projection"].SetValue(MGame.Instance.projection);
-
-                    part.Effect.Parameters["tint"].SetValue(ourLight);
-                    part.Effect.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
+                    part.Effect.Parameters["RotWorld"].SetValue(Matrix.Transpose(Matrix.Invert(world)));
                 }
                 mesh.Draw();
             }

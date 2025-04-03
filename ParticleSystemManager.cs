@@ -8,7 +8,76 @@ using System.Threading.Tasks;
 
 namespace FantasyVoxels
 {
-    public class ParticleSystem
+	public class FixedList<T>
+	{
+		private readonly T[] _items;
+		private readonly Stack<int> _freeSlots;
+		private readonly HashSet<int> _occupiedSlots;
+		private int _count;
+		private bool _dirty = true;
+		private T[] _valuecache;
+
+		public int Count => _count;
+		public int Capacity => _items.Length;
+
+		public FixedList(int size)
+		{
+			_items = new T[size];
+			_freeSlots = new Stack<int>(Enumerable.Range(0, size));
+			_occupiedSlots = new HashSet<int>();
+		}
+		public int Add(T item)
+		{
+			if (_freeSlots.Count == 0)
+            {
+                _occupiedSlots.Remove(0);
+                _freeSlots.Push(0);
+            }
+			int slot = _freeSlots.Pop();
+			_items[slot] = item;
+			_occupiedSlots.Add(slot);
+			_dirty = true;
+			_count++;
+			return slot;
+		}
+		public void Remove(int index)
+		{
+			if (!_occupiedSlots.Contains(index)) return;
+
+			_items[index] = default;
+			_occupiedSlots.Remove(index);
+			_freeSlots.Push(index);
+			_dirty = true;
+			_count--;
+		}
+		public void Remove(T item)
+		{
+			Remove(Array.FindIndex(_items, i => EqualityComparer<T>.Default.Equals(i, item)));
+		}
+		public Span<T> GetValues()
+		{
+			if (_dirty)
+			{
+				var val = _occupiedSlots.Select(i => _items[i]).ToArray();
+				_valuecache = val;
+			}
+			return _valuecache;
+		}
+		public int FindIndex(Predicate<T> match)
+		{
+			return (Array.FindIndex(_items, match));
+		}
+		public T this[int id]
+		{
+			get { return _items[id]; }
+			set
+			{
+				_items[id] = value;
+				if (value == null) Remove(id);
+			}
+		}
+	}
+	public class ParticleSystem
     {
         public int particleCount;
         public Vector3Double[] particlePositions;
@@ -19,31 +88,34 @@ namespace FantasyVoxels
         {
             BlockAtlas,
             ItemAtlas,
-            CustomTexture
+            ParticleAtlas
         }
         public TextureProvider textureProvider;
-        public int textureIndex;
+        public int textureIndex, textureFinalIndex = -1;
         public float lifetime;
         public float gravity;
         public float curlife;
+        public float uvScale;
         public float tint = 0.0f;
+        public float scale;
 
-        public ParticleSystem(int particles, TextureProvider provider, int texIndex, Vector3Double origin, Vector3 velocity, float lifetime, float gravity, Vector3 randomPosScalar, Vector3 randomVelScalar)
+        public ParticleSystem(int particles, TextureProvider provider, int texIndex, Vector3Double origin, Vector3 velocity, float lifetime, float gravity, Vector3 randomPosScalar, Vector3 randomVelScalar, int endTexture = -1, float uvScale = 1, float particleScale = 0.12f)
         {
             this.particleCount = particles;
             this.particlePositions = new Vector3Double[particles];
             this.particleVelocities = new Vector3[particles];
-            this.particleRotations = new float[particles];
             for (int i = 0; i < particles; i++)
             {
                 this.particlePositions[i] = origin + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)*randomPosScalar;
                 this.particleVelocities[i] = velocity + new Vector3(Random.Shared.NextSingle()*2-1, Random.Shared.NextSingle() * 2 - 1, Random.Shared.NextSingle() * 2 - 1)* randomVelScalar;
-                this.particleRotations[i] = Random.Shared.NextSingle();
             }
             this.textureProvider = provider;
             this.textureIndex = texIndex;
+            this.textureFinalIndex = endTexture<0?texIndex: endTexture;
             this.gravity = gravity;
             this.lifetime = lifetime;
+            this.uvScale = uvScale;
+            this.scale = particleScale;
             this.origin = (Vector3)origin;
         }
     }
@@ -58,7 +130,7 @@ namespace FantasyVoxels
             new(new Vector3(-0.5f, 0.5f,-0.5f), new Vector2(1, 0)),
             new(new Vector3(-0.5f,-0.5f,-0.5f), new Vector2(0, 0)),
         ];
-        private static List<ParticleSystem> systems = new List<ParticleSystem>();
+        private static FixedList<ParticleSystem> systems = new FixedList<ParticleSystem>(15);
 
         public static void AddSystem(ParticleSystem system)
         {
@@ -66,10 +138,8 @@ namespace FantasyVoxels
         }
         public static void UpdateSystems()
         {
-            for(int i = systems.Count-1; i >= 0; i--)
+            foreach(var system in systems.GetValues())
             {
-                ParticleSystem system = systems[i];
-
                 system.curlife += MGame.dt;
 
                 if(system.lifetime > 0 && system.curlife > system.lifetime) { systems.Remove(system); continue; }
@@ -88,8 +158,6 @@ namespace FantasyVoxels
                     system.particleVelocities[p].Z -= system.particleVelocities[p].Z * MGame.dt;
 
                     system.particleVelocities[p].Y -= system.gravity * MGame.dt;
-
-                    system.particleRotations[p] += system.particleVelocities[p].LengthSquared() * MGame.dt * ((p * 0.5f + 1)*(p%2==0?-1:1))*0.1f;
 
                     int x = (int)double.Floor(system.particlePositions[p].X) - cx * Chunk.Size;
                     int y = (int)double.Floor(system.particlePositions[p].Y) - cy * Chunk.Size;
@@ -117,11 +185,9 @@ namespace FantasyVoxels
             shader.Parameters["View"].SetValue(MGame.Instance.view);
             shader.Parameters["Projection"].SetValue(MGame.Instance.projection);
 
-            for (int i = systems.Count - 1; i >= 0; i--)
-            {
-                ParticleSystem system = systems[i];
-
-                MGame.Instance.GrabVoxelData(system.origin + Vector3.Up * 0.1f, out var voxelData);
+			foreach (var system in systems.GetValues())
+			{
+				MGame.Instance.GrabVoxelData(system.origin + Vector3.Up * 0.1f, out var voxelData);
 
                 float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage;
 
@@ -139,18 +205,28 @@ namespace FantasyVoxels
                         shader.Parameters["atlasSize"].SetValue(MGame.ItemAtlasSize / 16);
 
                         break;
+                    case ParticleSystem.TextureProvider.ParticleAtlas:
+
+                        shader.Parameters["mainTexture"].SetValue(MGame.Instance.particleAtlas);
+                        shader.Parameters["atlasSize"].SetValue(MGame.ParticleAtlasSize / 16);
+
+                        break;
                 }
-                shader.Parameters["texIndex"].SetValue(system.textureIndex);
-                shader.Parameters["uvScale"].SetValue(0.25f);
+                shader.Parameters["texIndex"].SetValue((int)float.Round(float.Lerp(system.textureIndex, system.textureFinalIndex, (system.curlife / system.lifetime))));
+                if(system.textureProvider == ParticleSystem.TextureProvider.BlockAtlas||
+                    system.textureProvider == ParticleSystem.TextureProvider.ItemAtlas) shader.Parameters["uvScale"].SetValue(0.25f);
+                else shader.Parameters["uvScale"].SetValue(system.uvScale);
                 shader.Parameters["tint"].SetValue(ourLight);
                 shader.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
 
                 for (int p = 0; p < system.particleCount; p++)
                 {
-                    Matrix m = Matrix.CreateScale(0.1f) * Matrix.CreateRotationX(system.particleRotations[p])*Matrix.CreateRotationY(MathHelper.ToRadians(90f))*Matrix.CreateWorld((Vector3)system.particlePositions[p],MGame.Instance.cameraForward,Vector3.Up);
+                    Matrix m = Matrix.CreateScale(system.scale) *Matrix.CreateRotationY(MathHelper.ToRadians(90f))*Matrix.CreateWorld((Vector3)system.particlePositions[p],MGame.Instance.cameraForward,Vector3.Up);
 
                     shader.Parameters["World"].SetValue(m*MGame.Instance.world);
-                    shader.Parameters["uvOffset"].SetValue(new Vector2(p%4,p/4)/4f);
+                    if (system.textureProvider == ParticleSystem.TextureProvider.BlockAtlas ||
+                    system.textureProvider == ParticleSystem.TextureProvider.ItemAtlas) shader.Parameters["uvOffset"].SetValue(new Vector2(p % 4, p / 4) / 4f);
+                    else shader.Parameters["uvOffset"].SetValue(Vector2.Zero);
 
                     foreach (var pass in shader.CurrentTechnique.Passes)
                     {

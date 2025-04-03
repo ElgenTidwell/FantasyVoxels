@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{ea31b786-6043-4cfd-878c-f8c52eed405f}">
+		<property name="assetPath">
+			<value>04-stoneplace.ogg</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>48</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>0.50693750000000004</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{133dc659-1481-4538-9aa7-86acd14a192a}</destination>
+		</relationship>
+	</object>
+</objects>
