@@ -1083,18 +1083,18 @@ namespace FantasyVoxels.Entities
 
             MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, MGame.Instance.GraphicsDevice.Viewport.Bounds.Size.ToVector2() / 2, new Rectangle(52, 0, 7, 7), Color.White, 0f, Vector2.One * 2, 3, SpriteEffects.None, 0);
 
-            long curChunk = EntityManager.GetChunk(position);
-            StringBuilder debugInfo = new StringBuilder($"{curChunk}\n");
-            if(MGame.Instance.loadedChunks.ContainsKey(curChunk))
-            {
-                debugInfo.AppendLine($"Modified? {MGame.Instance.loadedChunks[curChunk].modified}");
-                debugInfo.AppendLine($"Generated? {MGame.Instance.loadedChunks[curChunk].generated}");
-                debugInfo.AppendLine($"Empty? {MGame.Instance.loadedChunks[curChunk].CompletelyEmpty}");
-            }
-            else
-            {
-                debugInfo.AppendLine($"Not available!");
-            }
+            //long curChunk = EntityManager.GetChunk(position);
+            //StringBuilder debugInfo = new StringBuilder($"{curChunk}\n");
+            //if(MGame.Instance.loadedChunks.ContainsKey(curChunk))
+            //{
+            //    debugInfo.AppendLine($"Modified? {MGame.Instance.loadedChunks[curChunk].modified}");
+            //    debugInfo.AppendLine($"Generated? {MGame.Instance.loadedChunks[curChunk].generated}");
+            //    debugInfo.AppendLine($"Empty? {MGame.Instance.loadedChunks[curChunk].CompletelyEmpty}");
+            //}
+            //else
+            //{
+            //    debugInfo.AppendLine($"Not available!");
+            //}
 
             MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], debugInfo, new Vector2(100,100), Color.White, 0f, Vector2.Zero, uiScale/2, SpriteEffects.None, 1f);
 
