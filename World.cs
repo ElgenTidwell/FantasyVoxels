@@ -625,9 +625,14 @@ namespace FantasyVoxels
                     //int terrainHeight = (int)(float.Lerp(biome1.GetTerrainHeight(samplex,samplez),biome2.GetTerrainHeight(samplex,samplez),biomeSelector%1));
 
                     int terrainHeight = 0;
-                    if(noBelow)
+
+                    // Doing the 0 check because sometimes we'll just fill this with 0's (???)
+                    // This was the major cause of the world eating, and even though we may sometimes recalculate when we dont need to,
+                    // it's better than whole chunks disappearing.
+                    
+                    if(noBelow || tHeight[x, z] == 0)
                     {
-                        float continentalness = GetOctaveNoise2D(samplex, samplez, 0.02f * scalar, 10, 0.7f, 1.45f, 1)*40+20;
+                        float continentalness = GetOctaveNoise2D(samplex, samplez, 0.02f * scalar, 10, 0.7f, 1.45f, 1) * 40 + 20;
 
                         terrainHeight = (int)(continentalness);
                         tHeight[x, z] = terrainHeight;
@@ -1366,11 +1371,22 @@ namespace FantasyVoxels
 
         public bool CheckQueue(bool remesh = true)
         {
-            queueModified = false;
-            int queueCount = VoxelStructurePlacer.GetQueueLength(chunkPos);
-            if (queueCount <= 1) return false;
+            // Sometimes this would just mark itself as done and never get done...
+            // Changed it to now only mark itself as complete at the VERY end,
+            // meaning we could maybe sometimes call this twice. Oh well.
 
-            if (MGame.Instance.GraphicsDevice == null) return false;
+            int queueCount = VoxelStructurePlacer.GetQueueLength(chunkPos);
+            if (queueCount <= 0)
+            {
+                queueModified = false;
+                return false;
+            }
+
+            if (MGame.Instance.GraphicsDevice == null)
+            {
+                queueModified = false;
+                return false;
+            }
 
             lightOutOfDate = true;
             if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos((chunkPos.x, chunkPos.y + 1, chunkPos.z)), out Chunk c))
@@ -1423,6 +1439,10 @@ namespace FantasyVoxels
                     if (!remeshNeighbors.Contains(neighbor)) remeshNeighbors.Add(neighbor);
                 }
             }
+
+            // |||
+            // vvv
+            queueModified = false;
             GenerateVisibility();
             meshUpdated = [false, false, false, false];
 

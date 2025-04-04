@@ -55,7 +55,8 @@ namespace FantasyVoxels.Saves
             IList<Task> writeTaskList = new List<Task>();
             List<KeyValuePair<long,Chunk>> chunksToSave =
             [
-                .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk => chunk.Value.modified)
+                .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk => (chunk.Value.modified ||
+                                (int.Abs(chunk.Value.chunkPos.x - cx) < 5 && int.Abs(chunk.Value.chunkPos.z - cz) < 5 && chunk.Value.generated && !chunk.Value.CompletelyEmpty)))
             ];
 
             //Parallel.ForEach(chunks, (chunk)=>

@@ -1078,15 +1078,30 @@ namespace FantasyVoxels.Entities
 
         public void RenderUI()
         {
+            float uiScale = float.Floor(4 * UserInterface.Active.GlobalScale);
             MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp,blendState:MGame.crosshair);
 
             MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, MGame.Instance.GraphicsDevice.Viewport.Bounds.Size.ToVector2() / 2, new Rectangle(52, 0, 7, 7), Color.White, 0f, Vector2.One * 2, 3, SpriteEffects.None, 0);
+
+            long curChunk = EntityManager.GetChunk(position);
+            StringBuilder debugInfo = new StringBuilder($"{curChunk}\n");
+            if(MGame.Instance.loadedChunks.ContainsKey(curChunk))
+            {
+                debugInfo.AppendLine($"Modified? {MGame.Instance.loadedChunks[curChunk].modified}");
+                debugInfo.AppendLine($"Generated? {MGame.Instance.loadedChunks[curChunk].generated}");
+                debugInfo.AppendLine($"Empty? {MGame.Instance.loadedChunks[curChunk].CompletelyEmpty}");
+            }
+            else
+            {
+                debugInfo.AppendLine($"Not available!");
+            }
+
+            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], debugInfo, new Vector2(100,100), Color.White, 0f, Vector2.Zero, uiScale/2, SpriteEffects.None, 1f);
 
             MGame.Instance.spriteBatch.End();
 
             MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp, sortMode: SpriteSortMode.FrontToBack);
 
-            float uiScale = float.Floor(4 * UserInterface.Active.GlobalScale);
             int leftmost = (int)(-4.5f * uiScale * 21 + UserInterface.Active.ScreenWidth/2f);
 
             //hotbar and health
