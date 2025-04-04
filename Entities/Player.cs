@@ -1096,7 +1096,7 @@ namespace FantasyVoxels.Entities
             //    debugInfo.AppendLine($"Not available!");
             //}
 
-            MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], debugInfo, new Vector2(100,100), Color.White, 0f, Vector2.Zero, uiScale/2, SpriteEffects.None, 1f);
+            //MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], debugInfo, new Vector2(100,100), Color.White, 0f, Vector2.Zero, uiScale/2, SpriteEffects.None, 1f);
 
             MGame.Instance.spriteBatch.End();
 
