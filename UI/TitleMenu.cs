@@ -95,7 +95,7 @@ namespace FantasyVoxels.UI
             worldCreator.AddChild(worldSeed);
 
             worldCreator.AddChild(new Button("Cancel", anchor: Anchor.BottomLeft, skin: ButtonSkin.Alternative, size: new Vector2(300, 70))).OnClick += GoToWorldBrowser;
-            worldCreator.AddChild(new Button("Create New World", anchor: Anchor.BottomRight, skin: ButtonSkin.Alternative, size: new Vector2(300, 70))).OnClick += CreateNewWorld;
+            worldCreator.AddChild(new Button("Create World", anchor: Anchor.BottomRight, skin: ButtonSkin.Alternative, size: new Vector2(300, 70))).OnClick += CreateNewWorld;
 
 
             //Options
