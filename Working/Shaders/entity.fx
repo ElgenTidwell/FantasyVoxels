@@ -73,7 +73,7 @@ PSOut MainPS(VSOutput input)
     
     output.Color0.a = 1;
     output.Color0.xyz *= float3(tint, tint, tint) + tex2D(lightmapSampler, float2(pow(blocklightTint, 0.8f), 0)).xyz;
-    output.Color0.xyz *= (dot(input.Normal.xyz, float3(0.1, 0.9, 0)) * 0.5 + 0.5) * input.Color.xyz * colorTint;
+    output.Color0.xyz *= (dot(input.Normal.xyz, float3(0.1, 0.9, 0)) * 0.5 + 0.5) * colorTint;
     
     float2 depth = input.Depth.xy;
     

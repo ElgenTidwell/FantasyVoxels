@@ -56,12 +56,6 @@ namespace FantasyVoxels.Entities.EntityModels
 
             float ourLight = (voxelData.skyLight / 255f) * MGame.Instance.daylightPercentage;
 
-            var effect = MGame.Instance.GetEntityShader();
-            effect.Parameters["mainTexture"].SetValue(texture);
-            effect.Parameters["colorTint"].SetValue(tint);
-            effect.Parameters["tint"].SetValue(ourLight);
-            effect.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
-
             foreach (var mesh in model.Meshes)
             {
                 var partmat = partMatrixLookup[mesh.Name];
@@ -70,6 +64,10 @@ namespace FantasyVoxels.Entities.EntityModels
                     Matrix world = partmat * mesh.ParentBone.ModelTransform * Matrix.CreateScale(scale) * entityMatrix * MGame.Instance.world;
                     part.Effect.Parameters["World"].SetValue(world);
                     part.Effect.Parameters["RotWorld"].SetValue(Matrix.Transpose(Matrix.Invert(world)));
+                    part.Effect.Parameters["mainTexture"].SetValue(texture);
+                    part.Effect.Parameters["colorTint"].SetValue(tint);
+                    part.Effect.Parameters["tint"].SetValue(ourLight);
+                    part.Effect.Parameters["blocklightTint"].SetValue(voxelData.blockLight / 255f);
                 }
                 mesh.Draw();
             }

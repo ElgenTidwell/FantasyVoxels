@@ -36,11 +36,6 @@
 /processor:ModelProcessor
 /build:../Working/Models/roboPlayer.glb;Models/roboPlayer.glb
 
-#begin ../Working/Models/roboPlayer.obj
-/importer:FbxImporter
-/processor:ModelProcessor
-/build:../Working/Models/roboPlayer.obj;Models/roboPlayer.obj
-
 #begin ../Working/Shaders/breakingVoxel.fx
 /importer:EffectImporter
 /processor:EffectProcessor
@@ -4869,10 +4864,6 @@
 /importer:FbxImporter
 /processor:ModelProcessor
 /build:../Working/Models/cow.glb;Models/cow.glb
-#begin ../Working/Models/cow.obj
-/importer:FbxImporter
-/processor:ModelProcessor
-/build:../Working/Models/cow.obj;Models/cow.obj
 #begin ../Working/Models/cow.fbx
 /importer:FbxImporter
 /processor:ModelProcessor
