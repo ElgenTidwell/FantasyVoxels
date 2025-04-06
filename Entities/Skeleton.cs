@@ -176,7 +176,7 @@ namespace Solovox.Entities
 
 				if(attacktime < 0 && Vector3.Distance((Vector3)g.target.position, (Vector3)position) < 2f)
 				{
-					g.target.OnTakeDamage(new DamageInfo { damage = 0, from = this.position, fromEntity = this });
+					g.target.OnTakeDamage(new DamageInfo { damage = 4, from = this.position, fromEntity = this });
 					attacktime = 0.5f;
 				}
 				if (Vector3.Distance((Vector3)g.target.position, (Vector3)position) > 12)

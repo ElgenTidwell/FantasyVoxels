@@ -10,21 +10,19 @@ namespace FantasyVoxels.Biomes
 {
     public abstract class BiomeProvider:IComparable<BiomeProvider>
     {
-        protected float GetOctaveNoise2D(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
+        public float GetOctaveNoise2D(float x, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
             float totalNoise = 0;
             float amplitude = 1;
-            float maxAmplitude = 0; // Used to normalize the result
             for (int i = 0; i < octaveCount; i++)
             {
                 totalNoise += IcariaNoise.GradientNoise(x * frequency, z * frequency, MGame.Instance.seed - 10) * amplitude;
-                maxAmplitude += amplitude;
                 amplitude *= persistence;    // Decrease amplitude for each octave
                 frequency *= lacunarity;     // Increase frequency for each octave
             }
-            return totalNoise / maxAmplitude;
+            return totalNoise;
         }
-        protected float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
+        public float GetOctaveNoise3D(float x, float y, float z, float frequency, int octaveCount, float persistence, float lacunarity, int seedOffset = 0)
         {
             float totalNoise = 0;
             float amplitude = 1;
@@ -40,8 +38,9 @@ namespace FantasyVoxels.Biomes
         }
         public abstract string Name { get; }
         public abstract TerrainLode[] Lodes { get; }
+        public abstract int GrassColor { get; }
         public abstract byte GetVoxel(float x, float y, float z, int terrainHeight, bool p3d);
-        public abstract byte RequestFolliage(float samplex, float sampley, float samplez, Random tRandom);
+        public abstract byte RequestFolliage(float samplex, float sampley, float samplez, Random tRandom, int fromvox);
         public abstract byte GetSurfaceVoxel(float samplex, float sampley, float samplez);
 
         public int CompareTo(BiomeProvider other)

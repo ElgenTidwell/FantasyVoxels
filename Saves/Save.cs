@@ -52,10 +52,14 @@ namespace FantasyVoxels.Saves
             int cx = (int)double.Floor(Instance.player.position.X / Chunk.Size);
             int cz = (int)double.Floor(Instance.player.position.Z / Chunk.Size);
 
+            var array = MGame.Instance.loadedChunks.ToArray();
+
             IList<Task> writeTaskList = new List<Task>();
             List<KeyValuePair<long,Chunk>> chunksToSave =
             [
-                .. Array.FindAll(MGame.Instance.loadedChunks.ToArray(), chunk => chunk.Value.modified)
+                .. Array.FindAll(array, chunk => chunk.Value.modified || (int.Abs(chunk.Value.chunkPos.x - cx) < 4 &&
+                                                                          int.Abs(chunk.Value.chunkPos.z - cz) < 4 &&
+                                                                          chunk.Value.generated && !chunk.Value.CompletelyEmpty))
             ];
 
             //Parallel.ForEach(chunks, (chunk)=>
@@ -157,16 +161,7 @@ namespace FantasyVoxels.Saves
 
                     chunk.chunkPos = (chunkx, chunky, chunkz);
 
-                    //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
-                    if (!MGame.Instance.loadedChunks.TryAdd(MGame.CCPos(chunk.chunkPos), chunk))
-                    {
-                        MGame.Instance.loadedChunks[MGame.CCPos(chunk.chunkPos)] = chunk;
-                    }
-
                     chunk.generated = true;
-                    chunk.modified = true;
-
-                    //chunk.modified = !chunkfilename.Contains("unmodified");
 
                     Array.Fill(chunk.meshLayer, true);
 
@@ -175,6 +170,13 @@ namespace FantasyVoxels.Saves
                     chunk.meshUpdated = [false, false, false, false];
 
                     chunk.Remesh(useOldLight: true);
+
+                    //Dont just forget about the chunk (like old versions did), just modify it instead. Easier, no?
+                    if (!MGame.Instance.loadedChunks.TryAdd(MGame.CCPos(chunk.chunkPos), chunk))
+                    {
+                        MGame.Instance.loadedChunks[MGame.CCPos(chunk.chunkPos)] = chunk;
+                    }
+                    //chunk.modified = !chunkfilename.Contains("unmodified");
 
                     cur++;
                     prog.Value = (int)((cur / (float)max) * 100);

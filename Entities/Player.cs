@@ -21,6 +21,7 @@ using static FantasyVoxels.Voxel;
 using FantasyVoxels.Blocks;
 using System.Reflection;
 using Solovox.Entities;
+using FantasyVoxels.Biomes;
 
 namespace FantasyVoxels.Entities
 {
@@ -45,6 +46,7 @@ namespace FantasyVoxels.Entities
         bool accessingInventory;
         bool accessingIdeasBook;
 		bool accessingBlockContainer;
+        bool debugMenu;
 
         ContainerBlockData blockContainer;
 
@@ -137,6 +139,7 @@ namespace FantasyVoxels.Entities
         HandAnimation currentHandAnimation;
         float handAnimationTimer;
         float swingAngle = 0;
+        float newItemToastTime = 0f;
 
         enum HandAnimation
         {
@@ -179,7 +182,9 @@ namespace FantasyVoxels.Entities
                     {
                         return string.Compare(ItemManager.GetItemFromID(recipes[a].itemOutput.itemID).name, ItemManager.GetItemFromID(recipes[b].itemOutput.itemID).name);
                     });
-				}
+
+                    if (newItemToastTime <= 0) newItemToastTime = 6f;
+                }
 				recipes = CraftingManager.GetRecipes(RecipeType.Cooking);
 				foreach (var recipe in recipes.FindAll(r => r.itemInput.Contains(id)))
 				{
@@ -194,7 +199,9 @@ namespace FantasyVoxels.Entities
 					{
 						return string.Compare(ItemManager.GetItemFromID(recipes[a].itemOutput.itemID).name, ItemManager.GetItemFromID(recipes[b].itemOutput.itemID).name);
 					});
-				}
+
+                    if (newItemToastTime <= 0) newItemToastTime = 6f;
+                }
 			}
         }
 
@@ -256,6 +263,8 @@ namespace FantasyVoxels.Entities
         {
             //running = (Keyboard.GetState().IsKeyDown(Keys.LeftControl) || running) && !crouched;
             crouched = Keyboard.GetState().IsKeyDown(Keys.LeftShift);
+
+            if (BetterKeyboard.HasBeenPressed(Keys.F1)) debugMenu = !debugMenu;
 
             if (!crouched)
             {
@@ -621,6 +630,8 @@ namespace FantasyVoxels.Entities
         {
             if (health <= 0 && !deathUIshown) Die();
 
+            if (newItemToastTime >= 0) newItemToastTime -= MGame.dt;
+
             if (health > 0)
             {
                 if (MathF.Abs(velocity.X + velocity.Z) < 4f) running = false;
@@ -673,13 +684,13 @@ namespace FantasyVoxels.Entities
                 painResponse = Maths.MoveTowards(painResponse, 4, MGame.dt * 5 * (float.Abs(painResponse) + 0.1f));
             }
 
-            //if(BetterKeyboard.HasBeenPressed(Keys.R))
-            //{
-            //    Skeleton test = new Skeleton();
-            //    test.position = position + forward;
+            if (BetterKeyboard.HasBeenPressed(Keys.F5))
+            {
+                Skeleton test = new Skeleton();
+                test.position = position + forward;
 
-            //    EntityManager.SpawnEntity(test);
-            //}
+                EntityManager.SpawnEntity(test);
+            }
 
             vmswayX = Maths.MoveTowards(vmswayX, 0, MGame.dt * 15 * float.Abs(vmswayX));
             vmswayY = Maths.MoveTowards(vmswayY, 0, MGame.dt * 15 * float.Abs(vmswayY));
@@ -920,7 +931,7 @@ namespace FantasyVoxels.Entities
 
 			if (BetterKeyboard.HasBeenPressed(Keys.R))
 			{
-				if (!ExitOtherMenus()) { accessingIdeasBook = true; MGame.Instance.IsMouseVisible = true; }
+				if (!ExitOtherMenus()) { accessingIdeasBook = true; if (newItemToastTime > 0.5f) newItemToastTime = 0.5f; MGame.Instance.IsMouseVisible = true; }
 			}
 
 			if (!accessingInventory) return;
@@ -947,7 +958,7 @@ namespace FantasyVoxels.Entities
             float speed = new Vector2(velocity.X, velocity.Z).Length();
             if (speed != 0)
             {
-                float drop = speed * (swimming ? 2f : grounded ? 12 : 1) * MGame.dt;
+                float drop = speed * (fly? 24 : swimming ? 2f : grounded ? 12 : 1) * MGame.dt;
                 velocity *= MathF.Max(speed - drop, 0) / speed;
             }
 
@@ -1083,29 +1094,49 @@ namespace FantasyVoxels.Entities
 
             MGame.Instance.spriteBatch.Draw(MGame.Instance.uiTextures, MGame.Instance.GraphicsDevice.Viewport.Bounds.Size.ToVector2() / 2, new Rectangle(52, 0, 7, 7), Color.White, 0f, Vector2.One * 2, 3, SpriteEffects.None, 0);
 
-            //long curChunk = EntityManager.GetChunk(position);
-            //StringBuilder debugInfo = new StringBuilder($"{curChunk}\n");
-            //if(MGame.Instance.loadedChunks.ContainsKey(curChunk))
-            //{
-            //    debugInfo.AppendLine($"Modified? {MGame.Instance.loadedChunks[curChunk].modified}");
-            //    debugInfo.AppendLine($"Generated? {MGame.Instance.loadedChunks[curChunk].generated}");
-            //    debugInfo.AppendLine($"Empty? {MGame.Instance.loadedChunks[curChunk].CompletelyEmpty}");
-            //}
-            //else
-            //{
-            //    debugInfo.AppendLine($"Not available!");
-            //}
+            if(debugMenu)
+            {
+                float humid = WorldBuilder.GetHumidity((float)position.X, (float)position.Z);
+                float temp = WorldBuilder.GetTemperature((float)position.X, (float)position.Z);
+                var biome = BiomeTracker.GetBiome(humid, temp);
+                long curChunk = EntityManager.GetChunk(position);
+                StringBuilder debugInfo = new StringBuilder($"Solovox {MGame.GameVersion}\n");
+                debugInfo.Append($"{curChunk}\n{MGame.ReverseCCPos(curChunk)}\n");
+                debugInfo.AppendLine($"{biome.Name}, (h:{humid.ToString("0.00")} [{(int)(humid * (BiomeTracker.HumidityLevels))}], t:{temp.ToString("0.00")} [{(int)(temp * (BiomeTracker.TemperatureLevels))}])");
+                if (MGame.Instance.loadedChunks.ContainsKey(curChunk))
+                {
+                    debugInfo.AppendLine($"Modified? {MGame.Instance.loadedChunks[curChunk].modified}");
+                    debugInfo.AppendLine($"Generated? {MGame.Instance.loadedChunks[curChunk].generated}");
+                    debugInfo.AppendLine($"Empty? {MGame.Instance.loadedChunks[curChunk].CompletelyEmpty}");
+                }
+                else
+                {
+                    debugInfo.AppendLine($"Not available!");
+                }
+                debugInfo.AppendLine($"X:{position.X.ToString("0.0")}, Y:{position.Y.ToString("0.0")}, Z:{position.Z.ToString("0.0")}");
 
-            //MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], debugInfo, new Vector2(100,100), Color.White, 0f, Vector2.Zero, uiScale/2, SpriteEffects.None, 1f);
+                MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], debugInfo, new Vector2(32, 32), Color.White, 0f, Vector2.Zero, 2, SpriteEffects.None, 1f);
+            }
 
             MGame.Instance.spriteBatch.End();
 
             MGame.Instance.spriteBatch.Begin(samplerState: SamplerState.PointClamp, sortMode: SpriteSortMode.FrontToBack);
 
             int leftmost = (int)(-4.5f * uiScale * 21 + UserInterface.Active.ScreenWidth/2f);
+            
+            if(newItemToastTime > 0)
+            {
+                int toastX = (int)(0);
+                int toastY = (int)((int)(newItemToastTime > 5.5f ? (1 - (newItemToastTime - 5.5f)*2) * 48 - 48
+                                        : newItemToastTime < 0.5f ? newItemToastTime * 2 * 48 - 48 : 0)*uiScale);
+                MGame.Instance.spriteBatch.Draw(MGame.Instance.uiToast, new Vector2(toastX, toastY), null, Color.White, 0f, Vector2.Zero,uiScale,SpriteEffects.None,0);
+
+                MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], "New ideas...", new Vector2(toastX+uiScale*6, toastY), Color.Goldenrod, 0f, Vector2.Zero, uiScale, SpriteEffects.None, 1f);
+                MGame.Instance.spriteBatch.DrawString(Resources.Instance.Fonts[(int)FontStyle.Regular], "Press R to view", new Vector2(toastX+uiScale*6, toastY + uiScale * 10), Color.White, 0f, Vector2.Zero, uiScale, SpriteEffects.None, 1f);
+            }
 
             //hotbar and health
-            for(int i = 0; i < 9; i++)
+            for (int i = 0; i < 9; i++)
             {
                 float horizPos = leftmost + i * uiScale * 21;
                 
@@ -1431,27 +1462,27 @@ namespace FantasyVoxels.Entities
 
 			var craftTab = new Rectangle(backpackX-7*scale, backpackY - (184 / 2) * scale, 24 * scale, 24 * scale);
 			var cookTab = new Rectangle(backpackX-7* scale, backpackY - (184 / 2) * scale + 24*scale, 24 * scale, 24 * scale);
-
+            
             if (craftTab.Contains(Mouse.GetState().Position))
             {
-				craftTab.X -= 16 * scale;
+				craftTab.X = backpackX - 24 * scale;
 				if (BetterMouse.WasLeftPressed())
                 {
 					curIdeaTab = RecipeType.Crafting;
 					curIdeaPage = 0;
 				}
-			}
+            }
             if (cookTab.Contains(Mouse.GetState().Position))
             {
-				cookTab.X -= 16 * scale;
+				cookTab.X = backpackX - 24 * scale;
                 if (BetterMouse.WasLeftPressed())
                 {
 					curIdeaTab = RecipeType.Cooking;
 					curIdeaPage = 0;
 				}
-			}
+            }
 
-			MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, craftTab, new Rectangle(383, 0, 24, 24), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.06f);
+            MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, craftTab, new Rectangle(383, 0, 24, 24), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.06f);
 			MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, new Rectangle(craftTab.X+6*scale, craftTab.Y + 3 * scale, 16*scale,16 * scale), new Rectangle(364, 24, 16, 16), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.07f);
             MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, cookTab, new Rectangle(383, 0, 24, 24), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.06f);
 			MGame.Instance.spriteBatch.Draw(MGame.Instance.uiIdeas, new Rectangle(cookTab.X + 6 * scale, cookTab.Y + 3 * scale, 16 * scale, 16 * scale), new Rectangle(380, 24, 16, 16), Color.White, 0f, Vector2.Zero, SpriteEffects.None, 0.07f);

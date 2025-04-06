@@ -17,7 +17,7 @@ namespace FantasyVoxels.Blocks
 			public const float MAX_COOK_TIME = 100;
 			public const float FUEL_DURATION = 360;
 
-			public float fuelTimeRemaining = 0;
+			public float fuelTimeRemaining = 1;
 			public float cookTime = MAX_COOK_TIME;
 			public bool isCooking = false;
 			public bool alternateFuelSlot = false;
@@ -72,6 +72,7 @@ namespace FantasyVoxels.Blocks
 			private void ConsumeFuel()
 			{
 				if (--fuelTimeRemaining > 0) return;
+				if (FindItemToCook().Item1.itemID == -1) return;
 
 				alternateFuelSlot = !alternateFuelSlot;
 				useBothFuelSlots = items.PeekItem(0).itemID != -1 && items.PeekItem(1).itemID != -1;

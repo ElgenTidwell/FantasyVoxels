@@ -4,27 +4,18 @@ using FantasyVoxels.UI;
 using GeonBit.UI;
 using GeonBit.UI.Entities;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json;
 using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using static Icaria.Engine.Procedural.IcariaNoise;
-using static System.Net.Mime.MediaTypeNames;
 using FantasyVoxels.ItemManagement;
 using FmodForFoxes;
 using FmodForFoxes.Studio;
-using FantasyVoxels.Entities.EntityModels;
-using System.Timers;
 using FantasyVoxels.Blocks;
 
 namespace FantasyVoxels
@@ -32,6 +23,7 @@ namespace FantasyVoxels
     public class MGame : Game
     {
         public static MGame Instance { get; private set; }
+        public const string GameVersion = "a0.1.0";
 
         public static float dt = 0;
         public static float totalTime = 0;
@@ -56,7 +48,7 @@ namespace FantasyVoxels
         public SpriteBatch spriteBatch => _spriteBatch;
         private RenderTarget2D screenTexture, normalTexture, SSAOTarget, shadowMap;
         public Texture2D colors,items,normals,noise,uiTextures,uiBackback,sunTexture,moonTexture,aoMap,white,breaking,lightmap,waterOverlay,waterDUDV,handSpr,clouds,clouds_2;
-        public Texture2D uiBasket,uiForge,uiIdeas,titleTexture,particleAtlas;
+        public Texture2D uiBasket,uiForge,uiIdeas,titleTexture,particleAtlas,uiToast;
         private Effect chunk;
         private Effect entity;
         private Effect particles;
@@ -404,33 +396,35 @@ namespace FantasyVoxels
             SSAOTarget = new RenderTarget2D(GraphicsDevice,Width/2,Height/2,false,SurfaceFormat.HdrBlendable,DepthFormat.None);
             shadowMap = new RenderTarget2D(GraphicsDevice, 2048, 2048, false, SurfaceFormat.Single, DepthFormat.Depth24);
             
-            colors = Content.Load<Texture2D>("Textures/colors");
-            items = Content.Load<Texture2D>("Textures/items");
-            normals = Content.Load<Texture2D>("Textures/normals");
-            aoMap = Content.Load<Texture2D>("Textures/aomap");
-            noise = Content.Load<Texture2D>("Textures/noise");
-            uiTextures = Content.Load<Texture2D>("Textures/UITextures");
-            uiBackback = Content.Load<Texture2D>("Textures/backpack");
-            uiForge = Content.Load<Texture2D>("Textures/forge");
-            uiBasket = Content.Load<Texture2D>("Textures/basket");
-            uiIdeas = Content.Load<Texture2D>("Textures/ideabook");
-			white = Content.Load<Texture2D>("Textures/white");
-            breaking = Content.Load<Texture2D>("Textures/breaking");
-            sunTexture = Content.Load<Texture2D>("Textures/sun");
-            moonTexture = Content.Load<Texture2D>("Textures/moon");
-            lightmap = Content.Load<Texture2D>("Textures/lightmap");
-            waterOverlay = Content.Load<Texture2D>("Textures/waterOverlay");
-            waterDUDV = Content.Load<Texture2D>("Textures/water_dudv");
-            handSpr = Content.Load<Texture2D>("Textures/rbhand");
-            clouds = Content.Load<Texture2D>("Textures/clouds");
-            clouds_2 = Content.Load<Texture2D>("Textures/clouds_2");
+            colors        = Content.Load<Texture2D>("Textures/colors");
+            items         = Content.Load<Texture2D>("Textures/items");
+            normals       = Content.Load<Texture2D>("Textures/normals");
+            aoMap         = Content.Load<Texture2D>("Textures/aomap");
+            noise         = Content.Load<Texture2D>("Textures/noise");
+            uiTextures    = Content.Load<Texture2D>("Textures/UITextures");
+            uiBackback    = Content.Load<Texture2D>("Textures/backpack");
+            uiForge       = Content.Load<Texture2D>("Textures/forge");
+            uiBasket      = Content.Load<Texture2D>("Textures/basket");
+            uiToast       = Content.Load<Texture2D>("Textures/toast");
+            uiIdeas       = Content.Load<Texture2D>("Textures/ideabook");
+			white         = Content.Load<Texture2D>("Textures/white");
+            breaking      = Content.Load<Texture2D>("Textures/breaking");
+            sunTexture    = Content.Load<Texture2D>("Textures/sun");
+            moonTexture   = Content.Load<Texture2D>("Textures/moon");
+            lightmap      = Content.Load<Texture2D>("Textures/lightmap");
+            waterOverlay  = Content.Load<Texture2D>("Textures/waterOverlay");
+            waterDUDV     = Content.Load<Texture2D>("Textures/water_dudv");
+            handSpr       = Content.Load<Texture2D>("Textures/rbhand");
+            clouds        = Content.Load<Texture2D>("Textures/clouds");
+            clouds_2      = Content.Load<Texture2D>("Textures/clouds_2");
             particleAtlas = Content.Load<Texture2D>("Textures/particles");
-            titleTexture = Content.Load<Texture2D>("Textures/logo");
+            titleTexture  = Content.Load<Texture2D>("Textures/logo");
 
             chunk.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             chunk.Parameters["colors"]?.SetValue(colors);
             chunk.Parameters["normal"]?.SetValue(normals);
             chunk.Parameters["lightmap"]?.SetValue(lightmap);
+            chunk.Parameters["grassColor"]?.SetValue(Content.Load<Texture2D>("Textures/grasscolors"));
             entity.Parameters["ChunkSize"]?.SetValue(Chunk.Size);
             entity.Parameters["lightmap"]?.SetValue(lightmap);
             particles.Parameters["lightmap"]?.SetValue(lightmap);
@@ -554,7 +548,7 @@ namespace FantasyVoxels
                 int cy;
                 int cz;
                 
-                player.position.Y = 0;
+                player.position.Y = 200;
 
                 cx = (int)MathF.Floor(cameraPosition.X / Chunk.Size);
                 cy = (int)MathF.Floor(cameraPosition.Y / Chunk.Size);
@@ -562,7 +556,7 @@ namespace FantasyVoxels
 
                 for (int x = -spawnGenRadius; x <= spawnGenRadius; x++)
                 {
-                    for (int y = -1; y <= 4; y++)
+                    for (int y = 0; y <= 6; y++)
                     {
                         for (int z = -spawnGenRadius; z <= spawnGenRadius; z++)
                         {
@@ -595,11 +589,13 @@ namespace FantasyVoxels
                 UserInterface.Active.RemoveEntity(label);
                 UserInterface.Active.RemoveEntity(prog);
 
-                for(int y = 0; y < 8; y++)
+                for(int i = 256; i > 0; i--)
                 {
-                    if (!loadedChunks.TryGetValue(CCPos((cx, y, cz)), out var c)) continue;
-
-                    player.position.Y = float.Max((float)player.position.Y, c.MaxY);
+                    if(CollisionDetector.IsSolidTile(0,i,0,true))
+                    {
+                        player.position.Y = i+1;
+                        break;
+                    }
                 }
 
                 worldSpawnpoint = player.position;
@@ -638,7 +634,21 @@ namespace FantasyVoxels
             const short shift = short.MaxValue/2;
             return (((long)((short)pos.z + shift) | ((long)((short)pos.y + shift) << 16) | ((long)((short)pos.x + shift) << 32)));
         }
+        public static (int x, int y, int z) ReverseCCPos(long value)
+        {
+            const short shift = short.MaxValue / 2;
+            // Extract each component (each component was stored in 16 bits)
+            short encodedZ = (short)(value & 0xFFFF);
+            short encodedY = (short)((value >> 16) & 0xFFFF);
+            short encodedX = (short)((value >> 32) & 0xFFFF);
 
+            // Subtract the shift to recover the original values
+            int x = encodedX - shift;
+            int y = encodedY - shift;
+            int z = encodedZ - shift;
+
+            return (x, y, z);
+        }
         void ProcessMesh()
         {
             if (!toMesh.TryDequeue(out (int x, int y, int z) t)) return;
@@ -1030,6 +1040,7 @@ namespace FantasyVoxels
             GraphicsDevice.SamplerStates[1] = crunchy;
             GraphicsDevice.SamplerStates[2] = crunchy;
             GraphicsDevice.SamplerStates[3] = SamplerState.LinearClamp;
+            GraphicsDevice.SamplerStates[4] = SamplerState.LinearClamp;
 
             var skyColor = WorldTimeManager.GetSkyColor();
             var skyBandColor = WorldTimeManager.GetSkyBandColor();
@@ -1219,9 +1230,9 @@ namespace FantasyVoxels
 
             RenderChunks(true);
 
-            GraphicsDevice.BlendState = BlendState.Additive;
+            GraphicsDevice.BlendState = BlendState.AlphaBlend;
 
-            GraphicsDevice.SamplerStates[0] = SamplerState.LinearWrap;
+            GraphicsDevice.SamplerStates[0] = SamplerState.PointWrap;
 
             cloudShader.Parameters["View"].SetValue(view);
             cloudShader.Parameters["Projection"].SetValue(projection);

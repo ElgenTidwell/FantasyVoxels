@@ -11,12 +11,13 @@ namespace FantasyVoxels.Entities
 	public static class WorldPopulator
 	{
 		const int MAX_POPULATION = 2;
+		static int totalPopulation;
 		static ConcurrentDictionary<long, Chunk> chunks => MGame.Instance.loadedChunks;
 		static ConcurrentDictionary<long, int> entityPopulations = new ConcurrentDictionary<long, int>();
 		static float timer = 0;
 		public static void UpdateTimer()
 		{
-			if(timer < -0.5f) timer = Random.Shared.NextSingle() * 15;
+			if(timer < -0.5f) timer = Random.Shared.NextSingle() * 10;
 			timer -= MGame.dt;
 		}
 		public static void CheckChunk(long id)
@@ -25,8 +26,17 @@ namespace FantasyVoxels.Entities
 
 			int population = 0;
 			entityPopulations.TryGetValue(id, out population);
+			totalPopulation += population;
 
-			if (timer <= 0 && population < MAX_POPULATION)
+            int cx = (int)double.Floor(MGame.Instance.player.position.X / Chunk.Size);
+            int cy = (int)double.Floor(MGame.Instance.player.position.Y / Chunk.Size);
+            int cz = (int)double.Floor(MGame.Instance.player.position.Z / Chunk.Size);
+
+			var cpos = MGame.ReverseCCPos(id);
+
+			if (int.Abs(cx - cpos.x) <= 1 && int.Abs(cz - cpos.z) <= 1 && int.Abs(cy - cpos.y) <= 1) return;
+
+            if (timer <= 0 && population < MAX_POPULATION && totalPopulation < 75)
 			{
 				int spawnCount = Random.Shared.Next(-8, MAX_POPULATION - population);
 

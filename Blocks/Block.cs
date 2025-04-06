@@ -40,6 +40,7 @@ namespace FantasyVoxels.Blocks
     {
         protected int myVoxelID;
         public bool supportsCustomMeshing;
+        public bool customMeshColorControl;
         public bool smoothLightingEnable;
         public bool customDrops;
         public bool customBounds;
@@ -83,6 +84,10 @@ namespace FantasyVoxels.Blocks
         public virtual void PlaceBlock((int x, int y, int z) posInChunk, Chunk chunk) { }
         public virtual void BreakBlock((int x, int y, int z) posInChunk, Chunk chunk) { }
         public virtual List<VertexPositionNormalTexture> CustomMesh(int x, int y, int z, int checkFace, int otherVoxel, Vector2 baseUVOffset, Vector3 chunkPos)
+        {
+            return null;
+        }
+        public virtual List<VertexPositionColorNormalTexture> CustomMeshColorControl(int x, int y, int z, int checkFace, int otherVoxel, Vector2 baseUVOffset, Vector3 chunkPos)
         {
             return null;
         }

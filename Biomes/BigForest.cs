@@ -4,10 +4,10 @@ using System;
 
 namespace FantasyVoxels.Biomes
 {
-    public class GlowForest : BiomeProvider
+    public class BigForest : BiomeProvider
     {
-        public override int GrassColor => 0;
-        public override string Name => "Glow Forest";
+        public override int GrassColor => 1;
+        public override string Name => "Big Forest";
         private static TerrainLode[] lodes =
         [
             new TerrainLode(19,-50,60, 0.35f),
@@ -36,22 +36,23 @@ namespace FantasyVoxels.Biomes
             float r = IcariaNoise.GradientNoise(samplex * 0.01f, samplez * 0.01f, MGame.Instance.seed - 10);
             byte voxel = 0;
 
-            if ((int)(r * 35) == tRandom.Next(-35, 35) && IcariaNoise.CellularNoise(samplex*0.1f,sampley * 0.1f, MGame.Instance.seed).r >= 0.5f)
+            if ((int)(r * 35) == tRandom.Next(-35, 35) && IcariaNoise.CellularNoise(samplex*0.1f,sampley * 0.1f, MGame.Instance.seed).r >= 0.25f)
             {
-                VoxelStructurePlacer.Place((int)samplex, (int)sampley + 1, (int)samplez, new Tree());
+                VoxelStructurePlacer.Place((int)samplex, (int)sampley + 1, (int)samplez, new BigTree());
+            }
+            if ((int)(r * 600) == tRandom.Next(-250, 250) && IcariaNoise.CellularNoise(samplex * 0.1f, sampley * 0.1f, MGame.Instance.seed).r >= 0.35f)
+            {
+                VoxelStructurePlacer.Place((int)samplex, (int)sampley + 1, (int)samplez, new HugeBigTree());
             }
             if ((int)(r * 50) == tRandom.Next(-150, 150))
             {
                 voxel = 12;
             }
-            if ((int)(r * 200) == tRandom.Next(-150, 150))
-            {
-                voxel = 15;
-            }
             if ((int)(r * 40) == tRandom.Next(0,80))
             {
                 voxel = 18;
             }
+
             return voxel;
         }
 

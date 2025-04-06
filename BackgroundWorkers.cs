@@ -48,7 +48,7 @@ namespace FantasyVoxels
                         if (currentChunk.queueModified)
                         {
                             currentChunk.queueModified = false;
-                            currentChunk.CheckQueue(true);
+                            currentChunk.CheckQueue(false);
                         }
 
                         if (MGame.Instance.frustum.Contains(chunkbounds) == ContainmentType.Disjoint) continue;

@@ -20,12 +20,12 @@ namespace FantasyVoxels
         static WorldBuilder()
         {
             ContinentalnessCurve.Keys.Add(new CurveKey(1, 60));
-            ContinentalnessCurve.Keys.Add(new CurveKey(0.2f, 16));
-            ContinentalnessCurve.Keys.Add(new CurveKey(0.1f, 90));
-            ContinentalnessCurve.Keys.Add(new CurveKey(0.04f, 80));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.1f, 25));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-0.3f, -25));
-            ContinentalnessCurve.Keys.Add(new CurveKey(-1.0f, 60));
+            ContinentalnessCurve.Keys.Add(new CurveKey(0.4f, 43));
+            ContinentalnessCurve.Keys.Add(new CurveKey(0.27f, 19));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.07f, 19.3f));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.23f, 14f));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-0.4f, 23));
+            ContinentalnessCurve.Keys.Add(new CurveKey(-1.0f, 26));
 
             ErosionCurve.Keys.Add(new CurveKey(-1, 3));
             ErosionCurve.Keys.Add(new CurveKey(-0.3f, 2));
@@ -44,7 +44,9 @@ namespace FantasyVoxels
             DensityCurve.Keys.Add(new CurveKey(140, 0.0f));
 
             humid.SetNoiseType(FastNoiseLite.NoiseType.ValueCubic);
+            humid.SetFrequency(0.006f);
             temp.SetNoiseType(FastNoiseLite.NoiseType.ValueCubic);
+            temp.SetFrequency(0.0034f);
         }
 
         public static float GetHumidity(float x, float z)

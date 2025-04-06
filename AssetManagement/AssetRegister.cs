@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,7 +9,7 @@ namespace FantasyVoxels.AssetManagement
 {
     public static class AssetServer
     {
-        private static Dictionary<string, object> assets = new Dictionary<string, object>();
+        private static ConcurrentDictionary<string, object> assets = new ConcurrentDictionary<string, object>();
 
         public static T RequestOrLoad<T>(string assetPath)
         {
@@ -16,7 +17,7 @@ namespace FantasyVoxels.AssetManagement
 
             T asset = MGame.Instance.Content.Load<T>(assetPath);
 
-            assets.Add(assetPath, asset);
+            assets.TryAdd(assetPath, asset);
             return asset;
         }
     }

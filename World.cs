@@ -9,6 +9,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Media;
 using Newtonsoft.Json;
+using Solovox.Blocks;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -46,11 +47,13 @@ namespace FantasyVoxels
             .SetSurfaceType(SurfaceType.Dirt)
             .SetMaterialType(MaterialType.Soil)
             .SetBaseDigTime(DIRTDIG)
+            .AllowStone()
             .SetItem("dirt"),
             
             //Water
             new Voxel(true,1,true,true,2,ignoreRaycast:true)
             .SetTextureData(TextureSetSettings.ALLSIDES, 2)
+            .SetMaterialType(MaterialType.Stone)
             .SetClass(new WaterBlock()),
             
             //Clay
@@ -60,6 +63,7 @@ namespace FantasyVoxels
             .SetMaterialType(MaterialType.Soil)
             .SetBaseDigTime(DIRTDIG)
             .SetClass(new ClayBlock())
+            .AllowStone()
             .SetItem("clayblock"),
             
             //Log
@@ -96,6 +100,7 @@ namespace FantasyVoxels
             .SetBaseDigTime(STONEDIG)
             .RequireLevel(1)
             .SetClass(new StoneBlock())
+            .AllowStone()
             .SetItem("stone"),
             
             //Plank
@@ -213,10 +218,44 @@ namespace FantasyVoxels
             .SetBaseDigTime(STONEDIG)
             .RequireLevel(1)
             .SetItem("coal"),
+
+            //Sand (22)
+            new Voxel()
+            .SetTextureData(TextureSetSettings.ALLSIDES, 27)
+            .SetSurfaceType(SurfaceType.Dirt)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(DIRTDIG)
+            .AllowStone()
+            .SetItem("sand"),
+
+            //Gravel (23)
+            new Voxel()
+            .SetTextureData(TextureSetSettings.ALLSIDES, 28)
+            .SetSurfaceType(SurfaceType.Dirt)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(DIRTDIG)
+            .AllowStone()
+            .SetItem("gravel"),
+
+            //Yucca (24)
+            new Voxel(lightPassthrough: 0, renderNeighbors: true, ignoreCollision: true, ignoreRaycast: false)
+            .SetTextureData(TextureSetSettings.ALLSIDES, 29)
+            .SetSurfaceType(SurfaceType.Dirt)
+            .SetMaterialType(MaterialType.Soil)
+            .SetBaseDigTime(DIRTDIG)
+            .SetClass(new YuccaBlock())
+            .SetItem("gravel"),
+
+            //Leaves type 3 (25)
+            new Voxel(shaderEffect: 2, lightPassthrough: 190, renderNeighbors: true)
+            .SetTextureData(TextureSetSettings.ALLSIDES, 30)
+            .SetMaterialType(MaterialType.Wood)
+            .SetBaseDigTime(LEAVESDIG)
+            .SetSurfaceType(SurfaceType.Grass), 
         ];
 
         public Block myClass;
-        public bool ignoreCollision,isTransparent,renderNeighbors,isLiquid,ignoreRaycast;
+        public bool ignoreCollision,isTransparent,renderNeighbors,isLiquid,ignoreRaycast, allowStone;
         public int shaderEffect, lightPassthrough;
         public int requiredLevel;
         public byte blocklight;
@@ -353,6 +392,11 @@ namespace FantasyVoxels
 
             return this;
         }
+        public Voxel AllowStone()
+        {
+            allowStone = true;
+            return this;
+        }
 
         public bool AllowsPlacement(PlacementSettings placement) => placement == Voxel.PlacementSettings.ANY || allowedPlacements == Voxel.PlacementSettings.ANY || allowedPlacements.HasFlag(placement);
     }
@@ -372,7 +416,7 @@ namespace FantasyVoxels
         [Key(5)]
         public (int x, int y, int z, bool pos) spawnCandidate;
 	}
-    [MessagePackObject]
+    [MessagePackObject(AllowPrivate = true)]
     public class Chunk
     {
         public const int Size = 32;
@@ -463,7 +507,7 @@ namespace FantasyVoxels
             (0,0,-1),
         };
         [IgnoreMember]
-        static float[] sideShading =
+        public static float[] sideShading =
         [
             0.5f,
             0.5f,
@@ -605,7 +649,7 @@ namespace FantasyVoxels
             CompletelyEmpty = true;
 
             bool noBelow = true;
-            if(MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos((chunkPos.x,chunkPos.y-1,chunkPos.z)), out var c0) && c0.generated)
+            if (MGame.Instance.loadedChunks.TryGetValue(MGame.CCPos((chunkPos.x, chunkPos.y - 1, chunkPos.z)), out var c0) && c0.generated && c0.tHeight != null)
             {
                 tHeight = c0.tHeight;
                 noBelow = false;
@@ -632,7 +676,13 @@ namespace FantasyVoxels
                     
                     if(noBelow || tHeight[x, z] == 0)
                     {
-                        float continentalness = GetOctaveNoise2D(samplex, samplez, 0.02f * scalar, 10, 0.7f, 1.45f, 1) * 40 + 20;
+                        float continentalness = (GetOctaveNoise2D(samplex, samplez, 0.075f * scalar, 8, 0.6f, 1.45f, 1)) * 40+4;
+                        continentalness += float.Abs(GetOctaveNoise2D(samplex, samplez, 0.04f * scalar, 4, 0.5f, 1.45f, 1)) * 50;
+                        float mountain = (GetOctaveNoise2D(samplex, samplez, 0.03f * scalar, 8, 0.4f, 1.35f, 3)) * 120;
+
+                        continentalness += mountain;
+
+                        if (continentalness > 20) continentalness = (continentalness-20)*0.3f+ 20;
 
                         terrainHeight = (int)(continentalness);
                         tHeight[x, z] = terrainHeight;
@@ -660,10 +710,10 @@ namespace FantasyVoxels
 
                             //domainWarp.DomainWarp(ref samx, ref samy, ref samz);
 
-                            float perlin = GetBrokenOctaveNoise3D(samx, samy, samz, 0.26f, 8, 0.8f, 1.6f, 504);
-                            float perlin_thresh = GetBrokenOctaveNoise3D(samx, samy, samz, 0.1f, 2, 0.7f, 1.6f, 504);
+                            float perlin = GetBrokenOctaveNoise3D(samx, samy, samz, 0.2f, 8, 0.8f, 1.6f, 504);
+                            float perlinB = GetBrokenOctaveNoise3D(samx, samy, samz, 0.2f, 8, 0.8f, 1.6f, 243);
 
-                            if (float.Lerp(perlin, perlin_thresh, 0.5f + perlin_thresh) > (0.02f) * (sy * 0.1f)) vox = biome.GetVoxel(sx, sy, sz, th, true);
+                            if (float.Abs(perlin) > (0.015f) * (sy * 0.25f)) vox = biome.GetVoxel(sx, sy, sz, th, true);
                         }
                         if (pY > 0.1f)
                         {
@@ -710,8 +760,9 @@ namespace FantasyVoxels
 							//    EntityManager.SpawnEntity(wander);
 							//}
 						}
-                        bool stone = GetVoxel(samplex, sampley + 4, samplez, terrainHeight) == 2;
-                        if (voxels[x + Size * (y + Size * z)] == 2 && stone)
+                        var vox = y<Size-4? voxels[x + Size * ((y+4) + Size * z)] : GetVoxel(samplex, sampley + 4, samplez, terrainHeight);
+                        bool stone = vox != 0 && Voxel.voxelTypes[vox].allowStone;
+                        if (voxels[x + Size * (y + Size * z)] != 0 && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].allowStone && stone)
                         {
                             voxels[x + Size * (y + Size * z)] = 9;
 
@@ -735,9 +786,9 @@ namespace FantasyVoxels
                             voxels[x + Size * (y + Size * z)] = 2;
                         }
 
-                        if (voxels[x + Size * (y + Size * z)] == 1 && y < Size - 1)
+                        if (y < Size - 1 && (y < Size - 1 ? voxels[x + Size * ((y + 1) + Size * z)] : GetVoxel(samplex, sampley + 1, samplez, terrainHeight)) == 0)
                         {
-                            byte v = biome.RequestFolliage(samplex, sampley, samplez, tRandom);
+                            byte v = biome.RequestFolliage(samplex, sampley, samplez, tRandom, voxels[x + Size * (y + Size * z)]);
                             if (v > 0) voxels[x + Size * ((y + 1) + Size * z)] = v;
                         }
 
@@ -1017,10 +1068,10 @@ namespace FantasyVoxels
 
                             Vector3 normal = new Vector3(positionChecks[p].x, positionChecks[p].y, positionChecks[p].z);
 
-                            Color color = new Color((byte)Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].shaderEffect,
+                            Color color = new Color((byte)0,
                                                     (byte)0,
                                                     (byte)0,
-                                                    (byte)150);
+                                                    (byte)0);
 
                             Vector2 UVCoords = Vector2.Zero;
                             short tex = 0;
@@ -1045,9 +1096,8 @@ namespace FantasyVoxels
 									case 4: if(over.frontTexture != -1) tex = over.frontTexture; break;
 									case 5: if(over.backTexture != -1) tex = over.backTexture; break;
 								}
-							}
-
-                            UVCoords += new Vector2(tex % (MGame.AtlasSize/16), tex / (MGame.AtlasSize / 16)) * 16;
+                            }
+                            UVCoords += new Vector2(tex % (MGame.AtlasSize/16), float.Floor(tex / (MGame.AtlasSize / 16f))) * 16;
 
                             UVCoords /= MGame.AtlasSize;
 
@@ -1221,8 +1271,7 @@ namespace FantasyVoxels
                             {
                                 shouldMeshFace = Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.ShouldMeshFace(p, vox);
                             }
-
-                            if(shouldMeshFace && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass != null && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.supportsCustomMeshing)
+                            if(shouldMeshFace && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass != null && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.supportsCustomMeshing && !Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.customMeshColorControl)
                             {
                                 var tempverts = Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.CustomMesh(x,y,z,p, vox,UVCoords,new Vector3(chunkPos.x,chunkPos.y,chunkPos.z));
                                 if (!EnableSmoothLighting || !Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.smoothLightingEnable)
@@ -1240,6 +1289,34 @@ namespace FantasyVoxels
                                         color.B = (byte)(light * 255 * shade);
                                     }
                                     verts.Add(new VertexPositionColorNormalTexture(tempvert.Position,color,tempvert.Normal,tempvert.TextureCoordinate));
+                                }
+                            }
+                            else
+                            if (shouldMeshFace && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass != null && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.supportsCustomMeshing)
+                            {
+                                var tempverts = Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.CustomMeshColorControl(x, y, z, p, vox, UVCoords, new Vector3(chunkPos.x, chunkPos.y, chunkPos.z));
+                                if (!EnableSmoothLighting || !Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.smoothLightingEnable)
+                                {
+                                    color.G = (byte)(voxeldata[x + Size * (y + Size * z)].skyLight);
+                                    color.B = (byte)(voxeldata[x + Size * (y + Size * z)].blockLight);
+                                }
+
+                                foreach (var tempvert in tempverts)
+                                {
+                                    if (EnableSmoothLighting && Voxel.voxelTypes[voxels[x + Size * (y + Size * z)]].myClass.smoothLightingEnable)
+                                    {
+                                        GBL(tempvert.Position - new Vector3(x, y, z), out light, out sky);
+                                        color.G = (byte)(sky * 255 * shade);
+                                        color.B = (byte)(light * 255 * shade);
+                                    }
+                                    float sx = tempvert.Position.X + chunkPos.x * Size;
+                                    float sz = tempvert.Position.Z + chunkPos.z * Size;
+                                    BiomeProvider biome = BiomeTracker.GetBiome(WorldBuilder.GetHumidity(sx, sz), WorldBuilder.GetTemperature(sx, sz));
+
+                                    color.R = (byte)((biome.GrassColor / 64f) * 255);
+
+                                    color.A = tempvert.Color.R;
+                                    verts.Add(new VertexPositionColorNormalTexture(tempvert.Position, color, tempvert.Normal, tempvert.TextureCoordinate));
                                 }
                             }
                             else

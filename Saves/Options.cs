@@ -42,8 +42,8 @@ namespace FantasyVoxels.Saves
 
         public static RenderDistance renderDistance => settings.renderDistance;
         public static bool smoothLightingEnable => settings.smoothLightingEnable;
-        public static void SetRenderDistance(RenderDistance distance) => settings.renderDistance = distance;
-        public static void SetSmoothLighting(bool on) => settings.smoothLightingEnable = on;
+        public static void SetRenderDistance(RenderDistance distance) { settings.renderDistance = distance; SaveOptions(); }
+        public static void SetSmoothLighting(bool on) { settings.smoothLightingEnable = on; SaveOptions(); }
 
         public static void SaveOptions()
         {

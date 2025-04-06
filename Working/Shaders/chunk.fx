@@ -45,6 +45,11 @@ sampler2D lightmapSampler : register(s3) = sampler_state
 {
     Texture = <lightmap>;
 };
+texture grassColor;
+sampler2D grassColorSampler : register(s4) = sampler_state
+{
+    Texture = <grassColor>;
+};
 
 
 
@@ -141,7 +146,7 @@ VSOutput MainVS(half4 position : POSITION, nointerpolation float4 color : COLOR0
     
     output.ShadowCoord = float4(0,0,0, dot(-sunDir, normal.xyz));
     
-    output.Color = float4(voxShadeEffect, color.g, color.b, voxAlphaEffect);
+    output.Color = float4(color.r, color.g, color.b, color.a);
     
     output.Position = mul(mul(mul(finPos, World), View), Projection); // Apply standard transformations
     
@@ -219,6 +224,8 @@ PSOut MainPS(VSOutput input)
     float4 color = tex2Dlod(colorsSampler, float4(input.Coord,0,0));
     clip(color.a - 0.02f);
     
+    int gcol = round(dat.r * 64);
+    
     //float3 tangent;
     //float3 binormal;
     //float3 c1 = cross(input.NormalPS, float3(0.0, 0.0, 1.0));
@@ -268,8 +275,13 @@ PSOut MainPS(VSOutput input)
     float3 lmp = tex2D(lightmapSampler, float2(pow(dat.b, 0.8f), (time%4) / 4));
     
     float3 desCol = color.xyz * (lmp + saturate(dat.g * ((1-pow(dat.b, 0.8f))) - 0.025f) * (realBump + 1) * sunColor);
+    
+    if(dat.a > 0.5f)
+    {
+        desCol *= tex2D(grassColorSampler, float2(dat.r + (0.5f)/64.f, 0)).rgb;
+    }
 
-    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog),1.2f)), color.a * dat.a);
+    output.Color0 = float4(lerp(desCol, lerp(skyBandColor, skyColor, fogColor), pow(saturate(fog), 1.2f)), color.a);
     
     if (color.a > 0.9f)
     {

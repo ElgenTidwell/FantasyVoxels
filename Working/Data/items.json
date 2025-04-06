@@ -547,5 +547,29 @@
       "toolPieceLevel": 2,
       "durability": 220
     }
+  },
+  {
+    "type": 0,
+    "placement": 22,
+    "maxStackSize": 32,
+    "name": "sand",
+    "displayName": "Sand",
+    "description": null,
+    "texture": 0,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
+  },
+  {
+    "type": 0,
+    "placement": 23,
+    "maxStackSize": 32,
+    "name": "gravel",
+    "displayName": "Gravel",
+    "description": null,
+    "texture": 0,
+    "alwaysRenderAsSprite": false,
+    "toolPiece": false,
+    "properties": null
   }
 ]

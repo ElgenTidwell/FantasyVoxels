@@ -1,5 +1,4 @@
-﻿using log4net;
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -16,11 +15,11 @@ public static class Program
 		AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
 		{
 			Exception ex = args.ExceptionObject as Exception;
-			File.WriteAllText($"{Environment.GetEnvironmentVariable("profilePath")}/user/logs/log{Guid.NewGuid()}.txt",ex.StackTrace);
+			File.WriteAllText($"{Environment.GetEnvironmentVariable("profilePath")}/user/logs/log{Guid.NewGuid()}.txt",ex.ToString());
 		}; 
 		TaskScheduler.UnobservedTaskException += (sender, args) =>
 		{
-			File.WriteAllText($"{Environment.GetEnvironmentVariable("profilePath")}/user/logs/log{Guid.NewGuid()}.txt", args.Exception.StackTrace);
+			File.WriteAllText($"{Environment.GetEnvironmentVariable("profilePath")}/user/logs/log{Guid.NewGuid()}.txt", args.Exception.ToString());
 			args.SetObserved();
 		};
 

@@ -4921,3 +4921,27 @@
 /processorParam:MakeSquare=False
 /processorParam:TextureFormat=Color
 /build:../Working/Textures/skeleton.png;Textures/skeleton.png
+
+#begin ../Working/Textures/toast.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/toast.png;Textures/toast.png
+
+#begin ../Working/Textures/grasscolors.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:../Working/Textures/grasscolors.png;Textures/grasscolors.png

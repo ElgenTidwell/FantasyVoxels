@@ -25,6 +25,7 @@ namespace FantasyVoxels.Entities
         float tinttime = 0;
         float fleetime = 0;
         float punchAngle = 0;
+        float despawnTime = 60*5;
 
         FleeWhenAttacked fleeGoal;
 
@@ -78,6 +79,8 @@ namespace FantasyVoxels.Entities
 
         public override void Update()
         {
+            if (Vector3.Distance(MGame.Instance.cameraPosition, (Vector3)position) > 48) { despawnTime-=MGame.dt; if (despawnTime <= 0) { EntityManager.DeleteEntity(this); return; } }
+
             time += MGame.dt*8;
             if(curSound is not null) curSound.Position3D = (Vector3)position;
 
