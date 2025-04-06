@@ -20,6 +20,9 @@ using FantasyVoxels.Blocks;
 
 namespace FantasyVoxels
 {
+    /* Hey dumbass think of a less uninspired and unoriginal project before you sink your teeth into it...
+     * And dont promise shit you cant deliver. Do better. Think of something better fuckwad
+     */
     public class MGame : Game
     {
         public static MGame Instance { get; private set; }
